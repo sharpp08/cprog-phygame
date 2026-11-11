@@ -241,11 +241,17 @@ class Game:
             if current_time - self.player.last_shot_time >= GUN_COOLDOWN:
                 self.player.last_shot_time = current_time
 
+                # Spawn the bullet from the gun barrel tip. The aim direction
+                # is the screen-matched world velocity computed by the player
+                # so the projectile visually flies toward the cursor.
                 tip_dist = 22
-                bx = self.player.x + math.cos(self.player.angle) * tip_dist
-                by = self.player.y + math.sin(self.player.angle) * tip_dist
+                aim_vx = self.player.aim_world_vx
+                aim_vy = self.player.aim_world_vy
+                bx = self.player.x + aim_vx * tip_dist
+                by = self.player.y + aim_vy * tip_dist
 
-                bullet = Bullet(bx, by, self.player.angle)
+                # Bullet travels in world space along (aim_vx, aim_vy).
+                bullet = Bullet(bx, by, (aim_vx, aim_vy))
                 self.bullets.add(bullet)
                 self.all_sprites.add(bullet)
 

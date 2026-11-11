@@ -31,24 +31,28 @@ MAP_WIDTH = 2560
 MAP_HEIGHT = 1440
 
 # Player Stats
-PLAYER_SPEED = 4.0
+# Speeds are expressed in WORLD units per frame. The isometric projection
+# compresses on-screen distance (the long axis maps ~2 world units to 1
+# screen pixel), so these values are tuned ~2x higher than a flat top-down
+# game would need so that movement and enemy approach feel right on screen.
+PLAYER_SPEED = 7.0
 PLAYER_MAX_HEALTH = 100
 PLAYER_HIT_COOLDOWN = 500  # milliseconds
 GUN_COOLDOWN = 150  # milliseconds between shots
-BULLET_SPEED = 14.0
+BULLET_SPEED = 18.0
 BULLET_DAMAGE = 25
-BULLET_RANGE = 900
+BULLET_RANGE = 1200
 
 # Zombie Stats
-REGULAR_ZOMBIE_SPEED = 2.2
+REGULAR_ZOMBIE_SPEED = 3.5
 REGULAR_ZOMBIE_HEALTH = 40
 REGULAR_ZOMBIE_DAMAGE = 10
 
-FAST_ZOMBIE_SPEED = 3.6
+FAST_ZOMBIE_SPEED = 6.0
 FAST_ZOMBIE_HEALTH = 20
 FAST_ZOMBIE_DAMAGE = 6
 
-TANK_ZOMBIE_SPEED = 1.4
+TANK_ZOMBIE_SPEED = 2.0
 TANK_ZOMBIE_HEALTH = 120
 TANK_ZOMBIE_DAMAGE = 20
 

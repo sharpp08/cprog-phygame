@@ -25,7 +25,7 @@ class IsoCamera:
         self.y = 0.0
         self.target_x = 0.0
         self.target_y = 0.0
-        self.smoothing = 0.12  # lerp factor per frame
+        self.smoothing = 0.28  # lerp factor per frame (higher = snappier)
         self.offx = 0.0        # pixel offset applied to projected coords
         self.offy = 0.0
 

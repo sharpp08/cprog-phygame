@@ -24,6 +24,11 @@ class Player(pygame.sprite.Sprite):
 
         self.angle = 0.0
         self.facing = 1
+        # World-space aim velocity direction (set each frame by update_aim).
+        # Used at bullet spawn so the projectile's on-screen flight direction
+        # matches the mouse cursor's on-screen direction.
+        self.aim_world_vx = 1.0
+        self.aim_world_vy = 0.0
         self.last_shot_time = -GUN_COOLDOWN
         self.last_hit_time = -PLAYER_HIT_COOLDOWN
         self.is_hit_flash = False
@@ -89,11 +94,45 @@ class Player(pygame.sprite.Sprite):
 
     def update_aim(self, camera):
         mouse_pos = pygame.mouse.get_pos()
-        world_mouse_x, world_mouse_y = camera.screen_to_world(mouse_pos[0], mouse_pos[1])
 
+        # Convert the mouse to a WORLD-space aim target, then compute the
+        # aim ANGLE in world space. This is what bullet direction must use so
+        # that the bullet's on-screen flight matches the mouse's on-screen
+        # direction (see note below).
+        world_mouse_x, world_mouse_y = camera.screen_to_world(mouse_pos[0], mouse_pos[1])
         dx = world_mouse_x - self.x
         dy = world_mouse_y - self.y
         self.angle = math.atan2(dy, dx)
+
+        # The bullet is spawned with a world-space velocity of (cos, sin)*speed.
+        # Under the iso projection that velocity maps to a SCREEN direction
+        # (vx - vy)*SX, (vx + vy)*SY which is NOT the same as the mouse's
+        # screen direction. To make bullets visually travel toward the mouse,
+        # we store the SCREEN-space direction here and have the spawn site
+        # convert it back into a world velocity.
+        #
+        # Screen vector from player to mouse:
+        psx, psy = camera.world_to_screen(self.x, self.y)
+        screen_dx = mouse_pos[0] - psx
+        screen_dy = mouse_pos[1] - psy
+        # Invert the iso projection to get the world-space velocity direction
+        # that produces this exact on-screen flight direction:
+        #   sx = (wx - wy)*SX ; sy = (wx + wy)*SY
+        # For a unit screen direction (ux, uy):
+        #   wx_dir = (ux/SX + uy/SY) / 2 ; wy_dir = (uy/SY - ux/SX) / 2
+        ux, uy = screen_dx, screen_dy
+        len_s = math.hypot(ux, uy)
+        if len_s > 0.0001:
+            ux /= len_s
+            uy /= len_s
+        world_vx = (ux / ISO_SCALE_X + uy / ISO_SCALE_Y) / 2.0
+        world_vy = (uy / ISO_SCALE_Y - ux / ISO_SCALE_X) / 2.0
+        vlen = math.hypot(world_vx, world_vy)
+        if vlen > 0.0001:
+            world_vx /= vlen
+            world_vy /= vlen
+        self.aim_world_vx = world_vx
+        self.aim_world_vy = world_vy
 
         if math.cos(self.angle) < 0:
             self.facing = -1

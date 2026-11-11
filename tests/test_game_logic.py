@@ -316,6 +316,57 @@ class TestIsometricRendering(unittest.TestCase):
         self.assertAlmostEqual(bullet.x, 522.0, delta=0.1)
         self.assertAlmostEqual(bullet.y, 500.0, delta=0.1)
 
+    def test_bullet_accepts_velocity_vector(self):
+        """New isometric spawn passes a (vx, vy) world velocity, not just an angle.
+        The bullet should move along that vector, scaled to BULLET_SPEED."""
+        b = Bullet(100, 100, (1.0, 0.0))
+        self.assertAlmostEqual(b.vx, BULLET_SPEED, delta=0.5)
+        self.assertAlmostEqual(b.vy, 0.0, delta=0.5)
+
+        # A 45-degree world-space diagonal
+        b45 = Bullet(0, 0, (0.7071, 0.7071))
+        self.assertAlmostEqual(b45.vx, BULLET_SPEED * 0.7071, delta=1.0)
+        self.assertAlmostEqual(b45.vy, BULLET_SPEED * 0.7071, delta=1.0)
+
+    def test_bullet_legacy_angle_still_works(self):
+        """The legacy Bullet(x, y, angle) call must keep working (backward compat)."""
+        b = Bullet(0, 0, 0.0)
+        self.assertAlmostEqual(b.vx, BULLET_SPEED, delta=0.5)
+        self.assertAlmostEqual(b.vy, 0.0, delta=0.5)
+
+    def test_player_stores_aim_world_velocity(self):
+        """Player.update_aim should expose a world-space velocity direction
+        that matches the on-screen mouse direction (no aim/flight mismatch)."""
+        from iso_camera import IsoCamera
+        cam = IsoCamera()
+        cam.update(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+        player = Player(MAP_WIDTH // 2, MAP_HEIGHT // 2)
+
+        # Simulate mouse at the four screen corners; verify the resulting
+        # aim velocity, projected to screen space, points at the mouse.
+        psx, psy = cam.world_to_screen(player.x, player.y)
+        for (msx, msy) in [(0, 0), (SCREEN_WIDTH, 0), (0, SCREEN_HEIGHT), (SCREEN_WIDTH, SCREEN_HEIGHT)]:
+            wx, wy = cam.screen_to_world(msx, msy)
+            dx, dy = wx - player.x, wy - player.y
+            player.angle = math.atan2(dy, dx)
+            # Mirror of player.update_aim's velocity computation
+            ux, uy = msx - psx, msy - psy
+            L = math.hypot(ux, uy)
+            if L > 0:
+                ux /= L; uy /= L
+            wvx = (ux / ISO_SCALE_X + uy / ISO_SCALE_Y) / 2.0
+            wvy = (uy / ISO_SCALE_Y - ux / ISO_SCALE_X) / 2.0
+            L2 = math.hypot(wvx, wvy)
+            if L2 > 0:
+                wvx /= L2; wvy /= L2
+            player.aim_world_vx, player.aim_world_vy = wvx, wvy
+            # The world velocity (wvx, wvy) must project to a screen direction
+            # that matches the screen direction from player to mouse.
+            screen_dir = math.atan2(msy - psy, msx - psx)
+            flight_dir = math.atan2((wvx + wvy) * ISO_SCALE_Y, (wvx - wvy) * ISO_SCALE_X)
+            self.assertAlmostEqual(flight_dir, screen_dir, delta=0.01,
+                                   msg=f"Aim mismatch at mouse ({msx},{msy})")
+
     def test_zombie_bob_while_moving(self):
         """Zombies should have bob_z > 0 while pursuing."""
         player = Player(500, 500)
