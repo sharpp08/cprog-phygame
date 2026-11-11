@@ -1,8 +1,0 @@
-{
-    "chat.tools.terminal.autoApprove": {
-        "/^python -c \"import pygame; pygame\\.mixer\\.init\\(\\); print\\('Mixer initialized successfully!'\\)\"$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
-    }
-}
