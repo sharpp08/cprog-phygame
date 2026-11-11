@@ -1,0 +1,596 @@
+"""Procedural art / asset manager.
+
+Every sprite, tile, shadow and effect in the game is generated in code so the
+project is fully self-contained (no external image files to ship).  Surfaces
+are built once at startup and cached; the renderer scales them to match the
+camera zoom.
+
+The visual language follows the "Isometric Forest Shrine" reference: a dense
+autumn forest in golden/orange/green tones around a central clearing with a
+small wooden shrine (red tiled roof), a green pond with lily pads, a stone
+bridge and a misty waterfall.
+"""
+from __future__ import annotations
+
+import random
+from typing import Dict, Tuple
+
+import pygame
+
+import config
+
+
+def shade(color: Tuple[int, int, int], f: float) -> Tuple[int, int, int]:
+    """Lighten (f>0) or darken (f<0) a colour toward white/black."""
+    r, g, b = color
+    if f >= 0:
+        return (int(r + (255 - r) * f), int(g + (255 - g) * f),
+                int(b + (255 - b) * f))
+    return (int(r * (1 + f)), int(g * (1 + f)), int(b * (1 + f)))
+
+
+def lerp_color(a: Tuple[int, int, int], b: Tuple[int, int, int],
+               t: float) -> Tuple[int, int, int]:
+    return (int(a[0] + (b[0] - a[0]) * t),
+            int(a[1] + (b[1] - a[1]) * t),
+            int(a[2] + (b[2] - a[2]) * t))
+
+
+class AssetManager:
+    """Holds and generates every cached surface used by the renderer."""
+
+    def __init__(self) -> None:
+        self.spr: Dict[str, pygame.Surface] = {}
+        self.frames: Dict[str, Dict[str, list]] = {}
+        self.variants: Dict[str, list] = {}
+        self._zoom_cache: Dict[Tuple[str, float], pygame.Surface] = {}
+        self.quality = 1
+        self._built = False
+
+    def set_quality(self, q: int) -> None:
+        self.quality = int(q)
+
+    # ------------------------------------------------------------------
+    def build(self) -> None:
+        if self._built:
+            return
+        random.seed(1234)
+        self._make_tiles()
+        self._make_lily()
+        self._make_environment()
+        self._make_character()
+        self._make_pickups()
+        self._make_fx()
+        self._built = True
+
+    # -- lookup ---------------------------------------------------------
+    def get(self, name: str) -> pygame.Surface:
+        return self.spr[name]
+
+    def variants_list(self, prefix: str) -> list:
+        return self.variants.get(prefix, [])
+
+    def scaled(self, name: str, zoom: float) -> pygame.Surface:
+        zq = round(zoom, 2)
+        base = self.spr[name]
+        key = (name, zq)
+        if key in self._zoom_cache:
+            return self._zoom_cache[key]
+        sw, sh = base.get_size()
+        if abs(zq - 1.0) < 0.02:
+            surf = base
+        else:
+            surf = pygame.transform.smoothscale(
+                base, (max(2, int(sw * zq)), max(2, int(sh * zq))))
+        self._zoom_cache[key] = surf
+        return surf
+
+    def scaled_variant(self, prefix: str, index: int,
+                       zoom: float) -> pygame.Surface:
+        lst = self.variants_list(prefix)
+        base = lst[index % len(lst)]
+        w, h = base.get_size()
+        zq = round(zoom, 2)
+        key = (prefix, index, zq)
+        if key in self._zoom_cache:
+            return self._zoom_cache[key]
+        if abs(zq - 1.0) < 0.02:
+            surf = base
+        else:
+            surf = pygame.transform.smoothscale(
+                base, (max(2, int(w * zq)), max(2, int(h * zq))))
+        self._zoom_cache[key] = surf
+        return surf
+
+    # -- convenience lookups used by the renderer ---------------------
+    def tile(self, name: str, variant: int = 0) -> pygame.Surface:
+        if name == "grass":
+            return self.spr[self.variants["grass"][variant]]
+        return self.spr[name]
+
+    def sprite(self, kind: str, variant: int = 0) -> pygame.Surface:
+        if kind in self.variants:
+            lst = self.variants[kind]
+            return self.spr[lst[variant % len(lst)]]
+        return self.spr[kind]
+
+    def player_frames(self, state: str) -> list:
+        return self.frames["player"].get(state, self.frames["player"]["idle"])
+
+
+    # ================================================================
+    # tiles
+    # ================================================================
+    def _diamond(self, W: int, H: int) -> list:
+        return [(W / 2, 0), (W, H / 2), (W / 2, H), (0, H / 2)]
+
+    def _iso_block(self, W: int, H: int, depth: int, top, left,
+                   right) -> pygame.Surface:
+        s = pygame.Surface((W, H + depth), pygame.SRCALPHA)
+        pygame.draw.polygon(s, left,
+                            [(0, H / 2), (W / 2, H),
+                             (W / 2, H + depth), (0, H / 2 + depth)])
+        pygame.draw.polygon(s, right,
+                            [(W / 2, H), (W, H / 2),
+                             (W, H / 2 + depth), (W / 2, H + depth)])
+        pygame.draw.polygon(s, top, self._diamond(W, H))
+        return s
+
+    def _ground_tile(self, top, speckle=True,
+                     speckle_colors=()) -> pygame.Surface:
+        W, H = config.TILE_W, config.TILE_H
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        pygame.draw.polygon(s, top, self._diamond(W, H))
+        if speckle and speckle_colors:
+            for _ in range(40):
+                px = random.randint(8, W - 8)
+                py = random.randint(4, H - 4)
+                c = random.choice(speckle_colors)
+                s.set_at((px, py), c + (255,))
+        return s
+
+    def _make_tiles(self) -> None:
+        cfg = config
+        greens = [(86, 118, 58), (92, 110, 52),
+                  (104, 108, 50), (120, 110, 54), (138, 120, 58)]
+        for i, base in enumerate(greens):
+            self.spr[f"grass_{i}"] = self._ground_tile(
+                base, speckle_colors=[shade(base, 0.12), shade(base, -0.12),
+                                      shade(base, 0.05)])
+        self.variants["grass"] = [f"grass_{i}" for i in range(len(greens))]
+        self.spr["dirt"] = self._ground_tile(
+            (110, 84, 54), [(120, 94, 62), (96, 74, 48)])
+        self.spr["path"] = self._ground_tile(
+            (150, 140, 120),
+            [(170, 160, 140), (120, 112, 96), (160, 150, 130)])
+        self.spr["water"] = self._ground_tile((52, 120, 132), False)
+        self.spr["water_edge"] = self._ground_tile((44, 96, 110), False)
+        self.spr["rock"] = self._iso_block(
+            cfg.TILE_W, cfg.TILE_H, 10,
+            (120, 112, 104), shade((120, 112, 104), -0.35),
+            shade((120, 112, 104), -0.2))
+        self.spr["bridge"] = self._iso_block(
+            cfg.TILE_W, cfg.TILE_H, 6,
+            (150, 108, 66), shade((150, 108, 66), -0.4),
+            shade((150, 108, 66), -0.25))
+        self.variants["ground"] = self.variants["grass"] + ["dirt"]
+    def _make_lily(self) -> None:
+        W, H = config.TILE_W, config.TILE_H
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx, cy = W / 2, H / 2
+        for (ox, oy, r) in ((-14, -3, 9), (10, -6, 7), (6, 6, 8)):
+            col = (70, 130, 60)
+            pygame.draw.ellipse(s, shade(col, -0.35),
+                                (cx + ox - r, cy + oy - r * 0.5, r * 2, r))
+            pygame.draw.ellipse(s, col,
+                                (cx + ox - r + 1, cy + oy - r * 0.5 + 1,
+                                 r * 2 - 2, r - 1))
+            pygame.draw.line(s, shade(col, -0.4), (cx + ox, cy + oy),
+                             (cx + ox + r * 0.9, cy + oy - 3), 1)
+        self.spr["lily"] = s
+
+    # ================================================================
+    # environment objects (trees, rocks, shrine, waterfall)
+    # ================================================================
+    def _tree(self, trunk_w: int, trunk_h: int, foliage, base_name: str,
+              leaf, height_extra: int = 0):
+        pad = 20
+        W = 96
+        H = 96 + height_extra
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx = W / 2
+        ground = H
+        shadow = pygame.Surface((W, 20), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (0, 0, 0, 70),
+                            (cx - 34, ground - 14, 68, 20))
+        s.blit(shadow, (0, 0))
+        tw = max(6, int(trunk_w))
+        th = int(trunk_h)
+        trunk_top = ground - th
+        tcol = (74, 54, 36)
+        pygame.draw.rect(s, tcol, (cx - tw / 2, trunk_top, tw, th),
+                         border_radius=2)
+        pygame.draw.rect(s, shade(tcol, 0.2),
+                         (cx - tw / 2, trunk_top, tw // 3, th),
+                         border_radius=2)
+        top = trunk_top
+        for i, (dy, rx, ry, f) in enumerate(foliage):
+            y = top - dy
+            col = lerp_color(leaf, shade(leaf, 0.35), f)
+            pygame.draw.ellipse(s, shade(col, -0.32),
+                                (cx - rx + 3, y - ry + 4, rx * 2, ry * 2))
+            pygame.draw.ellipse(s, col,
+                                (cx - rx, y - ry, rx * 2, ry * 2))
+            pygame.draw.arc(s, shade(col, 0.35),
+                            (cx - rx, y - ry, rx * 2, ry * 2), -0.9, 0.4, 2)
+        self.spr[base_name] = s
+        return s
+
+    def _make_environment(self) -> None:
+        g = (70, 110, 44)
+        o = (180, 120, 40)
+        r = (160, 70, 40)
+        layers_big = [(6, 26, 20, 1.0), (22, 30, 24, 0.85),
+                      (44, 24, 19, 0.55), (60, 16, 13, 0.25)]
+        layers_small = [(4, 20, 16, 1.0), (16, 22, 17, 0.6),
+                       (30, 15, 12, 0.3)]
+        self._tree(14, 34, layers_big, "tree_g", g)
+        self._tree(16, 40, layers_big, "tree_o", o, height_extra=6)
+        self._tree(12, 26, layers_small, "tree_r", r, height_extra=4)
+        self._tree(10, 22, layers_small, "tree_s", g, height_extra=2)
+        self.variants["tree"] = ["tree_g", "tree_o", "tree_r", "tree_s"]
+
+        for i, base in enumerate([(110, 104, 96), (90, 86, 82)]):
+            s = pygame.Surface((70, 60), pygame.SRCALPHA)
+            pygame.draw.ellipse(s, (0, 0, 0, 70), (8, 40, 54, 16))
+            pts = [(10, 40), (18, 20), (34, 12), (52, 20), (56, 40),
+                   (34, 50)]
+            pygame.draw.polygon(s, shade(base, -0.35),
+                                [(p[0] + 2, p[1] + 2) for p in pts])
+            pygame.draw.polygon(s, base, pts)
+            pygame.draw.polygon(s, shade(base, 0.25),
+                                [(10, 40), (18, 20), (34, 12),
+                                 (34, 42), (34, 50)])
+            pygame.draw.line(s, shade(base, 0.4), (18, 20), (30, 18), 1)
+            self.spr[f"rock_{i}"] = s
+        self.variants["rock"] = ["rock_0", "rock_1"]
+
+        s = pygame.Surface((60, 44), pygame.SRCALPHA)
+        pygame.draw.ellipse(s, (0, 0, 0, 60), (10, 30, 40, 12))
+        for (ox, oy, rr, f) in ((0, 18, 15, 1.0), (-12, 24, 13, 0.8),
+                                 (12, 24, 13, 0.7), (-4, 12, 12, 0.5)):
+            col = lerp_color(g, o, f * 0.4)
+            pygame.draw.ellipse(s, shade(col, -0.35),
+                                (30 + ox - rr + 2, oy - rr * 0.6 + 3,
+                                 rr * 2, rr * 1.2))
+            pygame.draw.ellipse(s, col,
+                                (30 + ox - rr, oy - rr * 0.6, rr * 2,
+                                 rr * 1.2))
+        self.spr["bush"] = s
+        self.spr["shrine"] = self._shrine()
+        self.spr["waterfall"] = self._waterfall()
+        self.spr["ruin"] = self._ruin()
+
+    def _draw_block(self, s, cx, top, w, d, h, top_c, left_c, right_c):
+        half = d / 2
+        top_pts = [(cx, top), (cx + w / 2, top + half),
+                   (cx, top + d), (cx - w / 2, top + half)]
+        left_pts = [(cx - w / 2, top + half), (cx, top + d),
+                    (cx, top + d + h), (cx - w / 2, top + half + h)]
+        right_pts = [(cx + w / 2, top + half), (cx, top + d),
+                     (cx, top + d + h), (cx + w / 2, top + half + h)]
+        pygame.draw.polygon(s, left_c, left_pts)
+        pygame.draw.polygon(s, right_c, right_pts)
+        pygame.draw.polygon(s, top_c, top_pts)
+        pygame.draw.polygon(s, shade(top_c, 0.18), top_pts, 1)
+
+    def _shrine(self) -> pygame.Surface:
+        W, H = 150, 150
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx = W / 2
+        base_y = 118
+        self._draw_block(s, cx, base_y, 92, 46, 20,
+                         (150, 142, 132), shade((150, 142, 132), -0.35),
+                         shade((150, 142, 132), -0.2))
+        wall_top = base_y - 46
+        body_h = 40
+        self._draw_block(s, cx, base_y - 20, 60, 30, body_h,
+                         (196, 178, 150), shade((196, 178, 150), -0.4),
+                         shade((196, 178, 150), -0.2))
+        pygame.draw.rect(s, (70, 48, 34),
+                         (cx - 7, wall_top - 2, 14, 22), border_radius=3)
+        pygame.draw.rect(s, (50, 34, 24),
+                         (cx - 7, wall_top - 2, 14, 22), 1)
+        roof_top = wall_top - 30
+        ry = wall_top
+        roof_c = (150, 44, 40)
+        pygame.draw.polygon(s, shade(roof_c, -0.4),
+                            [(cx - 40, ry), (cx, ry - 4), (cx, roof_top)])
+        pygame.draw.polygon(s, roof_c,
+                            [(cx - 40, ry), (cx, roof_top), (cx, ry)])
+        pygame.draw.polygon(s, shade(roof_c, 0.25),
+                            [(cx, roof_top), (cx, ry), (cx + 40, ry)])
+        for k in range(1, 4):
+            yy = roof_top + (ry - roof_top) * k / 4.0
+            pygame.draw.line(s, shade(roof_c, -0.3),
+                            (cx - 40 * k / 4 + 4, yy - 1),
+                            (cx + 40 * k / 4 - 4, yy - 1), 1)
+        pygame.draw.circle(s, (90, 30, 28), (cx, roof_top), 5)
+        for side in (-34, 34):
+            lx = cx + side
+            pygame.draw.rect(s, (230, 60, 50),
+                             (lx - 5, ry + 4, 10, 16), border_radius=3)
+            pygame.draw.rect(s, (255, 210, 150),
+                             (lx - 2, ry + 7, 4, 10), border_radius=2)
+        return s
+
+    def _waterfall(self) -> pygame.Surface:
+        W, H = 84, 150
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx = W / 2
+        top, bottom = 20, 130
+        sheet = (150, 210, 220, 210)
+        pygame.draw.polygon(s, sheet,
+                            [(cx - 26, top), (cx + 26, top),
+                             (cx + 34, bottom), (cx - 34, bottom)])
+        for i in range(5):
+            xx = cx - 20 + i * 10
+            pygame.draw.line(s, (230, 250, 255, 150),
+                            (xx, top + 6), (xx - 4, bottom - 4), 2)
+            pygame.draw.line(s, (255, 255, 255, 90),
+                            (xx + 2, top + 12), (xx - 2, bottom - 8), 1)
+        pygame.draw.ellipse(s, (200, 230, 235, 220),
+                            (cx - 30, top - 8, 60, 14))
+        for (ox, oy, rr) in ((-20, 0, 10), (0, 4, 12), (20, -2, 10),
+                             (-8, 8, 8), (10, 8, 8)):
+            pygame.draw.ellipse(s, (235, 250, 255, 160),
+                                (cx + ox - rr, bottom - 4 + oy - rr * 0.4,
+                                 rr * 2, rr))
+        return s
+
+    def _ruin(self) -> pygame.Surface:
+        W, H = 120, 120
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx, base = 60, 100
+        wall = (120, 86, 58)
+        # back broken wall
+        self._draw_block(s, cx - 14, base - 40, 40, 20, 34,
+                         wall, shade(wall, -0.4), shade(wall, -0.22))
+        # front partial wall
+        self._draw_block(s, cx + 12, base - 12, 32, 16, 20,
+                         shade(wall, 0.06), shade(wall, -0.42),
+                         shade(wall, -0.24))
+        # leaning roof beam
+        pygame.draw.line(s, (80, 56, 38), (cx - 26, base - 46),
+                         (cx + 20, base - 64), 5)
+        pygame.draw.line(s, (96, 68, 44), (cx - 26, base - 45),
+                         (cx + 20, base - 63), 2)
+        # rubble
+        for (ox, oy, sz) in ((-30, -2, 12), (-6, 2, 14), (24, -2, 10),
+                             (10, 4, 9)):
+            pygame.draw.polygon(s, shade((110, 90, 64), -0.2),
+                                [(cx + ox - sz / 2, base - 4 + oy),
+                                 (cx + ox + sz / 2, base - 2 + oy),
+                                 (cx + ox, base + 4 + oy)])
+        return s
+
+    # ================================================================
+    # character + zombie animation frames
+    # ================================================================
+    _PALETTE = {
+        "player": dict(skin=(210, 182, 150), top=(96, 112, 140),
+                       bot=(64, 66, 74), gun=(58, 60, 66),
+                       hair=(60, 44, 34), size=1.0),
+        "regular": dict(skin=(150, 150, 96), top=(96, 86, 64),
+                       bot=(64, 60, 52), gun=(70, 70, 70),
+                       hair=(90, 86, 70), size=1.0),
+        "fast": dict(skin=(170, 150, 110), top=(120, 96, 64),
+                    bot=(70, 64, 54), gun=(70, 70, 70),
+                    hair=(70, 64, 54), size=0.92),
+        "tank": dict(skin=(120, 140, 90), top=(70, 80, 54),
+                    bot=(54, 54, 50), gun=(50, 50, 50),
+                    hair=(60, 66, 52), size=1.3),
+    }
+
+    def _humanoid(self, kind: str, pose: str, leg: int = 0,
+                  reach: float = 0.0, crouch: float = 0.0,
+                  flash: bool = False):
+        p = self._PALETTE[kind]
+        sc = p["size"]
+        W, H = 44, 66
+        s = pygame.Surface((W, H), pygame.SRCALPHA)
+        cx = W / 2
+        skin, top, bot = p["skin"], p["top"], p["bot"]
+        gy = 60 - crouch * 6
+        pygame.draw.ellipse(s, (0, 0, 0, 80),
+                            (cx - 12 * sc, gy - 4, 24 * sc, 9))
+        if pose == "dead":
+            pygame.draw.ellipse(s, (0, 0, 0, 60),
+                                (cx - 14 * sc, 44, 28 * sc, 10))
+            pygame.draw.ellipse(s, shade(top, -0.2),
+                                (cx - 16 * sc, 46, 30 * sc, 12))
+            pygame.draw.ellipse(s, skin,
+                                (cx + 8 * sc, 44, 9 * sc, 9))
+            return s
+        hip_y = gy - 18 * sc
+        shoulder_y = gy - 34 * sc
+        head_cy = gy - 40 * sc
+        lean = 6 * reach if pose in ("walk", "run", "idle") else 0
+        if pose == "run":
+            fA = (cx - 9 * sc + (6 if leg else -4), gy)
+            fB = (cx + 9 * sc - (6 if leg else -4), gy - 2)
+        elif pose == "walk":
+            fA = (cx - 7 * sc + (5 if leg else -3), gy)
+            fB = (cx + 7 * sc - (5 if leg else -3), gy)
+        else:
+            fA, fB = (cx - 5 * sc, gy), (cx + 5 * sc, gy)
+        hx, hy = cx - lean * 0.4, hip_y
+        pygame.draw.line(s, shade(bot, -0.15), (hx - 2, hy), fA, int(5 * sc))
+        pygame.draw.line(s, shade(bot, -0.35), (hx + 2, hy), fB, int(5 * sc))
+        ty = shoulder_y + (4 if crouch else 0)
+        pygame.draw.polygon(s, shade(top, -0.25),
+                            [(hx - 8 * sc, ty + 2), (hx + 8 * sc, ty + 2),
+                             (hx + 6 * sc, hip_y), (hx - 6 * sc, hip_y)])
+        pygame.draw.polygon(s, top,
+                            [(hx - 7 * sc, ty + 1), (hx + 7 * sc, ty + 1),
+                             (hx + 5 * sc, hip_y - 2),
+                             (hx - 5 * sc, hip_y - 2)])
+        pygame.draw.line(s, shade(bot, -0.2),
+                         (hx - 6 * sc, hip_y - 3),
+                         (hx + 6 * sc, hip_y - 3), 3)
+        pygame.draw.ellipse(s, shade(skin, -0.2),
+                            (hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
+        pygame.draw.ellipse(s, skin,
+                            (hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
+        pygame.draw.ellipse(s, p["hair"],
+                            (hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
+        e_col = (240, 90, 60) if pose == "hit" else (30, 24, 20)
+        pygame.draw.circle(s, e_col, (int(hx - 2), int(head_cy)), 1)
+        pygame.draw.circle(s, e_col, (int(hx + 3), int(head_cy)), 1)
+        arm_y = shoulder_y + 6
+        reach_px = 16 * reach * sc
+        ax, ay = hx + 5 * sc + lean * 0.3, arm_y
+        guncol = p["gun"]
+        if pose == "shoot":
+            pygame.draw.line(s, shade(top, -0.1),
+                             (hx + 3 * sc, arm_y),
+                             (hx + 4 * sc + reach_px, arm_y - 4), int(4 * sc))
+            pygame.draw.line(s, shade(top, -0.3),
+                             (hx + 3 * sc, arm_y + 2),
+                             (hx + 4 * sc + reach_px, arm_y - 2), int(4 * sc))
+            gx, gyw = hx + 4 * sc + reach_px, arm_y - 4
+            pygame.draw.rect(s, guncol, (gx, gyw - 2, 12 * sc, 5),
+                             border_radius=2)
+            pygame.draw.rect(s, shade(guncol, 0.4), (gx + 2, gyw - 3, 5, 2))
+            if flash:
+                pygame.draw.polygon(s, (255, 230, 150, 220),
+                                    [(gx + 12 * sc, gyw - 4),
+                                     (gx + 22 * sc, gyw),
+                                     (gx + 12 * sc, gyw + 4)])
+        elif pose == "reload":
+            pygame.draw.line(s, shade(top, -0.1),
+                             (hx + 3 * sc, arm_y),
+                             (hx + 6 * sc, arm_y + 6), int(4 * sc))
+            gx, gyw = hx + 4 * sc, arm_y + 4
+            pygame.draw.rect(s, guncol, (gx, gyw, 8 * sc, 5), border_radius=2)
+        else:
+            arms_ahead = reach > 0.2
+            gx = hx + 6 * sc + reach_px
+            gyw = arm_y + (2 if arms_ahead else 4)
+            pygame.draw.line(s, shade(top, -0.1),
+                             (hx + 4 * sc, arm_y), (gx, gyw), int(4 * sc))
+            pygame.draw.line(s, shade(top, -0.3),
+                             (hx + 4 * sc, arm_y + 2), (gx, gyw + 2),
+                             int(4 * sc))
+            pygame.draw.rect(s, guncol, (gx, gyw - 2, 9 * sc, 4),
+                             border_radius=2)
+        return s
+
+    def _make_character(self) -> None:
+        frames = self.frames
+        pl = {
+            "idle": [self._humanoid("player", "idle")],
+            "walk": [self._humanoid("player", "walk", leg=0),
+                     self._humanoid("player", "walk", leg=1)],
+            "run": [self._humanoid("player", "run", leg=0),
+                    self._humanoid("player", "run", leg=1)],
+            "shoot": [self._humanoid("player", "shoot", flash=True)],
+            "reload": [self._humanoid("player", "reload", leg=0),
+                       self._humanoid("player", "reload", leg=1)],
+            "hit": [self._humanoid("player", "hit")],
+            "dead": [self._humanoid("player", "dead")],
+        }
+        frames["player"] = pl
+        for zt in ("regular", "fast", "tank"):
+            z = {
+                "idle": [self._humanoid(zt, "idle", reach=0.5, crouch=0.4)],
+                "walk": [self._humanoid(zt, "walk", reach=0.55, crouch=0.4),
+                         self._humanoid(zt, "walk", reach=0.55, crouch=0.4,
+                                        leg=1)],
+                "attack": [self._humanoid(zt, "attack", reach=1.0,
+                                          crouch=0.5)],
+                "hit": [self._humanoid(zt, "hit", reach=0.5, crouch=0.4)],
+                "dead": [self._humanoid(zt, "dead")],
+            }
+            frames[f"zombie_{zt}"] = z
+
+    # ================================================================
+    # pickups
+    # ================================================================
+    def _make_pickups(self) -> None:
+        cfg = config
+        for ptype, spec in cfg.PICKUP_TYPES.items():
+            s = pygame.Surface((40, 44), pygame.SRCALPHA)
+            cx, cy = 20, 26
+            col = spec["color"]
+            pygame.draw.ellipse(s, (0, 0, 0, 70), (cx - 13, cy + 8, 26, 8))
+            if ptype.startswith("ammo"):
+                pygame.draw.rect(s, shade(col, -0.4), (cx - 8, cy - 8, 16,
+                                                        14), border_radius=2)
+                pygame.draw.rect(s, col, (cx - 6, cy - 6, 12, 10),
+                                 border_radius=2)
+                for i in range(3):
+                    pygame.draw.rect(s, shade(col, 0.3),
+                                     (cx - 4 + i * 3, cy - 5, 2, 8))
+            elif ptype == "medkit":
+                pygame.draw.rect(s, (240, 240, 235), (cx - 9, cy - 6, 18,
+                                                        14),
+                                 border_radius=2)
+                pygame.draw.rect(s, col, (cx - 2, cy - 5, 4, 12))
+                pygame.draw.rect(s, col, (cx - 5, cy - 2, 10, 4))
+            else:  # weapon crate
+                pygame.draw.rect(s, shade(col, -0.4), (cx - 11, cy - 6, 22,
+                                                        16),
+                                 border_radius=2)
+                pygame.draw.rect(s, col, (cx - 9, cy - 4, 18, 12),
+                                 border_radius=2)
+                pygame.draw.line(s, shade(col, 0.4), (cx - 8, cy - 2),
+                                 (cx + 8, cy + 4), 3)
+            self.spr[ptype] = s
+        # light beacon for the objective marker
+        s = pygame.Surface((24, 60), pygame.SRCALPHA)
+        for i, a in enumerate((150, 110, 70)):
+            pygame.draw.polygon(s, (255, 220, 120, a),
+                                [(12, 0), (3 + i, 40 - i * 2),
+                                 (21 - i, 40 - i * 2)])
+        pygame.draw.ellipse(s, (255, 230, 150, 220), (4, 46, 16, 8))
+        self.spr["beacon"] = s
+
+    # ================================================================
+    # effects
+    # ================================================================
+    def _make_fx(self) -> None:
+        # bullet tracer
+        s = pygame.Surface((20, 4), pygame.SRCALPHA)
+        for x in range(20):
+            a = int(255 * (1 - x / 20))
+            s.set_at((x, 2), (255, 230, 170, a))
+        self.spr["tracer"] = s
+        # shotgun pellet
+        s = pygame.Surface((6, 6), pygame.SRCALPHA)
+        pygame.draw.circle(s, (240, 210, 140), (3, 3), 3)
+        self.spr["pellet"] = s
+        # muzzle glow
+        s = pygame.Surface((28, 28), pygame.SRCALPHA)
+        pygame.draw.circle(s, (255, 210, 120, 160), (14, 14), 12)
+        pygame.draw.circle(s, (255, 250, 200, 220), (14, 14), 6)
+        self.spr["muzzle"] = s
+        # water ripple ring
+        s = pygame.Surface((40, 24), pygame.SRCALPHA)
+        pygame.draw.ellipse(s, (220, 240, 255, 90), (4, 8, 32, 16), 2)
+        self.spr["ripple"] = s
+        # soft light-ray streak (used sparingly, high quality)
+        s = pygame.Surface((70, 150), pygame.SRCALPHA)
+        for i, a in enumerate((20, 40, 60)):
+            w = 6 + i * 3
+            pygame.draw.polygon(s, (255, 240, 190, a),
+                                [(35 - w, 0), (35 + w, 0),
+                                 (35 + 12, 150), (35 - 12, 150)])
+        self.spr["ray"] = s
+        # fog / mist puff
+        s = pygame.Surface((80, 50), pygame.SRCALPHA)
+        for (ox, oy, rr) in ((20, 20, 18), (40, 26, 20), (55, 20, 16)):
+            pygame.draw.ellipse(s, (210, 220, 230, 40),
+                                (ox - rr, oy - rr, rr * 2, rr * 2))
+        self.spr["mist"] = s
+

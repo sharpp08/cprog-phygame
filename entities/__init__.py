@@ -1,0 +1,1 @@
+"""CPROG PHYGAME - entities package."""
