@@ -1,9 +1,9 @@
-# 🌲 CPROG PHYGAME
-### Isometric 2.5D Zombie Survival Game
+# 🌲 WHEN THE WOODS BLEED
+### Isometric 2.5D Zombie Survival Horror
 
-> Explore the forest. Survive the darkness. Reach the shrine.
+> The forest remembers. The dead awaken. Survival is only the beginning.
 
-**CPROG PHYGAME** is an in-development single-player isometric 2.5D zombie survival shooter built with Python and Pygame-ce. The project is being developed as a new game from scratch, with a modular architecture for its rendering, world, entities, gameplay systems, interface, and audio.
+**WHEN THE WOODS BLEED** is an in-development single-player isometric 2.5D zombie survival shooter built with Python and Pygame-ce. The project is being developed as a new game from scratch, with a modular architecture for its rendering, world, entities, gameplay systems, interface, and audio.
 
 > **Development status:** In development. This README describes the project vision and intended features. Items below are not claims that every feature is already implemented.
 
@@ -38,7 +38,7 @@ The project uses an isometric projection to create the appearance of a three-dim
 
 | Category | Description |
 |---|---|
-| Title | CPROG PHYGAME |
+| Title | WHEN THE WOODS BLEED |
 | Genre | Zombie Survival / Action / Shooter |
 | Perspective | Isometric 2.5D |
 | Language | Python |
@@ -408,7 +408,7 @@ The intended Windows packaging tool is PyInstaller. A basic starting command is:
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm --clean --windowed --name CPROG_PHYGAME main.py
+pyinstaller --noconfirm --clean --windowed --name WhenTheWoodsBleed main.py
 ```
 
 The final build configuration must bundle required assets, fonts, audio, and runtime dependencies. Test the packaged executable on a machine or environment that does not rely on the development virtual environment.
@@ -426,6 +426,6 @@ The Isometric Forest Shrine Map is a visual design reference. The playable envir
 ---
 
 <p align="center">
-<strong>CPROG PHYGAME</strong><br>
-<em>Survive the forest. Discover the shrine. Escape the nightmare.</em>
+<strong>WHEN THE WOODS BLEED</strong><br>
+<em>The forest remembers. The dead awaken. Survival is only the beginning.</em>
 </p>
