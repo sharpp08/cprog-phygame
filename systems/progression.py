@@ -64,7 +64,7 @@ class Progression:
                 self.objective = ("The shrine! Survive the final "
                                   f"{self.wave_total} waves to escape")
                 self.notify("The shrine's seal cracks. Waves incoming!", 5.0)
-                self.start_wave(world)
+                self.start_wave(controller, world)
 
         elif self.phase == "shrine":
             if self.wave >= self.wave_total and controller.alive_count == 0:

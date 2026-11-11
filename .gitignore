@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv lock (regenerated per-platform; keep optional)
+# uv.lock
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Game runtime artifacts
+saves/*.json
+!saves/.gitkeep

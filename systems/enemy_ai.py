@@ -7,9 +7,12 @@ Navigation`, audio and particles are injected so this module stays testable.
 from __future__ import annotations
 
 import random
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import config
+
+if TYPE_CHECKING:
+    from entities.zombie import Zombie
 
 
 class ZombieController:
@@ -42,11 +45,11 @@ class ZombieController:
         self.zombies.append(z)
         return z
 
-    def spawn_random(self) -> Optional:
+    def spawn_random(self) -> Optional["Zombie"]:
         return self.spawn_near(random.choice(self._spawn_points)
                                if self._spawn_points else (2, 2))
 
-    def spawn_near(self, pos: Tuple[int, int]) -> Optional:
+    def spawn_near(self, pos: Tuple[int, int]) -> Optional["Zombie"]:
         """Spawn a zombie at the best spawn point closest to ``pos``."""
         if not self._spawn_points:
             self._spawn_points = [(2, 2), (2, self.h - 3),
