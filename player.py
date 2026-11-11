@@ -1,4 +1,4 @@
-# player.py - Player character class
+# player.py - Player character class (isometric billboard rendering)
 
 import pygame
 import math
@@ -9,19 +9,31 @@ class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
         self.original_image = create_player_sprite()
+        self.image_right = self.original_image
+        self.image_left = pygame.transform.flip(self.original_image, True, False)
         self.image = self.original_image
-        self.rect = self.image.get_rect(center=(x, y))
+
+        self.rect = pygame.Rect(0, 0, 24, 24)
+        self.rect.center = (x, y)
         self.x = float(x)
         self.y = float(y)
-        
+
         self.speed = PLAYER_SPEED
         self.health = PLAYER_MAX_HEALTH
         self.max_health = PLAYER_MAX_HEALTH
-        
+
         self.angle = 0.0
+        self.facing = 1
         self.last_shot_time = -GUN_COOLDOWN
         self.last_hit_time = -PLAYER_HIT_COOLDOWN
         self.is_hit_flash = False
+
+        self.moving = False
+        self.walk_phase = 0.0
+        self.bob_z = 0.0
+        self.z = 0.0
+        self.shadow_w = 28
+        self.shadow_h = 10
 
     def handle_input(self, keys, obstacles):
         def is_pressed(k):
@@ -40,23 +52,21 @@ class Player(pygame.sprite.Sprite):
             dx -= 1
         if is_pressed(pygame.K_d) or is_pressed(pygame.K_RIGHT):
             dx += 1
-            
-        # Normalize diagonal movement
+
+        self.moving = (dx != 0 or dy != 0)
+
         if dx != 0 and dy != 0:
             dx *= 0.7071
             dy *= 0.7071
-            
-        # Move X with obstacle collision
+
         self.x += dx * self.speed
         self.rect.centerx = int(self.x)
         self.check_obstacle_collisions(obstacles, 'x', dx)
-        
-        # Move Y with obstacle collision
+
         self.y += dy * self.speed
         self.rect.centery = int(self.y)
         self.check_obstacle_collisions(obstacles, 'y', dy)
-        
-        # Keep inside map bounds
+
         self.x = max(32, min(MAP_WIDTH - 32, self.x))
         self.y = max(32, min(MAP_HEIGHT - 32, self.y))
         self.rect.center = (int(self.x), int(self.y))
@@ -77,20 +87,19 @@ class Player(pygame.sprite.Sprite):
                         self.rect.top = obs.rect.bottom
                     self.y = float(self.rect.centery)
 
-    def update_aim(self, camera_x, camera_y):
+    def update_aim(self, camera):
         mouse_pos = pygame.mouse.get_pos()
-        # Convert screen mouse pos to world coordinates
-        world_mouse_x = mouse_pos[0] + camera_x
-        world_mouse_y = mouse_pos[1] + camera_y
-        
+        world_mouse_x, world_mouse_y = camera.screen_to_world(mouse_pos[0], mouse_pos[1])
+
         dx = world_mouse_x - self.x
         dy = world_mouse_y - self.y
         self.angle = math.atan2(dy, dx)
-        
-        # Rotate image towards angle
-        degrees = -math.degrees(self.angle)
-        self.image = pygame.transform.rotate(self.original_image, degrees)
-        self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+
+        if math.cos(self.angle) < 0:
+            self.facing = -1
+        else:
+            self.facing = 1
+        self.image = self.image_left if self.facing == -1 else self.image_right
 
     def take_damage(self, amount):
         current_time = pygame.time.get_ticks()
@@ -105,3 +114,9 @@ class Player(pygame.sprite.Sprite):
         current_time = pygame.time.get_ticks()
         if current_time - self.last_hit_time > 150:
             self.is_hit_flash = False
+        if self.moving:
+            self.walk_phase += 0.3
+            self.bob_z = abs(math.sin(self.walk_phase)) * 3.0
+        else:
+            self.walk_phase = 0.0
+            self.bob_z = 0.0

@@ -10,18 +10,18 @@ class Bullet(pygame.sprite.Sprite):
         self.damage = damage
         self.speed = speed
         self.angle = angle
-        
-        # Create small bullet surface
+
         self.image = pygame.Surface((8, 8), pygame.SRCALPHA)
         pygame.draw.circle(self.image, BULLET_COLOR, (4, 4), 3)
+        pygame.draw.circle(self.image, (255, 255, 200), (4, 4), 1)
         self.rect = self.image.get_rect(center=(x, y))
-        
-        # Calculate velocity vectors
+
         self.vx = math.cos(angle) * self.speed
         self.vy = math.sin(angle) * self.speed
-        
+
         self.x = float(x)
         self.y = float(y)
+        self.z = 14.0
         self.distance_traveled = 0.0
         self.max_range = BULLET_RANGE
 
@@ -29,7 +29,7 @@ class Bullet(pygame.sprite.Sprite):
         self.x += self.vx
         self.y += self.vy
         self.rect.center = (int(self.x), int(self.y))
-        
+
         dist = math.hypot(self.vx, self.vy)
         self.distance_traveled += dist
         if self.distance_traveled >= self.max_range:

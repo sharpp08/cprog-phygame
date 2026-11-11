@@ -1,17 +1,25 @@
 # ZOMBIE SURVIVAL: Last Stand
-*A 2D Top-Down Pixel Art Survival Game in Python & Pygame*
+*An Isometric 2.5D Pixel Art Survival Game in Python & Pygame*
 
 ---
 
 ## 1. Overview
-**ZOMBIE SURVIVAL: Last Stand** is a complete, responsive, top-down 2D pixel-art zombie survival game built from scratch using Python 3 and Pygame.
+**ZOMBIE SURVIVAL: Last Stand** is a complete, responsive, isometric 2.5D pixel-art zombie survival game built from scratch using Python 3 and Pygame.
 
 The player assumes the role of a lone survivor trapped in an abandoned perimeter overrun by relentless waves of undead. Surviving requires tactical movement, precise mouse aiming, weapon management, and situational awareness to navigate around rocks, crates, and trees while holding back ever-increasing hordes.
 
+### Isometric 2.5D Rendering
+The game uses a centralized isometric projection system (`iso_camera.py`) that separates world-space gameplay coordinates from screen-space rendering:
+- **Diamond-grid projection** — the world plane is rendered as a diamond-shaped isometric view at a ~30° angle
+- **Billboard sprites** — characters and obstacles are pre-rendered front-facing sprites anchored to their projected ground position, with ground-contact shadows and a subtle walk bob
+- **Depth sorting** — all entities are sorted by world depth (x + y) each frame so that trees, crates, and characters occlude correctly
+- **Camera tracking** — a smoothed isometric camera follows the player and clamps to the projected map bounds
+- **Screen-space UI** — HUD, menus, and buttons remain in normal screen coordinates, unaffected by the projection
+
 ### Key Highlights
 - **100% Self-Contained**: All pixel-art sprites, textures, and audio effects are generated procedurally in code. No external image or sound files are required, eliminating missing-file errors.
-- **Performant & Lightweight**: Locked at a smooth 60 FPS on Windows 10 and 11, running effortlessly on ordinary laptops and Intel integrated graphics.
-- **Object-Oriented Architecture**: Clean, modular separation of concerns between Player, Zombie, Projectile, Particle, Game State, Audio, and UI systems.
+- **Performant & Lightweight**: 200+ FPS measured with 80+ active sprites on 60 FPS-locked windows, running effortlessly on ordinary laptops and Intel integrated graphics.
+- **Object-Oriented Architecture**: Clean, modular separation of concerns between Player, Zombie, Projectile, Particle, Obstacle, Game State, Audio, UI, and Isometric Camera systems.
 - **Robust Persistence**: High scores are automatically saved to and loaded from local JSON (`data/highscore.json`), with fail-safe error handling for missing or corrupt files.
 
 ---
