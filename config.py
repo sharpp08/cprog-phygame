@@ -44,6 +44,7 @@ TILE_H = 32         # full diamond height in pixels
 SCALE_X = TILE_W / 2.0    # 32
 SCALE_Y = TILE_H / 2.0    # 16
 HEIGHT_SCALE = 1.0       # world Z -> pixels
+SCALE_Z = HEIGHT_SCALE    # obstacle Z offset used by the renderer
 
 # ---------------------------------------------------------------------------
 # Map / world

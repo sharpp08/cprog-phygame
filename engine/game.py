@@ -111,7 +111,7 @@ class Game:
         self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
-        self.cam.clamp(0, self.wm.world.W, 0, self.wm.world.H)
+        self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
                                  self.particles)
         self.renderer.quality = int(self.settings["quality"])
@@ -158,7 +158,7 @@ class Game:
         self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
-        self.cam.clamp(0, self.wm.world.W, 0, self.wm.world.H)
+        self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
                                  self.particles)
         self.renderer.quality = int(self.settings["quality"])
@@ -209,6 +209,10 @@ class Game:
     def _on_event(self, event) -> None:
         if event.type == pygame.QUIT:
             self.running = False
+            return
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
+            if self.renderer is not None:
+                self.renderer.show_debug = not self.renderer.show_debug
             return
         if self.state == "menu":
             self._handle_menu_result(self.main_menu.handle(event,

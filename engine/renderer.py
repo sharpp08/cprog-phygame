@@ -22,25 +22,25 @@ class Renderer:
         self.particles = particles
         self.W = config.WINDOW_W
         self.H = config.WINDOW_H
-        self.quality = getattr(config, "QUALITY", 1)
+        self.quality = 1
         self.time = 0.0
         self._lightmap: Optional[pygame.Surface] = None
         self._mesh: Optional[Tuple[np.ndarray, np.ndarray]] = None
         self._fog: Optional[pygame.Surface] = None
         self._dim: Optional[pygame.Surface] = None
         self._flashes: dict = {}
+        self.show_debug = False
+        self._fps = 0.0
+        self._dbg_font = None
+        self._dbg_counts: dict = {}
         self._prep_fog()
 
     # ------------------------------------------------------------------
     def _prep_fog(self) -> None:
         fog = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        cols = [[0, 0, 0, 0] for _ in range(self.H)]
         for y in range(self.H):
             a = int(90 * (y / self.H) ** 2)
-            cols[y] = [190, 170, 140, a]
-        for x in range(self.W):
-            for y in range(self.H):
-                fog.set_at((x, y), tuple(cols[y]))
+            pygame.draw.line(fog, (190, 170, 140, a), (0, y), (self.W, y))
         self._fog = fog
         dim = pygame.Surface((self.W, self.H))
         dim.fill((208, 202, 186))
@@ -70,8 +70,10 @@ class Renderer:
         self._draw_ground(world, minx, miny, maxx, maxy)
         self._draw_water(world, minx, miny, maxx, maxy)
         items = self._depth_items(world, player, zombies, pickups)
+        drawn_items = 0
         for it in items:
             self._draw_item(it)
+            drawn_items += 1
         self._draw_bullets(bullets)
         self._draw_particles()
         if self.quality >= 1:
@@ -81,6 +83,28 @@ class Renderer:
                              special_flags=pygame.BLEND_RGB_MULT)
         if self.quality >= 2 and self._fog:
             self.screen.blit(self._fog, (0, 0))
+        # cache counts for the debug overlay
+        cam_x, cam_y = cam.fx, cam.fy
+        psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \
+            if player is not None else (0.0, 0.0)
+        self._dbg_counts = {
+            "tiles_total": world.W * world.H,
+            "obstacles_total": len(world.obstacles),
+            "obstacles_visible": sum(1 for o in world.obstacles
+                                     if o.in_rect(minx, miny, maxx, maxy, 0.0)),
+            "depth_items": len(items),
+            "drawn_items": drawn_items,
+            "zombies": len(zombies),
+            "pickups": len(pickups),
+            "bullets": len(bullets),
+            "cam_x": cam_x,
+            "cam_y": cam_y,
+            "cam_zoom": cam.zoom,
+            "player_x": player.x if player else 0.0,
+            "player_y": player.y if player else 0.0,
+            "player_sx": psx,
+            "player_sy": psy,
+        }
 
     # ------------------------------------------------------------------
     def _draw_ground(self, world, minx, miny, maxx, maxy) -> None:
@@ -349,6 +373,37 @@ class Renderer:
     def render_frame(self, world, player, zombies, pickups, bullets,
                      dt: float) -> None:
         self.time += dt
+        if dt > 0:
+            self._fps = self._fps * 0.9 + (1.0 / dt) * 0.1
         self.screen.fill((30, 26, 20))
         self.draw_world(world, player, zombies, pickups, bullets)
+        if self.show_debug:
+            self._draw_debug()
+
+    # ------------------------------------------------------------------
+    def _draw_debug(self) -> None:
+        d = self._dbg_counts
+        if not d:
+            return
+        if self._dbg_font is None:
+            self._dbg_font = pygame.font.SysFont(
+                "consolas,couriernew,monospace", 16)
+        lines = [
+            f"FPS: {self._fps:5.1f}",
+            f"Player world: ({d['player_x']:.2f}, {d['player_y']:.2f})",
+            f"Player screen: ({d['player_sx']:.0f}, {d['player_sy']:.0f})",
+            f"Camera: ({d['cam_x']:.2f}, {d['cam_y']:.2f})  zoom={d['cam_zoom']:.2f}",
+            f"Map tiles: {d['tiles_total']}",
+            f"Obstacles total/visible: {d['obstacles_total']}/{d['obstacles_visible']}",
+            f"Depth items: {d['depth_items']}  drawn: {d['drawn_items']}",
+            f"Zombies: {d['zombies']}  Pickups: {d['pickups']}  Bullets: {d['bullets']}",
+        ]
+        x, y = 12, self.H - len(lines) * 20 - 12
+        bg = pygame.Surface((360, len(lines) * 20 + 8), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 160))
+        self.screen.blit(bg, (x - 6, y - 4))
+        for line in lines:
+            surf = self._dbg_font.render(line, True, (200, 255, 160))
+            self.screen.blit(surf, (x, y))
+            y += 20
 
