@@ -579,6 +579,39 @@ class AssetManager:
                              int(4 * sc))
             pygame.draw.rect(s, guncol, (gx, gyw - 2, 9 * sc, 4),
                              border_radius=2)
+        # Fine silhouette details make the player and enemy classes easier
+        # to read at the game's normal zoom.
+        if kind == "player":
+            pygame.draw.line(s, shade(top, -0.35),
+                             (hx - 5 * sc, ty + 5),
+                             (hx - 1 * sc, hip_y - 2), 2)
+            pygame.draw.line(s, shade(top, 0.30),
+                             (hx + 4 * sc, ty + 6),
+                             (hx + 2 * sc, hip_y - 5), 1)
+            pygame.draw.line(s, (42, 39, 38),
+                             (hx - 6 * sc, hip_y - 5),
+                             (hx + 6 * sc, hip_y - 5), 2)
+            pygame.draw.rect(s, (104, 83, 57),
+                             (hx - 8 * sc, shoulder_y + 5, 5 * sc,
+                              9 * sc), border_radius=2)
+        else:
+            # Torn cloth, dark wounds and dried-blood accents.
+            pygame.draw.polygon(s, shade(top, -0.38), [
+                (hx - 7 * sc, ty + 8), (hx - 2 * sc, ty + 11),
+                (hx - 4 * sc, ty + 16), (hx - 8 * sc, ty + 14)])
+            pygame.draw.line(s, (91, 43, 38),
+                             (hx + 3 * sc, shoulder_y + 12),
+                             (hx + 1 * sc, hip_y - 4), 2)
+            pygame.draw.circle(s, (105, 38, 34),
+                               (int(hx - 4 * sc), int(shoulder_y + 13)), 2)
+            if kind == "tank":
+                pygame.draw.line(s, (50, 61, 43),
+                                 (hx - 8 * sc, ty + 5),
+                                 (hx + 7 * sc, ty + 15), 3)
+            elif kind == "fast":
+                pygame.draw.line(s, (124, 48, 38),
+                                 (hx + 2 * sc, head_cy + 2),
+                                 (hx + 6 * sc, head_cy + 5), 2)
         return s
 
     def _make_character(self) -> None:
