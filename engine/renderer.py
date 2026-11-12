@@ -190,7 +190,9 @@ class Renderer:
         return items
 
     def _draw_item(self, item) -> None:
-        key, _, obj = item
+        # item is a 3-tuple: (depth, kind_string, object)
+        # The kind_string selects which draw method handles it.
+        _, key, obj = item
         if key == "obs":
             self._draw_obstacle(obj)
         elif key == "zombie":

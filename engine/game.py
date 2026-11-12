@@ -124,11 +124,46 @@ class Game:
         self.save_manager.delete()
         self.audio.play_music("ambient")
         self.progression.notify("Find the ancient shrine. Follow the path.")
+        self._print_world_diagnostics()
 
     def _init_world(self) -> None:
         from systems.world_manager import WorldManager
         self.wm = WorldManager()
         self.particles.clear()
+
+    # ------------------------------------------------------------------
+    def _print_world_diagnostics(self) -> None:
+        """Print a one-time diagnostic summary of entity creation and
+        registration to confirm the world is populated at startup."""
+        w = self.wm.world
+        trees = [o for o in w.obstacles if o.kind == "tree"]
+        rocks = [o for o in w.obstacles if o.kind == "rock"]
+        bushes = [o for o in w.obstacles if o.kind == "bush"]
+        zombies = self.wm.controller.zombies
+        psx, psy = self.cam.iso_to_screen(self.player.x, self.player.y, 0.0)
+        in_view = 0
+        for o in w.obstacles:
+            ox, oy = self.cam.iso_to_screen(o.x, o.y, 0.0)
+            if -160 <= ox <= self.cam.sw + 160 and \
+                    -180 <= oy <= self.cam.sh + 80:
+                in_view += 1
+        print("=" * 60)
+        print("WORLD INITIALIZED: YES")
+        print(f"PLAYER CREATED: YES  pos=({self.player.x:.1f}, "
+              f"{self.player.y:.1f}) hp={self.player.hp}")
+        print(f"PLAYER REGISTERED: YES  screen=({psx:.0f}, {psy:.0f})")
+        print(f"TREES GENERATED: {len(trees)}")
+        print(f"TREES REGISTERED: {len(trees)} (in world.obstacles)")
+        print(f"ROCKS GENERATED: {len(rocks)}")
+        print(f"BUSHES GENERATED: {len(bushes)}")
+        print(f"ENEMIES SPAWNED: {len(zombies)}")
+        print(f"ENEMIES REGISTERED: {len(zombies)} (in controller.zombies)")
+        print(f"RENDERABLE ENTITIES (obstacles): {len(w.obstacles)}")
+        print(f"VISIBLE ENTITIES (obstacles in view): {in_view}")
+        print(f"PICKUPS: {len(self.wm.pickups)}")
+        print(f"MAP: {w.W}x{w.H}  CAMERA: ({self.cam.fx:.1f}, "
+              f"{self.cam.fy:.1f}) zoom={self.cam.zoom:.2f}")
+        print("=" * 60)
 
     # ------------------------------------------------------------------
     def load_game(self) -> bool:

@@ -26,9 +26,10 @@ class WorldManager:
     def setup(self, player, audio, particles) -> None:
         self.controller.set_context(player, audio, particles,
                                     self.world.spawn_points)
-        # a few initial zombies scattered around the map
-        for i in range(6):
-            x, y = self._random_clear_tile()
+        # Initial zombies scattered around the map at safe distances.
+        # Spawn at least 8 (acceptance criterion) around the starting area.
+        for i in range(8):
+            x, y = self._random_clear_tile_safe(player)
             zt = random.choice(["regular", "regular", "fast"])
             z = self.controller.add_zombie(None, x, y, zt)
             z.path = self.nav.a_star((int(x), int(y)),
@@ -43,6 +44,28 @@ class WorldManager:
             if g.is_blocked(x, y):
                 continue
             return float(x), float(y)
+        return float(self.world.start[0]), float(self.world.start[1])
+
+    def _random_clear_tile_safe(self, player, min_dist: float = 6.0):
+        """Find a clear tile at least ``min_dist`` tiles from the player
+        so initial zombies do not spawn on top of the survivor."""
+        import math
+        g = self.world.grid
+        best = None
+        best_d = -1.0
+        for _ in range(80):
+            x = random.randint(2, self.world.W - 3)
+            y = random.randint(2, self.world.H - 3)
+            if g.is_blocked(x, y):
+                continue
+            d = math.hypot(x - player.x, y - player.y)
+            if d >= min_dist:
+                return float(x), float(y)
+            if d > best_d:
+                best_d = d
+                best = (float(x), float(y))
+        if best is not None:
+            return best
         return float(self.world.start[0]), float(self.world.start[1])
 
     # ------------------------------------------------------------------
