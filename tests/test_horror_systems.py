@@ -85,5 +85,5 @@ class TestHorrorDirector(unittest.TestCase):
         self.assertEqual(progression.message, message)
 
 
-if __=__main__:
+if __name__ == "__main__":
     unittest.main()
