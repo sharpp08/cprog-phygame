@@ -66,6 +66,8 @@ class HUD:
             light_state = "ON" if survival.flashlight_on else "OFF / CHARGING"
             text(screen, f, f"LIGHT {survival.battery_percent}%  {light_state}",
                  24, 101, 17, (225, 205, 145), "left")
+            text(screen, f, f"SCRAP {survival.scrap}  [C] CRAFT MEDKIT (3)",
+                 24, 124, 16, (190, 170, 135), "left")
         if story is not None:
             text(screen, f, f"CLUES {len(story.discovered)}/{len(story.clues)}  [E] INVESTIGATE",
                  self.W // 2, self.H - 24, 17, (205, 190, 155), "center")
