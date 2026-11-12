@@ -138,15 +138,33 @@ class AssetManager:
 
     def _ground_tile(self, top, speckle=True,
                      speckle_colors=()) -> pygame.Surface:
+        """Build a varied diamond tile with details clipped to its surface."""
         W, H = config.TILE_W, config.TILE_H
         s = pygame.Surface((W, H), pygame.SRCALPHA)
-        pygame.draw.polygon(s, top, self._diamond(W, H))
+        diamond = self._diamond(W, H)
+        pygame.draw.polygon(s, top, diamond)
         if speckle and speckle_colors:
-            for _ in range(40):
-                px = random.randint(8, W - 8)
-                py = random.randint(4, H - 4)
-                c = random.choice(speckle_colors)
-                s.set_at((px, py), c + (255,))
+            for _ in range(72):
+                px = random.randint(5, W - 6)
+                py = random.randint(3, H - 4)
+                # Keep marks inside the isometric diamond, not in its corners.
+                if abs(px - W / 2) / (W / 2) + \
+                        abs(py - H / 2) / (H / 2) > 0.82:
+                    continue
+                col = random.choice(speckle_colors)
+                if random.random() < 0.45:
+                    pygame.draw.ellipse(s, (*col, 210),
+                                        (px, py, 3, 2))
+                else:
+                    s.set_at((px, py), (*col, 255))
+            # Fine, subdued grass blades / mineral streaks.
+            for _ in range(7):
+                px = random.randint(10, W - 10)
+                py = random.randint(5, H - 5)
+                if abs(px - W / 2) / (W / 2) + \
+                        abs(py - H / 2) / (H / 2) <= 0.78:
+                    pygame.draw.line(s, (*random.choice(speckle_colors), 220),
+                                     (px, py), (px + 2, py - 2), 1)
         return s
 
     def _make_tiles(self) -> None:
@@ -159,10 +177,11 @@ class AssetManager:
                                       shade(base, 0.05)])
         self.variants["grass"] = [f"grass_{i}" for i in range(len(greens))]
         self.spr["dirt"] = self._ground_tile(
-            (110, 84, 54), [(120, 94, 62), (96, 74, 48)])
+            (86, 65, 45), speckle_colors=[
+                (120, 91, 61), (64, 48, 35), (104, 78, 51)])
         self.spr["path"] = self._ground_tile(
-            (150, 140, 120),
-            [(170, 160, 140), (120, 112, 96), (160, 150, 130)])
+            (112, 105, 91), speckle_colors=[
+                (154, 145, 125), (75, 70, 62), (132, 121, 101)])
         self.spr["water"] = self._ground_tile((52, 120, 132), False)
         self.spr["water_edge"] = self._ground_tile((44, 96, 110), False)
         self.spr["rock"] = self._iso_block(
@@ -194,36 +213,107 @@ class AssetManager:
     # ================================================================
     def _tree(self, trunk_w: int, trunk_h: int, foliage, base_name: str,
               leaf, height_extra: int = 0):
-        pad = 20
-        W = 96
-        H = 96 + height_extra
+        """Layered canopy tree with roots, bark grain and leaf highlights."""
+        W, H = 104, 104 + height_extra
         s = pygame.Surface((W, H), pygame.SRCALPHA)
-        cx = W / 2
-        ground = H
-        shadow = pygame.Surface((W, 20), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow, (0, 0, 0, 70),
-                            (cx - 34, ground - 14, 68, 20))
-        s.blit(shadow, (0, 0))
-        tw = max(6, int(trunk_w))
-        th = int(trunk_h)
+        cx, ground = W / 2, H - 2
+        pygame.draw.ellipse(s, (0, 0, 0, 92),
+                            (cx - 39, ground - 13, 78, 21))
+        # Exposed roots visually tie the trunk into the terrain.
+        root = (65, 46, 31)
+        pygame.draw.polygon(s, root, [
+            (cx - 5, ground - trunk_h * 0.30),
+            (cx + 5, ground - trunk_h * 0.30),
+            (cx + 22, ground - 2), (cx + 8, ground - 5),
+            (cx, ground - 13), (cx - 9, ground - 4),
+            (cx - 23, ground - 1)])
+        tw, th = max(7, int(trunk_w)), int(trunk_h)
         trunk_top = ground - th
-        tcol = (74, 54, 36)
-        pygame.draw.rect(s, tcol, (cx - tw / 2, trunk_top, tw, th),
-                         border_radius=2)
-        pygame.draw.rect(s, shade(tcol, 0.2),
-                         (cx - tw / 2, trunk_top, tw // 3, th),
-                         border_radius=2)
-        top = trunk_top
+        trunk = (66, 48, 34)
+        pygame.draw.polygon(s, trunk, [
+            (cx - tw * 0.48, ground), (cx - tw * 0.38, trunk_top),
+            (cx + tw * 0.30, trunk_top - 2),
+            (cx + tw * 0.50, ground)])
+        pygame.draw.polygon(s, (105, 76, 49), [
+            (cx - tw * 0.38, ground - 2),
+            (cx - tw * 0.25, trunk_top + 2),
+            (cx - 1, trunk_top + 1), (cx + 1, ground - 2)])
+        for j in range(4):
+            bx = cx - tw * 0.25 + j * tw * 0.18
+            pygame.draw.line(s, (42, 33, 27),
+                             (bx, trunk_top + 8), (bx - 1, ground - 9), 1)
+        # Branch forks appear between foliage tiers.
+        pygame.draw.line(s, (65, 45, 31),
+                         (cx, trunk_top + 13), (cx - 23, trunk_top - 7), 4)
+        pygame.draw.line(s, (65, 45, 31),
+                         (cx + 1, trunk_top + 17), (cx + 22, trunk_top - 4), 4)
         for i, (dy, rx, ry, f) in enumerate(foliage):
-            y = top - dy
-            col = lerp_color(leaf, shade(leaf, 0.35), f)
-            pygame.draw.ellipse(s, shade(col, -0.32),
-                                (cx - rx + 3, y - ry + 4, rx * 2, ry * 2))
+            y = trunk_top - dy + 5
+            col = lerp_color(leaf, shade(leaf, 0.28), f)
+            rect = (cx - rx, y - ry, rx * 2, ry * 2)
+            pygame.draw.ellipse(s, shade(col, -0.42),
+                                (cx - rx + 4, y - ry + 7,
+                                 rx * 2, ry * 2))
+            pygame.draw.ellipse(s, shade(col, -0.12), rect)
             pygame.draw.ellipse(s, col,
-                                (cx - rx, y - ry, rx * 2, ry * 2))
-            pygame.draw.arc(s, shade(col, 0.35),
-                            (cx - rx, y - ry, rx * 2, ry * 2), -0.9, 0.4, 2)
+                                (cx - rx + 1, y - ry + 1,
+                                 rx * 2 - 3, ry * 2 - 4))
+            pygame.draw.arc(s, shade(col, 0.42),
+                            (cx - rx + 3, y - ry + 2,
+                             rx * 2 - 6, ry * 2 - 7), 3.5, 5.8, 2)
+            # Small leaf clusters break up the large flat oval silhouettes.
+            for _ in range(7):
+                lx = random.uniform(cx - rx * 0.72, cx + rx * 0.55)
+                ly = random.uniform(y - ry * 0.65, y + ry * 0.42)
+                rr = random.randint(2, 4)
+                fleck = shade(col, random.uniform(-0.16, 0.24))
+                pygame.draw.ellipse(s, fleck,
+                                    (int(lx), int(ly), rr * 2, rr))
         self.spr[base_name] = s
+        return s
+
+    def _pine_tree(self) -> pygame.Surface:
+        s = pygame.Surface((100, 122), pygame.SRCALPHA)
+        cx, base = 50, 118
+        pygame.draw.ellipse(s, (0, 0, 0, 90), (12, 103, 76, 17))
+        pygame.draw.rect(s, (61, 43, 31), (46, 60, 8, 58))
+        for i, (top, width, height) in enumerate(
+                ((8, 70, 42), (28, 82, 48), (52, 94, 52))):
+            pts = [(cx, top), (cx + width // 2, top + height),
+                   (cx, top + height - 9), (cx - width // 2, top + height)]
+            pygame.draw.polygon(s, (15, 42 + i * 5, 35), pts)
+            pygame.draw.polygon(s, (35, 76 + i * 5, 53),
+                                [pts[0], pts[1], pts[2]])
+            pygame.draw.line(s, (91, 119, 76),
+                             (cx - 2, top + 8), (cx - width // 3,
+                                                 top + height - 12), 2)
+        return s
+
+    def _dead_tree(self, twisted: bool = False) -> pygame.Surface:
+        s = pygame.Surface((112, 126), pygame.SRCALPHA)
+        cx, base = 56, 122
+        pygame.draw.ellipse(s, (0, 0, 0, 88), (15, 108, 82, 17))
+        bark = (48, 42, 36)
+        points = [(cx - 7, base), (cx - 3, 82), (cx - 10, 54),
+                  (cx - 5, 24), (cx + 3, 18), (cx + 4, 57),
+                  (cx + 11, 88), (cx + 8, base)]
+        pygame.draw.polygon(s, bark, points)
+        pygame.draw.line(s, (100, 82, 62), (cx - 2, 111),
+                         (cx - 2, 38), 2)
+        pygame.draw.line(s, bark, (cx - 4, 63), (cx - 31, 39), 6)
+        pygame.draw.line(s, (74, 60, 48), (cx - 31, 39),
+                         (cx - 39, 14), 4)
+        pygame.draw.line(s, bark, (cx + 5, 70), (cx + 30, 46), 6)
+        pygame.draw.line(s, (78, 61, 47), (cx + 30, 46),
+                         (cx + 38, 19), 4)
+        pygame.draw.line(s, bark, (cx + 1, 39), (cx + 20, 13), 4)
+        if twisted:
+            pygame.draw.line(s, (86, 65, 48), (cx - 8, 91),
+                             (cx + 9, 56), 3)
+            pygame.draw.line(s, (86, 65, 48), (cx + 8, 56),
+                             (cx - 4, 28), 3)
+        for x, y in ((cx - 32, 38), (cx + 31, 45), (cx + 20, 13)):
+            pygame.draw.circle(s, (45, 38, 32), (x, y), 3)
         return s
 
     def _make_environment(self) -> None:
@@ -238,7 +328,12 @@ class AssetManager:
         self._tree(16, 40, layers_big, "tree_o", o, height_extra=6)
         self._tree(12, 26, layers_small, "tree_r", r, height_extra=4)
         self._tree(10, 22, layers_small, "tree_s", g, height_extra=2)
-        self.variants["tree"] = ["tree_g", "tree_o", "tree_r", "tree_s"]
+        self.spr["tree_pine"] = self._pine_tree()
+        self.spr["tree_dead"] = self._dead_tree()
+        self.spr["tree_twisted"] = self._dead_tree(twisted=True)
+        self.variants["tree"] = [
+            "tree_g", "tree_o", "tree_r", "tree_s",
+            "tree_pine", "tree_dead", "tree_twisted"]
 
         for i, base in enumerate([(110, 104, 96), (90, 86, 82)]):
             s = pygame.Surface((70, 60), pygame.SRCALPHA)
