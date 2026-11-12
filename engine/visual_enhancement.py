@@ -13,6 +13,8 @@ from functools import lru_cache
 import numpy as np
 import pygame
 
+import config
+
 
 class VisualEnhancement:
     def __init__(self, width: int, height: int) -> None:
@@ -23,6 +25,7 @@ class VisualEnhancement:
         self._shade = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._shade_full = pygame.Surface((self.width, self.height),
                                           pygame.SRCALPHA)
+        self._beam = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog_full = pygame.Surface((self.width, self.height),
                                         pygame.SRCALPHA)
@@ -101,11 +104,35 @@ class VisualEnhancement:
             # Focused flashlight pool: a soft centre and a fast outer falloff.
             lights.append((sx / 4.0, sy / 4.0,
                            7.4 * 32.0 * zoom / 4.0, 0.92))
+            if quality >= 1:
+                aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
+                dx = (aim_x - aim_y) * config.SCALE_X
+                dy = (aim_x + aim_y) * config.SCALE_Y
+                length = math.hypot(dx, dy) or 1.0
+                dx, dy = dx / length, dy / length
+                radius = 9.0 * 32.0 * zoom / 4.0
+                ox, oy = sx / 4.0, sy / 4.0
+                ex, ey = ox + dx * radius, oy + dy * radius
+                px, py = -dy * radius * 0.34, dx * radius * 0.34
+                self._beam.fill((0, 0, 0, 0))
+                pygame.draw.polygon(
+                    self._beam, (0, 0, 0, 42),
+                    [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
+                     (int(ex - px), int(ey - py))])
+                pygame.draw.polygon(
+                    self._beam, (0, 0, 0, 24),
+                    [(int(ox), int(oy)), (int(ox + dx * radius),
+                                          int(oy + dy * radius)),
+                     (int(ox + dx * radius * 0.88 + px * 0.55),
+                      int(oy + dy * radius * 0.88 + py * 0.55))])
         for lx, ly, radius, strength in lights:
             r = max(8, min(220, int(radius)))
             radial = self._radial(r)
             radial.set_alpha(int(255 * strength))
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
+                             special_flags=pygame.BLEND_RGBA_SUB)
+        if player is not None and quality >= 1:
+            self._shade.blit(self._beam, (0, 0),
                              special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),
                                self._shade_full)
