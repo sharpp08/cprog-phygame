@@ -194,6 +194,10 @@ class Game:
         self.story = StorySystem(self.wm.world)
         self.horror = HorrorDirector()
         self.story.discovered.update(pg.get("clues", []))
+        sd = data.get("survival", {})
+        self.survival.stamina = float(sd.get("stamina", 100.0))
+        self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
+        self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
         self.progression.phase = pg.get("phase", "explore")
         self.progression.state = "playing"
         self.progression.score = pg.get("score", 0)
@@ -223,12 +227,14 @@ class Game:
     def _enter_gameover(self) -> None:
         self.state = "gameover"
         self.game_over = GameOver(config.WINDOW_W, config.WINDOW_H)
+        if self.progression.state == "won" and self.story is not None:
+            self.game_over.ending_title, self.game_over.ending_subtitle = self.story.ending()
         self.audio.stop_music()
         if self.progression.state == "won":
             self.save_manager.delete()
         else:
             self.save_manager.save(self.player, self.progression,
-                                   self.settings)
+                                   self.settings, self.story, self.survival)
 
     # ------------------------------------------------------------------
     def run(self) -> None:
