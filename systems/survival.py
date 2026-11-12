@@ -9,6 +9,7 @@ class SurvivalSystem:
         self.flashlight_battery = 100.0
         self.flashlight_on = True
         self.low_battery_warned = False
+        self.scrap = 0
 
     def toggle_flashlight(self) -> bool:
         if self.flashlight_on:
@@ -34,6 +35,17 @@ class SurvivalSystem:
         else:
             self.stamina = min(100.0, self.stamina + 18.0 * dt)
         return can_run
+
+    def add_scrap(self, amount: int = 1) -> None:
+        self.scrap = max(0, self.scrap + int(amount))
+
+    def craft_medkit(self, player, cost: int = 3, healing: float = 35.0) -> bool:
+        """Craft a field dressing from scavenged zombie scrap."""
+        if self.scrap < cost or player.hp >= player.max_hp:
+            return False
+        self.scrap -= cost
+        player.hp = min(player.max_hp, player.hp + healing)
+        return True
 
     @property
     def battery_percent(self) -> int:
