@@ -56,6 +56,21 @@ class Renderer:
         dim.fill((208, 202, 186))
         self._dim = dim
 
+    def _scale_sprite(self, spr: pygame.Surface, zoom=None):
+        """Return a cached sprite scaled to the current isometric camera zoom."""
+        factor = self.cam.zoom if zoom is None else float(zoom)
+        zq = round(factor, 2)
+        if abs(zq - 1.0) < 0.02:
+            return spr
+        key = (id(spr), zq)
+        scaled = self._scaled_cache.get(key)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(
+                spr, (max(2, int(spr.get_width() * zq)),
+                      max(2, int(spr.get_height() * zq))))
+            self._scaled_cache[key] = scaled
+        return scaled
+
     # ------------------------------------------------------------------
     def _cull_bounds(self) -> Tuple[int, int, int, int]:
         cam = self.cam
@@ -145,13 +160,14 @@ class Renderer:
                 else:
                     spr = assets.tile(
                         "grass", variant=world.grass_var[ty][tx])
+                spr = self._scale_sprite(spr)
                 self.screen.blit(spr, (x - spr.get_width() / 2,
                                        y - spr.get_height() / 2))
 
     # ------------------------------------------------------------------
     def _draw_water(self, world, minx, miny, maxx, maxy) -> None:
         cam = self.cam
-        spr = self.assets.tile("water")
+        spr = self._scale_sprite(self.assets.tile("water"))
         half = (spr.get_width() / 2, spr.get_height() / 2)
         for (tx, ty) in world.water_tiles:
             if tx > maxx or tx < minx or ty > maxy or ty < miny:
@@ -171,12 +187,16 @@ class Renderer:
                 continue
             x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
             a = int(28 + 20 * math.sin(t * 2.2 + i))
+            z = self.cam.zoom
             pygame.draw.ellipse(self.screen,
-                                (190, 220, 240, a),
-                                (int(x - 12), int(y - 5), 24, 9), 0)
+                                (150, 188, 205, a),
+                                (int(x - 12 * z), int(y - 5 * z),
+                                 max(2, int(24 * z)),
+                                 max(2, int(9 * z))), 0)
         # A few larger, translucent ripple rings sell the water movement.
         ripple = self.assets.spr.get("ripple")
         if ripple is not None and world.water_tiles:
+            ripple = self._scale_sprite(ripple)
             phase = int(self.time * 1.7)
             for i, (tx, ty) in enumerate(world.water_tiles):
                 if (i + phase * 3) % 13:
@@ -249,7 +269,7 @@ class Renderer:
         self.screen.blit(fs, (cx - w // 2, cy - h // 2))
 
     def _draw_obstacle(self, o) -> None:
-        spr = self.assets.sprite(o.kind, o.variant)
+        spr = self._scale_sprite(self.assets.sprite(o.kind, o.variant))
         if o.kind == "tree" and self.quality >= 1:
             sway = int(round(math.sin(self.time * 1.15 +
                                       o.x * 0.63 + o.y * 0.41) * 1.25))
@@ -272,6 +292,7 @@ class Renderer:
         if o.kind == "waterfall" and self.quality >= 1:
             mist = self.assets.spr.get("mist")
             if mist is not None:
+                mist = self._scale_sprite(mist)
                 mist.set_alpha(105 if self.quality == 1 else 145)
                 drift = math.sin(self.time * 0.8) * 5
                 self.screen.blit(mist, (cx - 42 + drift,
@@ -286,16 +307,9 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
-        scale = 1.3 if z.ztype == "tank" else 1.0
-        if scale != 1.0:
-            skey = (id(spr), scale)
-            scaled = self._scaled_cache.get(skey)
-            if scaled is None:
-                scaled = pygame.transform.smoothscale(
-                    spr, (int(spr.get_width() * scale),
-                          int(spr.get_height() * scale)))
-                self._scaled_cache[skey] = scaled
-            spr = scaled
+        type_scale = 1.3 if z.ztype == "tank" else (
+            0.92 if z.ztype == "fast" else 1.0)
+        spr = self._scale_sprite(spr, self.cam.zoom * type_scale)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + 10))
         if z.hit_flash > 0:
@@ -312,10 +326,10 @@ class Renderer:
                              (bx, by, int(bw * ratio), 3))
 
     def _draw_pickup(self, p) -> None:
-        spr = self.assets.spr[p.ptype]
+        spr = self._scale_sprite(self.assets.spr[p.ptype])
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
-        bob = math.sin(p.bob * 3.0) * 3
+        bob = math.sin(p.bob * 3.0) * 3 * cam.zoom
         self._shadow(p.x, p.y, 20, 60)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() - 6 + bob))
@@ -326,13 +340,15 @@ class Renderer:
     def _draw_beacon(self, pos) -> None:
         cam = self.cam
         cx, cy = cam.iso_to_screen(pos[0] + 0.5, pos[1] + 0.5, 0.0)
-        spr = self.assets.spr["beacon"]
+        spr = self._scale_sprite(self.assets.spr["beacon"])
         off = math.sin(self.time * 2.0) * 4
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - 120 + off))
         a = int(150 + 70 * math.sin(self.time * 3))
         self._beacon_glow.set_alpha(a)
-        self.screen.blit(self._beacon_glow, (cx - 24, cy - 136 + off))
+        glow = self._scale_sprite(self._beacon_glow)
+        self.screen.blit(glow, (cx - glow.get_width() / 2,
+                                cy - 136 * cam.zoom + off))
 
     # ------------------------------------------------------------------
     def _draw_player(self, p) -> None:
@@ -340,7 +356,7 @@ class Renderer:
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
         flist = self.assets.player_frames(p.anim_state)
-        spr = flist[p.frame_index % len(flist)]
+        spr = self._scale_sprite(flist[p.frame_index % len(flist)])
         if p.facing < 0:
             key = id(spr)
             flipped = self._flip_cache.get(key)
@@ -361,13 +377,13 @@ class Renderer:
         if p._shoot_flash > 0:
             mx, my = cam.iso_to_screen(p.x + p.aim[0] * 0.7,
                                        p.y + p.aim[1] * 0.7, 0.3)
-            m = self.assets.spr["muzzle"]
+            m = self._scale_sprite(self.assets.spr["muzzle"])
             self.screen.blit(m, (mx - m.get_width() / 2,
                                  my - m.get_height() / 2 - 4))
 
     def _draw_bullets(self, bullets) -> None:
         cam = self.cam
-        tracer = self.assets.spr["tracer"]
+        tracer = self._scale_sprite(self.assets.spr["tracer"])
         for b in bullets:
             x, y = cam.iso_to_screen(b.x, b.y, b.z)
             ex, ey = cam.iso_to_screen(b.x - b.dx * 0.5,
@@ -379,7 +395,7 @@ class Renderer:
             self.screen.blit(rot, (x - rot.get_width() / 2,
                                    y - rot.get_height() / 2))
             if b.pellets > 1:
-                p = self.assets.spr["pellet"]
+                p = self._scale_sprite(self.assets.spr["pellet"])
                 self.screen.blit(p, (x - 3, y - 3))
 
     def _draw_particles(self) -> None:
