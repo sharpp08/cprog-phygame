@@ -21,7 +21,8 @@ class SaveManager:
         self.path = os.path.join(save_dir, SAVE_FILE)
 
     # ------------------------------------------------------------------
-    def save(self, player, progression, settings: dict) -> bool:
+    def save(self, player, progression, settings: dict,
+             story=None, survival=None) -> bool:
         data = {
             "version": SAVE_VERSION,
             "player": player.to_dict(),
@@ -33,6 +34,13 @@ class SaveManager:
                 "time": progression.time,
                 "wave": progression.wave,
                 "shrine_reached": progression.shrine_reached,
+                "clues": sorted(story.discovered) if story else [],
+            },
+            "survival": {
+                "stamina": survival.stamina if survival else 100.0,
+                "scrap": survival.scrap if survival else 0,
+                "flashlight_battery": survival.flashlight_battery if survival else 100.0,
+                "flashlight_on": survival.flashlight_on if survival else True,
             },
             "settings": settings,
         }

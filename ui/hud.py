@@ -18,7 +18,7 @@ class HUD:
         self.dmg_vignette = max(self.dmg_vignette, amount)
 
     # ------------------------------------------------------------------
-    def draw(self, screen, player, progression) -> None:
+    def draw(self, screen, player, progression, survival=None, story=None) -> None:
         f = self.fonts
         # health bar
         bw, bh = 220, 22
@@ -58,6 +58,19 @@ class HUD:
             text(screen, f, str(i + 1), rx + 10, wy + 40, 18,
                  (220, 210, 180) if sel else (120, 110, 90), "left",
                  True)
+
+        # Survival resources: sprint stamina and flashlight charge.
+        if survival is not None:
+            text(screen, f, f"STAMINA {survival.stamina_percent}%", 24, 78,
+                 18, (190, 205, 160), "left")
+            light_state = "ON" if survival.flashlight_on else "OFF / CHARGING"
+            text(screen, f, f"LIGHT {survival.battery_percent}%  {light_state}",
+                 24, 101, 17, (225, 205, 145), "left")
+            text(screen, f, f"SCRAP {survival.scrap}  [C] CRAFT MEDKIT (3)",
+                 24, 124, 16, (190, 170, 135), "left")
+        if story is not None:
+            text(screen, f, f"CLUES {len(story.discovered)}/{len(story.clues)}  [E] INVESTIGATE",
+                 self.W // 2, self.H - 24, 17, (205, 190, 155), "center")
 
         # objective (top-centre)
         text(screen, f, progression.objective, self.W // 2, 30, 22,

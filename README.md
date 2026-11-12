@@ -141,6 +141,33 @@ Enemy AI is intended to include detection, pursuit, navigation, obstacle avoidan
 
 Planned pickups include ammunition, medical supplies, weapons, and other survival items. Player status is expected to include health, current weapon, ammunition, inventory, and survival state.
 
+
+## Implemented horror and survival systems
+
+The current feature branch adds the following playable systems on top of the graphics upgrade:
+
+- **Adaptive horror director:** tracks nearby enemy pressure, player health, and elapsed time to pace unsettling ambient events with cooldowns.
+- **Smarter zombie investigation:** running footsteps and gunfire emit noise events; nearby zombies path toward the sound source before returning to normal player detection.
+- **Flashlight battery:** press **F** to toggle the flashlight. It drains while on and recharges while switched off; the player light pool and directional beam now follow the toggle.
+- **Stamina:** sprinting consumes stamina and resting restores it. Sprinting is temporarily disabled when stamina is depleted.
+- **Crafting:** defeated zombies yield scrap; press **C** to craft a 35-HP field dressing for 3 scrap.
+- **Safe zone:** the starting camp briefly protects the player from zombie pursuit and attacks.
+- **Environmental clues:** press **E** near discoverable journal/stone clues at forest landmarks. Clues are recorded and shown in the HUD.
+- **Psychological atmosphere:** the director schedules changing distant sounds, footsteps, bells, and unnatural quiet messages based on threat pressure.
+- **Multiple endings:** completing the shrine encounter produces one of three story outcomes based on how many clues were discovered.
+- **Save support:** discovered clues, stamina, flashlight charge, and flashlight state are persisted with the existing save data.
+
+### New controls
+
+| Input | Action |
+|---|---|
+| F | Toggle flashlight |
+| E | Investigate a nearby clue |
+| C | Craft a medkit (3 scrap) |
+| Shift | Sprint (uses stamina) |
+
+The systems are modular under `systems/` and include headless unit tests in `tests/test_horror_systems.py`. They use the existing Pygame architecture and do not add runtime dependencies.
+
 ## Technical Design
 
 ### Isometric projection

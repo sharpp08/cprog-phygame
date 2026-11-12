@@ -19,6 +19,9 @@ from systems.enemy_ai import ZombieController
 from systems.inventory import apply_pickup
 from systems.navigation import Navigation
 from systems.progression import Progression
+from systems.horror_director import HorrorDirector
+from systems.storytelling import StorySystem
+from systems.survival import SurvivalSystem
 from systems.save_manager import SaveManager
 from ui.game_over import GameOver
 from ui.hud import HUD
@@ -66,6 +69,9 @@ class Game:
         self.renderer: Optional[Renderer] = None
         self.combat: Optional[CombatSystem] = None
         self.progression: Optional[Progression] = None
+        self.survival: Optional[SurvivalSystem] = None
+        self.story: Optional[StorySystem] = None
+        self.horror: Optional[HorrorDirector] = None
         self._prev_hp = 0.0
         self._last = pygame.time.get_ticks()
 
@@ -108,6 +114,10 @@ class Game:
         self.wm.setup(self.player, self.audio, self.particles)
         self.combat = CombatSystem(self.wm.grid)
         self.progression = Progression()
+        self.survival = SurvivalSystem()
+        self.player.flashlight_on = self.survival.flashlight_on
+        self.story = StorySystem(self.wm.world)
+        self.horror = HorrorDirector()
         self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
@@ -181,6 +191,16 @@ class Game:
         self.wm.setup(self.player, self.audio, self.particles)
         self.combat = CombatSystem(self.wm.grid)
         self.progression = Progression()
+        self.survival = SurvivalSystem()
+        self.story = StorySystem(self.wm.world)
+        self.horror = HorrorDirector()
+        self.story.discovered.update(pg.get("clues", []))
+        sd = data.get("survival", {})
+        self.survival.stamina = float(sd.get("stamina", 100.0))
+        self.survival.scrap = int(sd.get("scrap", 0))
+        self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
+        self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
+        self.player.flashlight_on = self.survival.flashlight_on
         self.progression.phase = pg.get("phase", "explore")
         self.progression.state = "playing"
         self.progression.score = pg.get("score", 0)
@@ -210,12 +230,14 @@ class Game:
     def _enter_gameover(self) -> None:
         self.state = "gameover"
         self.game_over = GameOver(config.WINDOW_W, config.WINDOW_H)
+        if self.progression.state == "won" and self.story is not None:
+            self.game_over.ending_title, self.game_over.ending_subtitle = self.story.ending()
         self.audio.stop_music()
         if self.progression.state == "won":
             self.save_manager.delete()
         else:
             self.save_manager.save(self.player, self.progression,
-                                   self.settings)
+                                   self.settings, self.story, self.survival)
 
     # ------------------------------------------------------------------
     def run(self) -> None:
@@ -254,6 +276,23 @@ class Game:
                                                            self.audio))
         elif self.state == "playing":
             self.input.process(event)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_f:
+                if self.survival is not None:
+                    enabled = self.survival.toggle_flashlight()
+                    self.player.flashlight_on = enabled
+                    self.progression.notify(
+                        "Flashlight ON" if enabled else "Flashlight OFF", 1.5)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
+                if self.story is not None:
+                    clue = self.story.interact(self.player.x, self.player.y)
+                    if clue:
+                        self.progression.notify(clue["text"], 6.0)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
+                if self.survival and self.survival.craft_medkit(self.player):
+                    self.progression.notify("Field dressing crafted (+35 HP)", 2.5)
+                    self.audio.play("pickup")
+                elif self.survival:
+                    self.progression.notify("Need 3 scrap and missing health to craft", 2.0)
             if InputManager.pause_pressed():
                 self._open_pause()
         elif self.state == "paused":
@@ -335,9 +374,16 @@ class Game:
         player.set_aim(aim[0], aim[1])
         # movement
         mv = InputManager.move_vector()
-        player.apply_movement(mv, InputManager.running(), dt, self.wm.grid)
+        requested_run = InputManager.running() and (mv[0] != 0.0 or mv[1] != 0.0)
+        can_run = self.survival.update(dt, requested_run) if self.survival else True
+        player.apply_movement(mv, requested_run and can_run, dt, self.wm.grid)
+        player.update(dt)
         if player.footstep_sound:
             self.audio.play("footstep")
+            if self.wm.controller:
+                self.wm.controller.emit_noise(
+                    player.x, player.y, 11.0 if player.running else 5.0,
+                    1.1 if player.running else 0.45)
             player.footstep_sound = False
         # weapon switching 1/2/3
         k = pygame.key.get_pressed()
@@ -354,6 +400,7 @@ class Game:
         auto = w.fire_mode == "auto"
         if self.input.mouse_down and (auto or self.input.mouse_pressed):
             self.combat.fire(player, aim, self.audio, self.particles)
+            self.wm.controller.emit_noise(player.x, player.y, 19.0, 1.6)
         elif self.input.mouse_pressed and w.is_empty():
             if w.start_reload():
                 self.audio.play("reload")
@@ -365,6 +412,8 @@ class Game:
         for z in killed:
             self.wm.controller.kill(z)
             self.progression.on_kill(z)
+            if self.survival is not None:
+                self.survival.add_scrap(1)
         self.wm.controller.zombies = [z for z in self.wm.controller.zombies
                                        if z.alive]
         # pickups
@@ -372,6 +421,8 @@ class Game:
             apply_pickup(player, p, self.audio)
         # progression + world + particles
         self.progression.update(dt, player, self.wm.controller, self.wm.world)
+        if self.horror is not None:
+            self.horror.update(dt, player, self.wm.controller, self.progression)
         self.wm.world.update(dt)
         self.particles.update(dt, self.wm.world)
         # camera follow
@@ -393,7 +444,8 @@ class Game:
                                        self.wm.controller.zombies,
                                        self.wm.active_pickups(),
                                        self.combat.bullets, self.dt)
-            self.hud.draw(self.screen, self.player, self.progression)
+            self.hud.draw(self.screen, self.player, self.progression,
+                          self.survival, self.story)
         if self.state == "menu":
             self._draw_menu_bg()
             self.main_menu.draw(self.screen, self.fonts)

@@ -101,7 +101,7 @@ class VisualEnhancement:
             lights.append((sx / 4.0, sy / 4.0,
                            radius * 32.0 * zoom / 4.0,
                            max(0.0, min(1.0, float(intensity)))))
-        if player is not None:
+        if player is not None and getattr(player, "flashlight_on", True):
             sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
             # Focused flashlight pool: a soft centre and a fast outer falloff.
             lights.append((sx / 4.0, sy / 4.0,
@@ -133,7 +133,7 @@ class VisualEnhancement:
             radial.set_alpha(int(255 * strength))
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
                              special_flags=pygame.BLEND_RGBA_SUB)
-        if player is not None and quality >= 1:
+        if player is not None and getattr(player, "flashlight_on", True) and quality >= 1:
             self._shade.blit(self._beam, (0, 0),
                              special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),
