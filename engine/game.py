@@ -286,6 +286,12 @@ class Game:
                     clue = self.story.interact(self.player.x, self.player.y)
                     if clue:
                         self.progression.notify(clue["text"], 6.0)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
+                if self.survival and self.survival.craft_medkit(self.player):
+                    self.progression.notify("Field dressing crafted (+35 HP)", 2.5)
+                    self.audio.play("pickup")
+                elif self.survival:
+                    self.progression.notify("Need 3 scrap and missing health to craft", 2.0)
             if InputManager.pause_pressed():
                 self._open_pause()
         elif self.state == "paused":
@@ -405,6 +411,8 @@ class Game:
         for z in killed:
             self.wm.controller.kill(z)
             self.progression.on_kill(z)
+            if self.survival is not None:
+                self.survival.add_scrap(1)
         self.wm.controller.zombies = [z for z in self.wm.controller.zombies
                                        if z.alive]
         # pickups
