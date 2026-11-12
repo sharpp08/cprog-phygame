@@ -197,6 +197,7 @@ class Game:
         self.story.discovered.update(pg.get("clues", []))
         sd = data.get("survival", {})
         self.survival.stamina = float(sd.get("stamina", 100.0))
+        self.survival.scrap = int(sd.get("scrap", 0))
         self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
         self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
         self.player.flashlight_on = self.survival.flashlight_on
