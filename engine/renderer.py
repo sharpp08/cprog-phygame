@@ -160,14 +160,14 @@ class Renderer:
                 else:
                     spr = assets.tile(
                         "grass", variant=world.grass_var[ty][tx])
-                spr = self._scale_sprite(spr)
+                spr = self._scale_sprite(spr, self.cam.zoom * 1.025)
                 self.screen.blit(spr, (x - spr.get_width() / 2,
                                        y - spr.get_height() / 2))
 
     # ------------------------------------------------------------------
     def _draw_water(self, world, minx, miny, maxx, maxy) -> None:
         cam = self.cam
-        spr = self._scale_sprite(self.assets.tile("water"))
+        spr = self._scale_sprite(self.assets.tile("water"), self.cam.zoom * 1.025)
         half = (spr.get_width() / 2, spr.get_height() / 2)
         for (tx, ty) in world.water_tiles:
             if tx > maxx or tx < minx or ty > maxy or ty < miny:
@@ -244,6 +244,7 @@ class Renderer:
             self._draw_beacon(obj)
 
     def _shadow(self, x: float, y: float, size: float, alpha=90) -> None:
+        size = size * self.cam.zoom
         key = (int(size), int(alpha))
         s = self._shadow_cache.get(key)
         if s is None:
@@ -254,7 +255,7 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(x, y, 0.0)
         self.screen.blit(s, (cx - s.get_width() / 2,
-                             cy - s.get_height() / 2 + 4))
+                             cy - s.get_height() / 2 + 4 * cam.zoom))
 
     def _white_flash(self, w: int, h: int, cx: int, cy: int,
                     alpha: int) -> None:
@@ -286,9 +287,9 @@ class Renderer:
             return
         if o.kind in ("tree", "shrine", "waterfall", "ruin", "rock"):
             self._shadow(o.x, o.y, 30 if o.kind == "rock" else 42, 70)
-        oy = -o.z * config.SCALE_Z
+        oy = -o.z * config.SCALE_Z * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + oy + 8))
+                               cy - spr.get_height() + oy + 8 * cam.zoom))
         if o.kind == "waterfall" and self.quality >= 1:
             mist = self.assets.spr.get("mist")
             if mist is not None:
@@ -311,19 +312,19 @@ class Renderer:
             0.92 if z.ztype == "fast" else 1.0)
         spr = self._scale_sprite(spr, self.cam.zoom * type_scale)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10))
+                               cy - spr.get_height() + 10 * cam.zoom))
         if z.hit_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(180 * z.hit_flash / 0.12))
         # HP bar for damaged zombies
         if z.hp < z.max_hp:
-            bw = 26
+            bw = int(26 * cam.zoom)
             ratio = max(0.0, z.hp / z.max_hp)
             bx = cx - bw / 2
             by = cy - (spr.get_height()) - 6
-            pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, 3))
+            pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, max(2, int(3 * cam.zoom))))
             pygame.draw.rect(self.screen, (200, 50, 40),
-                             (bx, by, int(bw * ratio), 3))
+                             (bx, by, int(bw * ratio), max(2, int(3 * cam.zoom))))
 
     def _draw_pickup(self, p) -> None:
         spr = self._scale_sprite(self.assets.spr[p.ptype])
@@ -332,18 +333,19 @@ class Renderer:
         bob = math.sin(p.bob * 3.0) * 3 * cam.zoom
         self._shadow(p.x, p.y, 20, 60)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() - 6 + bob))
+                               cy - spr.get_height() - 6 * cam.zoom + bob))
         # soft glow ring
         pygame.draw.ellipse(self.screen, (255, 230, 150, 60),
-                            (cx - 14, cy - 2, 28, 12))
+                            (cx - 14 * cam.zoom, cy - 2 * cam.zoom,
+                             28 * cam.zoom, 12 * cam.zoom))
 
     def _draw_beacon(self, pos) -> None:
         cam = self.cam
         cx, cy = cam.iso_to_screen(pos[0] + 0.5, pos[1] + 0.5, 0.0)
         spr = self._scale_sprite(self.assets.spr["beacon"])
-        off = math.sin(self.time * 2.0) * 4
+        off = math.sin(self.time * 2.0) * 4 * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - 120 + off))
+                               cy - 120 * cam.zoom + off))
         a = int(150 + 70 * math.sin(self.time * 3))
         self._beacon_glow.set_alpha(a)
         glow = self._scale_sprite(self._beacon_glow)
@@ -396,7 +398,7 @@ class Renderer:
                                    y - rot.get_height() / 2))
             if b.pellets > 1:
                 p = self._scale_sprite(self.assets.spr["pellet"])
-                self.screen.blit(p, (x - 3, y - 3))
+                self.screen.blit(p, (x - 3 * cam.zoom, y - 3 * cam.zoom))
 
     def _draw_particles(self) -> None:
         self.particles.draw(self.screen, self.cam, self.quality)
