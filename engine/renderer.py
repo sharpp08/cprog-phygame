@@ -7,8 +7,9 @@ from __future__ import annotations
 import math
 from typing import List, Optional, Sequence, Tuple
 
-import numpy as np
 import pygame
+
+from engine.visual_enhancement import VisualEnhancement
 
 import config
 from engine.collision import distance2
@@ -24,8 +25,14 @@ class Renderer:
         self.H = config.WINDOW_H
         self.quality = 1
         self.time = 0.0
-        self._lightmap: Optional[pygame.Surface] = None
-        self._mesh: Optional[Tuple[np.ndarray, np.ndarray]] = None
+        self.visual = VisualEnhancement(self.W, self.H)
+        self._shadow_cache: dict = {}
+        self._scaled_cache: dict = {}
+        self._beacon_glow = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self._beacon_glow, (255, 210, 120, 110),
+                           (24, 24), 23)
+        pygame.draw.circle(self._beacon_glow, (255, 235, 170, 70),
+                           (24, 24), 14)
         self._fog: Optional[pygame.Surface] = None
         self._dim: Optional[pygame.Surface] = None
         self._flashes: dict = {}
@@ -37,6 +44,7 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _prep_fog(self) -> None:
+        self.visual.resize(self.W, self.H)
         fog = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         for y in range(self.H):
             a = int(90 * (y / self.H) ** 2)
@@ -76,13 +84,9 @@ class Renderer:
             drawn_items += 1
         self._draw_bullets(bullets)
         self._draw_particles()
-        if self.quality >= 1:
-            self._apply_lighting(world, player)
-        else:
-            self.screen.blit(self._dim, (0, 0),
-                             special_flags=pygame.BLEND_RGB_MULT)
-        if self.quality >= 2 and self._fog:
-            self.screen.blit(self._fog, (0, 0))
+        self._apply_lighting(world, player)
+        self.visual.draw_atmosphere(self.screen, self.cam, world,
+                                    self.time, self.quality)
         # cache counts for the debug overlay
         cam_x, cam_y = cam.fx, cam.fy
         psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \
@@ -205,8 +209,13 @@ class Renderer:
             self._draw_beacon(obj)
 
     def _shadow(self, x: float, y: float, size: float, alpha=90) -> None:
-        s = pygame.Surface((int(size), int(size / 2)), pygame.SRCALPHA)
-        pygame.draw.ellipse(s, (0, 0, 0, alpha), s.get_rect())
+        key = (int(size), int(alpha))
+        s = self._shadow_cache.get(key)
+        if s is None:
+            s = pygame.Surface((max(2, int(size)),
+                                max(2, int(size / 2))), pygame.SRCALPHA)
+            pygame.draw.ellipse(s, (0, 0, 0, alpha), s.get_rect())
+            self._shadow_cache[key] = s
         cam = self.cam
         cx, cy = cam.iso_to_screen(x, y, 0.0)
         self.screen.blit(s, (cx - s.get_width() / 2,
@@ -246,9 +255,14 @@ class Renderer:
         self._shadow(z.x, z.y, 34, 80)
         scale = 1.3 if z.ztype == "tank" else 1.0
         if scale != 1.0:
-            spr = pygame.transform.scale(spr,
-                                        (int(spr.get_width() * scale),
-                                         int(spr.get_height() * scale)))
+            skey = (id(spr), scale)
+            scaled = self._scaled_cache.get(skey)
+            if scaled is None:
+                scaled = pygame.transform.smoothscale(
+                    spr, (int(spr.get_width() * scale),
+                          int(spr.get_height() * scale)))
+                self._scaled_cache[skey] = scaled
+            spr = scaled
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + 10))
         if z.hit_flash > 0:
@@ -283,10 +297,9 @@ class Renderer:
         off = math.sin(self.time * 2.0) * 4
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - 120 + off))
-        glow = pygame.Surface((40, 40), pygame.SRCALPHA)
-        a = int(90 + 50 * math.sin(self.time * 3))
-        pygame.draw.circle(glow, (255, 220, 120, a), (20, 20), 20)
-        self.screen.blit(glow, (cx - 20, cy - 130 + off - 6))
+        a = int(150 + 70 * math.sin(self.time * 3))
+        self._beacon_glow.set_alpha(a)
+        self.screen.blit(self._beacon_glow, (cx - 24, cy - 136 + off))
 
     # ------------------------------------------------------------------
     def _draw_player(self, p) -> None:
@@ -336,40 +349,11 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _apply_lighting(self, world, player) -> None:
-        H, W = self.H, self.W
-        if self._mesh is None:
-            yy, xx = np.meshgrid(np.arange(H), np.arange(W),
-                                 indexing="ij")
-            self._mesh = (xx.astype(np.float32), yy.astype(np.float32))
-        xx, yy = self._mesh
-        ambient = 0.82
-        lum = np.full((H, W), ambient, dtype=np.float32)
-        z = self.cam.zoom
-        lights = []
-        for (wx, wy, r, inten) in world.lights:
-            lights.append((wx, wy, r * z * 4.0, inten))
-        lights.append((player.x, player.y, 11.0 * z, 0.55))
-        for (wx, wy, rpx, inten) in lights:
-            lx, ly = self.cam.iso_to_screen(wx, wy, 0.0)
-            lx, ly = int(lx), int(ly)
-            d2 = (xx - lx) ** 2 + (yy - ly) ** 2
-            fall = np.clip(1.0 - np.sqrt(d2) / rpx, 0.0, 1.0) ** 2
-            lum = lum + fall * inten
-        lum = np.clip(lum, 0.0, 1.0)
-        arr = np.stack([
-            (lum * 255).astype(np.uint8),
-            (lum * 248).astype(np.uint8),
-            (lum * 220).astype(np.uint8),
-        ], axis=2)
-        if self._lightmap is None or \
-                self._lightmap.get_size() != (W, H):
-            self._lightmap = pygame.surfarray.make_surface(
-                np.transpose(arr, (1, 0, 2)))
-        else:
-            pygame.surfarray.blit_array(self._lightmap,
-                                        np.transpose(arr, (1, 0, 2)))
-        self.screen.blit(self._lightmap, (0, 0),
-                         special_flags=pygame.BLEND_RGB_MULT)
+        # Lighting and post-processing are cached by VisualEnhancement.
+        # Keep a stable integration point for all quality presets and avoid
+        # rebuilding full-resolution NumPy arrays on every frame.
+        self.visual.apply_lighting(self.screen, self.cam, world, player,
+                                   self.quality)
 
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,
