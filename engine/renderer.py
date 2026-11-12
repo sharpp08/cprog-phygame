@@ -47,7 +47,7 @@ class Renderer:
         """Resize cached atmosphere surfaces after a display-mode change."""
         self.visual.resize(self.W, self.H)
 
-        def _scale_sprite(self, spr: pygame.Surface, zoom=None):
+    def _scale_sprite(self, spr: pygame.Surface, zoom=None):
         """Return a cached sprite scaled to the current isometric camera zoom."""
         factor = self.cam.zoom if zoom is None else float(zoom)
         zq = round(factor, 2)
