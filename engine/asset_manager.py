@@ -417,6 +417,23 @@ class AssetManager:
                              (lx - 5, ry + 4, 10, 16), border_radius=3)
             pygame.draw.rect(s, (255, 210, 150),
                              (lx - 2, ry + 7, 4, 10), border_radius=2)
+        # Aged roof shingles and weathered timber on the shrine facade.
+        for row in range(1, 5):
+            yy = roof_top + row * 5
+            pygame.draw.line(s, (100, 30, 29),
+                             (cx - 34 + row * 2, yy),
+                             (cx + 34 - row * 2, yy), 1)
+        for side in (-22, 22):
+            pygame.draw.line(s, (92, 61, 39),
+                             (cx + side, wall_top - 17),
+                             (cx + side, base_y - 22), 3)
+            pygame.draw.line(s, (220, 194, 160),
+                             (cx + side + 2, wall_top - 12),
+                             (cx + side + 2, base_y - 28), 1)
+        pygame.draw.line(s, (92, 83, 73), (cx - 36, base_y + 8),
+                         (cx - 20, base_y + 15), 2)
+        pygame.draw.line(s, (92, 83, 73), (cx + 24, base_y + 5),
+                         (cx + 34, base_y + 13), 1)
         return s
 
     def _waterfall(self) -> pygame.Surface:
