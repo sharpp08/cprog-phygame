@@ -13,6 +13,8 @@ class GameOver:
         self.W = w
         self.H = h
         self.fonts = FontSet()
+        self.ending_title = None
+        self.ending_subtitle = None
         cx = w // 2
         y0 = h // 2 + 60
         self.buttons = [
@@ -40,9 +42,10 @@ class GameOver:
         screen.blit(overlay, (0, 0))
         f = self.fonts
         if won:
-            text(screen, f, "You Escaped", self.W // 2, self.H // 4, 72,
+            title = self.ending_title or "You Escaped"
+            text(screen, f, title, self.W // 2, self.H // 4, 58,
                  (180, 220, 120), "center", True)
-            sub = "The forest falls silent behind you."
+            sub = self.ending_subtitle or "The forest falls silent behind you."
         else:
             text(screen, f, "You Died", self.W // 2, self.H // 4, 72,
                  (200, 70, 50), "center", True)
