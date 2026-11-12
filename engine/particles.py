@@ -120,19 +120,20 @@ class ParticleSystem:
                 continue
             x, y = cam.iso_to_screen(p.x, p.y, p.z)
             a = int(255 * p.fade)
+            scale = max(0.5, float(cam.zoom))
             if p.kind == "firefly":
                 pygame.draw.circle(screen, (*p.color, a),
-                                   (int(x), int(y)), max(1, int(p.size)))
+                                   (int(x), int(y)), max(1, int(p.size * scale)))
                 pygame.draw.circle(screen, (255, 255, 180, a // 4),
-                                   (int(x), int(y)), int(p.size) + 2)
+                                   (int(x), int(y)), int(p.size * scale) + 2)
             elif p.kind == "smoke":
                 pygame.draw.circle(screen, (*p.color, a // 3),
                                    (int(x), int(y)),
-                                   int(p.size * (2 - p.fade)))
+                                   int(p.size * scale * (2 - p.fade)))
             else:
                 pygame.draw.circle(screen, (*p.color, a),
                                    (int(x), int(y)),
-                                   max(1, int(p.size * p.fade + 1)))
+                                   max(1, int(p.size * scale * p.fade + 1)))
 
     def clear(self) -> None:
         self.particles = []

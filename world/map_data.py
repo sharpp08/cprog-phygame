@@ -129,7 +129,7 @@ def generate_map(seed: int = 1234) -> Dict:
             blocks[y][x] = config.BLOCK_SOLID
             reserved.add((x, y))
             obstacles.append(dict(x=x, y=y, kind="tree",
-                                  variant=rng.randint(0, 3), z=0.0,
+                                  variant=rng.randint(0, 6), z=0.0,
                                   solid=True))
             return True
         return False

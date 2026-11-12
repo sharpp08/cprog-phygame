@@ -5,10 +5,11 @@ world coordinates never leak into the UI layer.
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Sequence, Tuple
+from typing import Sequence, Tuple
 
-import numpy as np
 import pygame
+
+from engine.visual_enhancement import VisualEnhancement
 
 import config
 from engine.collision import distance2
@@ -24,10 +25,16 @@ class Renderer:
         self.H = config.WINDOW_H
         self.quality = 1
         self.time = 0.0
-        self._lightmap: Optional[pygame.Surface] = None
-        self._mesh: Optional[Tuple[np.ndarray, np.ndarray]] = None
-        self._fog: Optional[pygame.Surface] = None
-        self._dim: Optional[pygame.Surface] = None
+        self.visual = VisualEnhancement(self.W, self.H)
+        self._shadow_cache: dict = {}
+        self._scaled_cache: dict = {}
+        self._tree_sway_cache: dict = {}
+        self._flip_cache: dict = {}
+        self._beacon_glow = pygame.Surface((48, 48), pygame.SRCALPHA)
+        pygame.draw.circle(self._beacon_glow, (255, 210, 120, 110),
+                           (24, 24), 23)
+        pygame.draw.circle(self._beacon_glow, (255, 235, 170, 70),
+                           (24, 24), 14)
         self._flashes: dict = {}
         self.show_debug = False
         self._fps = 0.0
@@ -37,14 +44,23 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _prep_fog(self) -> None:
-        fog = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        for y in range(self.H):
-            a = int(90 * (y / self.H) ** 2)
-            pygame.draw.line(fog, (190, 170, 140, a), (0, y), (self.W, y))
-        self._fog = fog
-        dim = pygame.Surface((self.W, self.H))
-        dim.fill((208, 202, 186))
-        self._dim = dim
+        """Resize cached atmosphere surfaces after a display-mode change."""
+        self.visual.resize(self.W, self.H)
+
+    def _scale_sprite(self, spr: pygame.Surface, zoom=None):
+        """Return a cached sprite scaled to the current isometric camera zoom."""
+        factor = self.cam.zoom if zoom is None else float(zoom)
+        zq = round(factor, 2)
+        if abs(zq - 1.0) < 0.02:
+            return spr
+        key = (id(spr), zq)
+        scaled = self._scaled_cache.get(key)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(
+                spr, (max(2, int(spr.get_width() * zq)),
+                      max(2, int(spr.get_height() * zq))))
+            self._scaled_cache[key] = scaled
+        return scaled
 
     # ------------------------------------------------------------------
     def _cull_bounds(self) -> Tuple[int, int, int, int]:
@@ -76,13 +92,9 @@ class Renderer:
             drawn_items += 1
         self._draw_bullets(bullets)
         self._draw_particles()
-        if self.quality >= 1:
-            self._apply_lighting(world, player)
-        else:
-            self.screen.blit(self._dim, (0, 0),
-                             special_flags=pygame.BLEND_RGB_MULT)
-        if self.quality >= 2 and self._fog:
-            self.screen.blit(self._fog, (0, 0))
+        self._apply_lighting(world, player)
+        self.visual.draw_atmosphere(self.screen, self.cam, world,
+                                    self.time, self.quality)
         # cache counts for the debug overlay
         cam_x, cam_y = cam.fx, cam.fy
         psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \
@@ -121,10 +133,11 @@ class Renderer:
                 if t == config.T_WATER:
                     continue
                 if t == config.T_LILY:
-                    spr = assets.tile("water")
+                    spr = self._scale_sprite(assets.tile("water"),
+                                             cam.zoom * 1.025)
                     self.screen.blit(spr, (x - spr.get_width() / 2,
                                            y - spr.get_height() / 2))
-                    spr = assets.spr("lily")
+                    spr = self._scale_sprite(assets.spr["lily"])
                     self.screen.blit(spr, (x - spr.get_width() / 2,
                                            y - spr.get_height() / 2))
                     continue
@@ -139,13 +152,14 @@ class Renderer:
                 else:
                     spr = assets.tile(
                         "grass", variant=world.grass_var[ty][tx])
+                spr = self._scale_sprite(spr, self.cam.zoom * 1.025)
                 self.screen.blit(spr, (x - spr.get_width() / 2,
                                        y - spr.get_height() / 2))
 
     # ------------------------------------------------------------------
     def _draw_water(self, world, minx, miny, maxx, maxy) -> None:
         cam = self.cam
-        spr = self.assets.tile("water")
+        spr = self._scale_sprite(self.assets.tile("water"), self.cam.zoom * 1.025)
         half = (spr.get_width() / 2, spr.get_height() / 2)
         for (tx, ty) in world.water_tiles:
             if tx > maxx or tx < minx or ty > maxy or ty < miny:
@@ -165,9 +179,26 @@ class Renderer:
                 continue
             x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
             a = int(28 + 20 * math.sin(t * 2.2 + i))
+            z = self.cam.zoom
             pygame.draw.ellipse(self.screen,
-                                (190, 220, 240, a),
-                                (int(x - 12), int(y - 5), 24, 9), 0)
+                                (150, 188, 205, a),
+                                (int(x - 12 * z), int(y - 5 * z),
+                                 max(2, int(24 * z)),
+                                 max(2, int(9 * z))), 0)
+        # A few larger, translucent ripple rings sell the water movement.
+        ripple = self.assets.spr.get("ripple")
+        if ripple is not None and world.water_tiles:
+            ripple = self._scale_sprite(ripple)
+            phase = int(self.time * 1.7)
+            for i, (tx, ty) in enumerate(world.water_tiles):
+                if (i + phase * 3) % 13:
+                    continue
+                if tx < minx or tx > maxx or ty < miny or ty > maxy:
+                    continue
+                x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
+                ripple.set_alpha(42 + int(24 * (0.5 + 0.5 *
+                                                math.sin(self.time * 2 + i))))
+                self.screen.blit(ripple, (x - 20, y - 12))
 
     # ------------------------------------------------------------------
     def _depth_items(self, world, player, zombies, pickups) -> list:
@@ -205,12 +236,18 @@ class Renderer:
             self._draw_beacon(obj)
 
     def _shadow(self, x: float, y: float, size: float, alpha=90) -> None:
-        s = pygame.Surface((int(size), int(size / 2)), pygame.SRCALPHA)
-        pygame.draw.ellipse(s, (0, 0, 0, alpha), s.get_rect())
+        size = size * self.cam.zoom
+        key = (int(size), int(alpha))
+        s = self._shadow_cache.get(key)
+        if s is None:
+            s = pygame.Surface((max(2, int(size)),
+                                max(2, int(size / 2))), pygame.SRCALPHA)
+            pygame.draw.ellipse(s, (0, 0, 0, alpha), s.get_rect())
+            self._shadow_cache[key] = s
         cam = self.cam
         cx, cy = cam.iso_to_screen(x, y, 0.0)
         self.screen.blit(s, (cx - s.get_width() / 2,
-                             cy - s.get_height() / 2 + 4))
+                             cy - s.get_height() / 2 + 4 * cam.zoom))
 
     def _white_flash(self, w: int, h: int, cx: int, cy: int,
                     alpha: int) -> None:
@@ -225,16 +262,35 @@ class Renderer:
         self.screen.blit(fs, (cx - w // 2, cy - h // 2))
 
     def _draw_obstacle(self, o) -> None:
-        spr = self.assets.sprite(o.kind, o.variant)
+        spr = self._scale_sprite(self.assets.sprite(o.kind, o.variant))
+        if o.kind == "tree" and self.quality >= 1:
+            sway = int(round(math.sin(self.time * 1.15 +
+                                      o.x * 0.63 + o.y * 0.41) * 1.25))
+            if sway:
+                key = (id(spr), sway)
+                moved = self._tree_sway_cache.get(key)
+                if moved is None:
+                    moved = pygame.transform.rotate(spr, sway * 1.15)
+                    self._tree_sway_cache[key] = moved
+                spr = moved
         cam = self.cam
         cx, cy = cam.iso_to_screen(o.x, o.y, 0.0)
         if cx < -160 or cx > self.W + 160 or cy < -180 or cy > self.H + 80:
             return
         if o.kind in ("tree", "shrine", "waterfall", "ruin", "rock"):
             self._shadow(o.x, o.y, 30 if o.kind == "rock" else 42, 70)
-        oy = -o.z * config.SCALE_Z
+        oy = -o.z * config.SCALE_Z * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + oy + 8))
+                               cy - spr.get_height() + oy + 8 * cam.zoom))
+        if o.kind == "waterfall" and self.quality >= 1:
+            mist = self.assets.spr.get("mist")
+            if mist is not None:
+                mist = self._scale_sprite(mist)
+                mist.set_alpha(105 if self.quality == 1 else 145)
+                drift = math.sin(self.time * 0.8) * 5
+                self.screen.blit(mist, (cx - 42 + drift,
+                                         cy - 32 + math.sin(
+                                             self.time * 1.3) * 2))
 
     def _draw_zombie(self, z) -> None:
         key = f"zombie_{z.ztype}"
@@ -244,49 +300,49 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
-        scale = 1.3 if z.ztype == "tank" else 1.0
-        if scale != 1.0:
-            spr = pygame.transform.scale(spr,
-                                        (int(spr.get_width() * scale),
-                                         int(spr.get_height() * scale)))
+        type_scale = 1.3 if z.ztype == "tank" else (
+            0.92 if z.ztype == "fast" else 1.0)
+        spr = self._scale_sprite(spr, self.cam.zoom * type_scale)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10))
+                               cy - spr.get_height() + 10 * cam.zoom))
         if z.hit_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(180 * z.hit_flash / 0.12))
         # HP bar for damaged zombies
         if z.hp < z.max_hp:
-            bw = 26
+            bw = int(26 * cam.zoom)
             ratio = max(0.0, z.hp / z.max_hp)
             bx = cx - bw / 2
             by = cy - (spr.get_height()) - 6
-            pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, 3))
+            pygame.draw.rect(self.screen, (40, 40, 40), (bx, by, bw, max(2, int(3 * cam.zoom))))
             pygame.draw.rect(self.screen, (200, 50, 40),
-                             (bx, by, int(bw * ratio), 3))
+                             (bx, by, int(bw * ratio), max(2, int(3 * cam.zoom))))
 
     def _draw_pickup(self, p) -> None:
-        spr = self.assets.spr[p.ptype]
+        spr = self._scale_sprite(self.assets.spr[p.ptype])
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
-        bob = math.sin(p.bob * 3.0) * 3
+        bob = math.sin(p.bob * 3.0) * 3 * cam.zoom
         self._shadow(p.x, p.y, 20, 60)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() - 6 + bob))
+                               cy - spr.get_height() - 6 * cam.zoom + bob))
         # soft glow ring
         pygame.draw.ellipse(self.screen, (255, 230, 150, 60),
-                            (cx - 14, cy - 2, 28, 12))
+                            (cx - 14 * cam.zoom, cy - 2 * cam.zoom,
+                             28 * cam.zoom, 12 * cam.zoom))
 
     def _draw_beacon(self, pos) -> None:
         cam = self.cam
         cx, cy = cam.iso_to_screen(pos[0] + 0.5, pos[1] + 0.5, 0.0)
-        spr = self.assets.spr["beacon"]
-        off = math.sin(self.time * 2.0) * 4
+        spr = self._scale_sprite(self.assets.spr["beacon"])
+        off = math.sin(self.time * 2.0) * 4 * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - 120 + off))
-        glow = pygame.Surface((40, 40), pygame.SRCALPHA)
-        a = int(90 + 50 * math.sin(self.time * 3))
-        pygame.draw.circle(glow, (255, 220, 120, a), (20, 20), 20)
-        self.screen.blit(glow, (cx - 20, cy - 130 + off - 6))
+                               cy - 120 * cam.zoom + off))
+        a = int(150 + 70 * math.sin(self.time * 3))
+        self._beacon_glow.set_alpha(a)
+        glow = self._scale_sprite(self._beacon_glow)
+        self.screen.blit(glow, (cx - glow.get_width() / 2,
+                                cy - 136 * cam.zoom + off))
 
     # ------------------------------------------------------------------
     def _draw_player(self, p) -> None:
@@ -294,15 +350,20 @@ class Renderer:
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
         flist = self.assets.player_frames(p.anim_state)
-        spr = flist[p.frame_index % len(flist)]
+        spr = self._scale_sprite(flist[p.frame_index % len(flist)])
         if p.facing < 0:
-            spr = pygame.transform.flip(spr, True, False)
+            key = id(spr)
+            flipped = self._flip_cache.get(key)
+            if flipped is None:
+                flipped = pygame.transform.flip(spr, True, False)
+                self._flip_cache[key] = flipped
+            spr = flipped
         # flicker while invulnerable
         if p.invuln > 0 and int(p.invuln * 20) % 2 == 0:
             spr = spr.copy()
             spr.set_alpha(120)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10))
+                               cy - spr.get_height() + 10 * cam.zoom))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(200 * p.dmg_flash))
@@ -310,13 +371,13 @@ class Renderer:
         if p._shoot_flash > 0:
             mx, my = cam.iso_to_screen(p.x + p.aim[0] * 0.7,
                                        p.y + p.aim[1] * 0.7, 0.3)
-            m = self.assets.spr["muzzle"]
+            m = self._scale_sprite(self.assets.spr["muzzle"])
             self.screen.blit(m, (mx - m.get_width() / 2,
-                                 my - m.get_height() / 2 - 4))
+                                 my - m.get_height() / 2 - 4 * cam.zoom))
 
     def _draw_bullets(self, bullets) -> None:
         cam = self.cam
-        tracer = self.assets.spr["tracer"]
+        tracer = self._scale_sprite(self.assets.spr["tracer"])
         for b in bullets:
             x, y = cam.iso_to_screen(b.x, b.y, b.z)
             ex, ey = cam.iso_to_screen(b.x - b.dx * 0.5,
@@ -328,48 +389,19 @@ class Renderer:
             self.screen.blit(rot, (x - rot.get_width() / 2,
                                    y - rot.get_height() / 2))
             if b.pellets > 1:
-                p = self.assets.spr["pellet"]
-                self.screen.blit(p, (x - 3, y - 3))
+                p = self._scale_sprite(self.assets.spr["pellet"])
+                self.screen.blit(p, (x - 3 * cam.zoom, y - 3 * cam.zoom))
 
     def _draw_particles(self) -> None:
         self.particles.draw(self.screen, self.cam, self.quality)
 
     # ------------------------------------------------------------------
     def _apply_lighting(self, world, player) -> None:
-        H, W = self.H, self.W
-        if self._mesh is None:
-            yy, xx = np.meshgrid(np.arange(H), np.arange(W),
-                                 indexing="ij")
-            self._mesh = (xx.astype(np.float32), yy.astype(np.float32))
-        xx, yy = self._mesh
-        ambient = 0.82
-        lum = np.full((H, W), ambient, dtype=np.float32)
-        z = self.cam.zoom
-        lights = []
-        for (wx, wy, r, inten) in world.lights:
-            lights.append((wx, wy, r * z * 4.0, inten))
-        lights.append((player.x, player.y, 11.0 * z, 0.55))
-        for (wx, wy, rpx, inten) in lights:
-            lx, ly = self.cam.iso_to_screen(wx, wy, 0.0)
-            lx, ly = int(lx), int(ly)
-            d2 = (xx - lx) ** 2 + (yy - ly) ** 2
-            fall = np.clip(1.0 - np.sqrt(d2) / rpx, 0.0, 1.0) ** 2
-            lum = lum + fall * inten
-        lum = np.clip(lum, 0.0, 1.0)
-        arr = np.stack([
-            (lum * 255).astype(np.uint8),
-            (lum * 248).astype(np.uint8),
-            (lum * 220).astype(np.uint8),
-        ], axis=2)
-        if self._lightmap is None or \
-                self._lightmap.get_size() != (W, H):
-            self._lightmap = pygame.surfarray.make_surface(
-                np.transpose(arr, (1, 0, 2)))
-        else:
-            pygame.surfarray.blit_array(self._lightmap,
-                                        np.transpose(arr, (1, 0, 2)))
-        self.screen.blit(self._lightmap, (0, 0),
-                         special_flags=pygame.BLEND_RGB_MULT)
+        # Lighting and post-processing are cached by VisualEnhancement.
+        # Keep a stable integration point for all quality presets and avoid
+        # rebuilding full-resolution NumPy arrays on every frame.
+        self.visual.apply_lighting(self.screen, self.cam, world, player,
+                                   self.quality)
 
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,

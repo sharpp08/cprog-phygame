@@ -72,6 +72,20 @@ The primary environment is a mysterious forest guided by the saved **Isometric F
 - Atmospheric lighting, shadows, and fog.
 - Animated water, foliage, and particles where performance permits.
 
+### Implemented graphical foundation
+
+The current renderer now includes a procedural, cached art pipeline and an atmospheric presentation layer:
+
+- Seven tree silhouettes, including leafy, pine, dead, and twisted variants.
+- More detailed ground tiles with clipped surface variation, roots, bark grain, foliage highlights, and weathered shrine details.
+- Zoom-consistent terrain, character, obstacle, particle, and shadow sizing to preserve isometric alignment.
+- Cool night ambience, cached radial light falloff, a directional flashlight beam, and a subtle screen vignette.
+- Layered ground mist, high-quality film grain, fireflies, animated water ripples, waterfall mist, and gentle tree sway.
+- Reusable shadow and sprite-scale caches to reduce per-frame surface creation.
+- Low, Medium, and High quality presets remain available in Settings; atmospheric detail scales with the selected preset.
+
+The procedural assets are generated at startup and cached; the playable map is still composed from world tiles and objects, not a screenshot background. Headless render validation captures review scenes for the forest, player/vegetation, zombie encounters, shrine/pond, and flashlight lighting.
+
 ## Gameplay
 
 ### Core objective
