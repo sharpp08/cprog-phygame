@@ -27,6 +27,9 @@ class ZombieController:
         self._audio = None
         self._particles = None
         self._player = None
+        self.noise_pos = None
+        self.noise_radius = 0.0
+        self.noise_timer = 0.0
 
     # ------------------------------------------------------------------
     def set_context(self, player, audio, particles,
@@ -35,6 +38,13 @@ class ZombieController:
         self._audio = audio
         self._particles = particles
         self._spawn_points = spawn_points
+
+    def emit_noise(self, x: float, y: float, radius: float,
+                   duration: float = 1.0) -> None:
+        """Let nearby zombies investigate a loud player action."""
+        self.noise_pos = (float(x), float(y))
+        self.noise_radius = max(self.noise_radius, float(radius))
+        self.noise_timer = max(self.noise_timer, float(duration))
 
     def add_zombie(self, z, x: float, y: float, ztype: str = "regular") -> None:
         from entities.zombie import Zombie
@@ -72,6 +82,10 @@ class ZombieController:
         p = self._player
         if p is None:
             return
+        self.noise_timer = max(0.0, self.noise_timer - dt)
+        if self.noise_timer <= 0:
+            self.noise_radius = 0.0
+            self.noise_pos = None
         # ambient groans
         self._groan_timer -= dt
         if self._groan_timer <= 0 and self.zombies:
@@ -89,20 +103,29 @@ class ZombieController:
         if not z.alive:
             return
         d = z.dist(p)
-        # state machine
+        # Running and gunfire carry farther than cautious walking.
+        noise_target = None
+        if self.noise_pos is not None and self.noise_timer > 0:
+            nd = ((z.x - self.noise_pos[0]) ** 2 +
+                  (z.y - self.noise_pos[1]) ** 2) ** 0.5
+            if nd <= self.noise_radius:
+                noise_target = self.noise_pos
+        # State machine: attack visible targets, investigate sounds, then
+        # resume normal detection and patrol behaviour.
         if d <= z.attack_range:
             z.state = "attack"
-        elif d < z.detect:
-            z.state = "pursue"
+        elif d < z.detect or noise_target is not None:
+            z.state = "investigate" if noise_target is not None and d >= z.detect else "pursue"
         else:
             z.state = "idle"
 
-        if z.state == "pursue":
+        if z.state in ("pursue", "investigate"):
             z.repath_timer -= dt
+            target = noise_target if z.state == "investigate" else (p.x, p.y)
             if z.repath_timer <= 0 or z.path is None:
-                self.nav.plan(z)
+                self.nav.plan(z, target[0], target[1])
                 z.repath_timer = z._repath_cd
-            vx, vy = self.nav.velocity(z, p.x, p.y)
+            vx, vy = self.nav.velocity(z, target[0], target[1])
             z.apply_move(vx, vy, dt, self.grid)
         elif z.state == "attack":
             z.apply_move(0.0, 0.0, dt, self.grid)
