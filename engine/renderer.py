@@ -5,7 +5,7 @@ world coordinates never leak into the UI layer.
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Sequence, Tuple
+from typing import Sequence, Tuple
 
 import pygame
 
@@ -35,8 +35,6 @@ class Renderer:
                            (24, 24), 23)
         pygame.draw.circle(self._beacon_glow, (255, 235, 170, 70),
                            (24, 24), 14)
-        self._fog: Optional[pygame.Surface] = None
-        self._dim: Optional[pygame.Surface] = None
         self._flashes: dict = {}
         self.show_debug = False
         self._fps = 0.0
@@ -46,17 +44,10 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _prep_fog(self) -> None:
+        """Resize cached atmosphere surfaces after a display-mode change."""
         self.visual.resize(self.W, self.H)
-        fog = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        for y in range(self.H):
-            a = int(90 * (y / self.H) ** 2)
-            pygame.draw.line(fog, (190, 170, 140, a), (0, y), (self.W, y))
-        self._fog = fog
-        dim = pygame.Surface((self.W, self.H))
-        dim.fill((208, 202, 186))
-        self._dim = dim
 
-    def _scale_sprite(self, spr: pygame.Surface, zoom=None):
+        def _scale_sprite(self, spr: pygame.Surface, zoom=None):
         """Return a cached sprite scaled to the current isometric camera zoom."""
         factor = self.cam.zoom if zoom is None else float(zoom)
         zq = round(factor, 2)
