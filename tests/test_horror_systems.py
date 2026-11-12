@@ -50,6 +50,15 @@ class TestSurvival(unittest.TestCase):
         system.update(1.0, True)
         self.assertLess(system.stamina, 100.0)
 
+    def test_crafting_uses_scrap_and_heals_player(self):
+        system = SurvivalSystem()
+        player = type("Player", (), {"hp": 40.0, "max_hp": 100.0})()
+        system.add_scrap(3)
+        self.assertTrue(system.craft_medkit(player))
+        self.assertEqual(system.scrap, 0)
+        self.assertEqual(player.hp, 75.0)
+        self.assertFalse(system.craft_medkit(player))
+
     def test_empty_battery_forces_light_off(self):
         system = SurvivalSystem()
         system.flashlight_battery = 0.1
