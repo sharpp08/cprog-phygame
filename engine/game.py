@@ -115,6 +115,7 @@ class Game:
         self.combat = CombatSystem(self.wm.grid)
         self.progression = Progression()
         self.survival = SurvivalSystem()
+        self.player.flashlight_on = self.survival.flashlight_on
         self.story = StorySystem(self.wm.world)
         self.horror = HorrorDirector()
         self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
@@ -198,6 +199,7 @@ class Game:
         self.survival.stamina = float(sd.get("stamina", 100.0))
         self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
         self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
+        self.player.flashlight_on = self.survival.flashlight_on
         self.progression.phase = pg.get("phase", "explore")
         self.progression.state = "playing"
         self.progression.score = pg.get("score", 0)
@@ -276,6 +278,7 @@ class Game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 if self.survival is not None:
                     enabled = self.survival.toggle_flashlight()
+                    self.player.flashlight_on = enabled
                     self.progression.notify(
                         "Flashlight ON" if enabled else "Flashlight OFF", 1.5)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
