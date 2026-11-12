@@ -374,7 +374,7 @@ class Game:
         player.set_aim(aim[0], aim[1])
         # movement
         mv = InputManager.move_vector()
-        requested_run = InputManager.running()
+        requested_run = InputManager.running() and (mv[0] != 0.0 or mv[1] != 0.0)
         can_run = self.survival.update(dt, requested_run) if self.survival else True
         player.apply_movement(mv, requested_run and can_run, dt, self.wm.grid)
         player.update(dt)
