@@ -26,6 +26,8 @@ class WorldManager:
     def setup(self, player, audio, particles) -> None:
         self.controller.set_context(player, audio, particles,
                                     self.world.spawn_points)
+        self.controller.safe_zones = [
+            (float(self.world.start[0]), float(self.world.start[1]), 3.5)]
         # Initial zombies scattered around the map at safe distances.
         # Spawn at least 8 (acceptance criterion) around the starting area.
         for i in range(8):
