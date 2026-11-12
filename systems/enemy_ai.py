@@ -122,6 +122,9 @@ class ZombieController:
         if z.state in ("pursue", "investigate"):
             z.repath_timer -= dt
             target = noise_target if z.state == "investigate" else (p.x, p.y)
+            if ((target[0] - z.x) ** 2 + (target[1] - z.y) ** 2) < 0.16:
+                z.apply_move(0.0, 0.0, dt, self.grid)
+                return
             if z.repath_timer <= 0 or z.path is None:
                 z._tx, z._ty = target[0], target[1]
                 self.nav.plan(z)
