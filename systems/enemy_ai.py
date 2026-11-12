@@ -30,6 +30,7 @@ class ZombieController:
         self.noise_pos = None
         self.noise_radius = 0.0
         self.noise_timer = 0.0
+        self.safe_zones = []
 
     # ------------------------------------------------------------------
     def set_context(self, player, audio, particles,
@@ -103,6 +104,13 @@ class ZombieController:
         if not z.alive:
             return
         d = z.dist(p)
+        # The abandoned starting camp is a temporary safe zone. Enemies
+        # lose the trail while the survivor is inside its boundary.
+        if any(((p.x - sx) ** 2 + (p.y - sy) ** 2) <= radius ** 2
+               for sx, sy, radius in self.safe_zones):
+            z.state = "idle"
+            z.apply_move(0.0, 0.0, dt, self.grid)
+            return
         # Running and gunfire carry farther than cautious walking.
         noise_target = None
         if self.noise_pos is not None and self.noise_timer > 0:
