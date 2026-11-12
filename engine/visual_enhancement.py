@@ -56,14 +56,16 @@ class VisualEnhancement:
                                        "RGBA").convert_alpha()
 
     def _build_grain(self) -> pygame.Surface:
+        """Build one full-frame, low-opacity grain texture at startup."""
         rng = np.random.default_rng(731)
-        rgba = np.zeros((96, 96, 4), dtype=np.uint8)
-        values = rng.integers(90, 240, size=(96, 96), dtype=np.uint8)
+        w, h = self.width, self.height
+        rgba = np.zeros((h, w, 4), dtype=np.uint8)
+        values = rng.integers(90, 240, size=(h, w), dtype=np.uint8)
         rgba[..., 0] = values
         rgba[..., 1] = values
         rgba[..., 2] = values
-        rgba[..., 3] = rng.integers(0, 14, size=(96, 96), dtype=np.uint8)
-        return pygame.image.frombuffer(rgba.tobytes(), (96, 96),
+        rgba[..., 3] = rng.integers(0, 15, size=(h, w), dtype=np.uint8)
+        return pygame.image.frombuffer(rgba.tobytes(), (w, h),
                                        "RGBA").convert_alpha()
 
     def _radial(self, radius: int) -> pygame.Surface:
@@ -162,6 +164,6 @@ class VisualEnhancement:
                                self._fog_full)
         screen.blit(self._fog_full, (0, 0))
         if quality >= 2:
-            screen.blit(self._grain, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
-            screen.blit(self._grain, (self.width - 96, self.height - 96),
-                        special_flags=pygame.BLEND_RGBA_ADD)
+            # Normal alpha blending keeps grain subtle; additive blending
+            # turns individual noise pixels into distracting white specks.
+            screen.blit(self._grain, (0, 0))
