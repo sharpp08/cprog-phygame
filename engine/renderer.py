@@ -142,10 +142,11 @@ class Renderer:
                 if t == config.T_WATER:
                     continue
                 if t == config.T_LILY:
-                    spr = assets.tile("water")
+                    spr = self._scale_sprite(assets.tile("water"),
+                                             cam.zoom * 1.025)
                     self.screen.blit(spr, (x - spr.get_width() / 2,
                                            y - spr.get_height() / 2))
-                    spr = assets.spr("lily")
+                    spr = self._scale_sprite(assets.spr["lily"])
                     self.screen.blit(spr, (x - spr.get_width() / 2,
                                            y - spr.get_height() / 2))
                     continue
@@ -371,7 +372,7 @@ class Renderer:
             spr = spr.copy()
             spr.set_alpha(120)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10))
+                               cy - spr.get_height() + 10 * cam.zoom))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(200 * p.dmg_flash))
@@ -381,7 +382,7 @@ class Renderer:
                                        p.y + p.aim[1] * 0.7, 0.3)
             m = self._scale_sprite(self.assets.spr["muzzle"])
             self.screen.blit(m, (mx - m.get_width() / 2,
-                                 my - m.get_height() / 2 - 4))
+                                 my - m.get_height() / 2 - 4 * cam.zoom))
 
     def _draw_bullets(self, bullets) -> None:
         cam = self.cam
