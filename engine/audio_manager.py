@@ -34,6 +34,8 @@ class AudioManager:
         self.sfx_vol = config.SFX_VOL
         self.rate = 44100
         self._ready = False
+        self._rain = None
+        self._rain_level = 0.0
 
     # ------------------------------------------------------------------
     def init(self) -> None:
@@ -125,6 +127,26 @@ class AudioManager:
         self.sfx["ui"] = _f32_to_sound(
             np.sin(2 * np.pi * 660 * t) * self._decay(n, 30) * 0.4)
 
+        # Thunder: a low filtered rumble under a deep 45 Hz thump.
+        n = int(r * 1.4)
+        t = np.arange(n) / r
+        rumble = self._lp(self._noise(n), 0.09) * self._decay(n, 1.6)
+        thump = np.sin(2 * np.pi * 45 * t) * self._decay(n, 5.0) * 0.7
+        sig = rumble * 0.8 + thump
+        self.sfx["thunder"] = _f32_to_sound(
+            sig / max(1.0, np.max(np.abs(sig))) * 0.8)
+
+        # Rain: 3-second low-passed noise loop for ambient rainfall.
+        n = int(r * 3.0)
+        rain = self._lp(self._noise(n), 0.12) * 0.6
+        # crossfade the last 5% into the first 5% so the loop is seamless
+        fade = int(n * 0.05)
+        w = np.linspace(1.0, 0.0, fade)
+        rain[-fade:] *= w
+        rain[:fade] += rain[n - fade:n] * (1.0 - w) * 0.0
+        self._rain = _f32_to_sound(rain / max(1.0, np.max(np.abs(rain))))
+
+
     def _gen_music(self) -> None:
         r = self.rate
 
@@ -152,6 +174,29 @@ class AudioManager:
                                               self.music_vol)
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    def set_rain(self, level: float) -> None:
+        """Loop the synthesized rain ambience at ``level`` (0..1)."""
+        if not self._ready or self._rain is None:
+            return
+        level = max(0.0, min(1.0, level))
+        if level <= 0.02 and self._rain_level > 0.0:
+            self._rain.stop()
+            self._rain_level = 0.0
+        elif level > 0.02:
+            vol = 0.35 * level * self.sfx_vol * self.master
+            if self._rain_level <= 0.0:
+                self._rain.set_volume(vol)
+                self._rain.play(loops=-1)
+            else:
+                self._rain.set_volume(vol)
+            self._rain_level = level
+
+    def stop_rain(self) -> None:
+        if self._rain is not None and self._rain_level > 0.0:
+            self._rain.stop()
+        self._rain_level = 0.0
+
     def play(self, name: str) -> None:
         if not self._ready or name not in self.sfx:
             return

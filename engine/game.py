@@ -39,7 +39,7 @@ class Game:
             "master": config.MASTER_VOL, "music": config.MUSIC_VOL,
             "sfx": config.SFX_VOL, "resolution": config.DEFAULT_RESOLUTION,
             "fullscreen": config.FULLSCREEN, "quality": 1,
-            "zoom": config.DEFAULT_ZOOM,
+            "zoom": config.DEFAULT_ZOOM, "post_fx": None,
         }
         self.audio = AudioManager()
         self.assets = AssetManager()
@@ -85,7 +85,8 @@ class Game:
     def apply_settings(self, apply_window: bool = True) -> None:
         self.assets.set_quality(int(self.settings["quality"]))
         if self.renderer is not None:
-            self.renderer.quality = int(self.settings["quality"])
+            self.renderer._apply_quality(int(self.settings["quality"]))
+            self.renderer.set_post_fx(self.settings.get("post_fx"))
         if apply_window:
             self.window.set_mode(self.settings["resolution"],
                                 self.settings["fullscreen"])
@@ -124,7 +125,9 @@ class Game:
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
                                  self.particles)
-        self.renderer.quality = int(self.settings["quality"])
+        self.renderer._apply_quality(int(self.settings["quality"]))
+        self.renderer.set_post_fx(self.settings.get("post_fx"))
+        self.renderer.weather.set_audio(self.audio)
         w, h = self.screen.get_size()
         self.renderer.W, self.renderer.H = w, h
         self.renderer._prep_fog()
@@ -216,7 +219,9 @@ class Game:
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
                                  self.particles)
-        self.renderer.quality = int(self.settings["quality"])
+        self.renderer._apply_quality(int(self.settings["quality"]))
+        self.renderer.set_post_fx(self.settings.get("post_fx"))
+        self.renderer.weather.set_audio(self.audio)
         w, h = self.screen.get_size()
         self.renderer.W, self.renderer.H = w, h
         self.renderer._prep_fog()
@@ -224,6 +229,10 @@ class Game:
         self._prev_hp = self.player.hp
         self.state = "playing"
         self.audio.play_music("ambient")
+        # restore persisted graphics / audio settings from the save
+        self.settings.update({k: v for k, v in
+                              data.get("settings", {}).items()
+                              if k in self.settings})
         return True
 
     # ------------------------------------------------------------------
@@ -422,9 +431,20 @@ class Game:
         # progression + world + particles
         self.progression.update(dt, player, self.wm.controller, self.wm.world)
         if self.horror is not None:
-            self.horror.update(dt, player, self.wm.controller, self.progression)
+            horror_msg = self.horror.update(
+                dt, player, self.wm.controller, self.progression)
+            if horror_msg is not None and self.renderer is not None:
+                # supernatural event: visual tension spike + gentle shake
+                self.renderer.post.on_event(1.0)
+                self.renderer.shake.add(2.5, 0.8)
         self.wm.world.update(dt)
         self.particles.update(dt, self.wm.world)
+        # weather + flashlight battery (drives flicker / rain / fog visuals)
+        if self.renderer is not None:
+            self.renderer.set_battery(self.survival.flashlight_battery
+                                     if self.survival else 100.0)
+            self.renderer.tick_weather(dt)
+            self.audio.set_rain(self.renderer.weather.rain_amount)
         # camera follow
         cam.update(self.dt, player.x, player.y)
         # damage vignette
@@ -440,12 +460,16 @@ class Game:
     def _render(self) -> None:
         if self.state in ("playing", "paused", "settings") and \
                 self.renderer is not None:
+            tension = self.horror.tension if self.horror is not None else 0.0
             self.renderer.render_frame(self.wm.world, self.player,
                                        self.wm.controller.zombies,
                                        self.wm.active_pickups(),
-                                       self.combat.bullets, self.dt)
+                                       self.combat.bullets, self.dt,
+                                       tension=tension)
             self.hud.draw(self.screen, self.player, self.progression,
-                          self.survival, self.story)
+                          self.survival, self.story, self.dt)
+        elif self.state not in ("playing", "paused", "settings"):
+            self.audio.stop_rain()
         if self.state == "menu":
             self._draw_menu_bg()
             self.main_menu.draw(self.screen, self.fonts)

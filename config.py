@@ -30,9 +30,12 @@ RESDIC = {
 FPS = 60
 WINDOW_TITLE = "CPROG PHYGAME - Isometric Zombie Survival"
 
-# Graphics quality levels: Low disables fog/fireflies/water-anim/light rays,
-# Medium enables them, High adds contact AO and more particles.
-QUALITY = ("low", "medium", "high")
+# Graphics quality levels:
+#   low      - minimal fog/particles, no post-processing
+#   medium   - fog, fireflies, basic post-processing
+#   high     - richer lighting, chromatic aberration, better bloom
+#   ultra    - full post-processing chain at higher effect resolution
+QUALITY = ("low", "medium", "high", "ultra")
 
 # ---------------------------------------------------------------------------
 # Isometric projection (2:1 diamond tiles)
@@ -173,6 +176,11 @@ NIGHT_DARKNESS = 0.42        # base ambient darkness strength
 LIGHT_RADIUS_PLAYER = 7.5
 LIGHT_RADIUS_SHRINE = 10.0
 PARTICLE_LIMIT = 520
+
+# Flashlight behaviour (survival battery mechanics unchanged)
+FLASHLIGHT_SMOOTH = 3.0      # how fast the beam fades in/out
+FLASHLIGHT_LOW_BATTERY = 25.0   # % below which the beam starts to flicker
+FLASHLIGHT_FOG_BEAM = 4.0      # extra beam strength when weather is rainy/foggy
 
 # ---------------------------------------------------------------------------
 # Audio

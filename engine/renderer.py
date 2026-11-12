@@ -5,11 +5,15 @@ world coordinates never leak into the UI layer.
 from __future__ import annotations
 
 import math
-from typing import Sequence, Tuple
+import random
+from typing import Optional, Sequence, Tuple
 
 import pygame
 
 from engine.visual_enhancement import VisualEnhancement
+from graphics import quality_settings
+from graphics.post_processing import PostPipeline, ScreenShake
+from systems.weather import Weather
 
 import config
 from engine.collision import distance2
@@ -26,6 +30,13 @@ class Renderer:
         self.quality = 1
         self.time = 0.0
         self.visual = VisualEnhancement(self.W, self.H)
+        # graphics upgrade: post pipeline, smooth camera shake and weather
+        self.post = PostPipeline(self.W, self.H, self.quality)
+        self.shake = ScreenShake()
+        self.weather = Weather(seed=1)
+        self._battery = 100.0
+        self._last_hp: Optional[float] = None
+        self._rain: list = []
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
@@ -40,12 +51,32 @@ class Renderer:
         self._fps = 0.0
         self._dbg_font = None
         self._dbg_counts: dict = {}
+        self._apply_quality(self.quality)
         self._prep_fog()
 
     # ------------------------------------------------------------------
+    def _apply_quality(self, quality: int) -> None:
+        """Propagate a quality level to the post pipeline / particles."""
+        self.quality = max(0, min(3, int(quality)))
+        self.post.resize(self.W, self.H, quality=self.quality)
+        scale = quality_settings.particle_scale(self.quality)
+        self.particles.set_max(int(self.particles.MAX_PARTICLES * scale))
+
+    def set_post_fx(self, mode) -> None:
+        """Apply the settings' Post-FX toggle: None = follow the quality
+        preset, True/False force the pipeline on/off."""
+        enabled = None if mode is None else bool(mode)
+        self.post.resize(self.W, self.H, quality=self.quality,
+                         enabled=enabled)
+
+
+
+    # ------------------------------------------------------------------
     def _prep_fog(self) -> None:
-        """Resize cached atmosphere surfaces after a display-mode change."""
+        """Resize cached atmosphere / post surfaces after a display
+        mode change."""
         self.visual.resize(self.W, self.H)
+        self.post.resize(self.W, self.H, quality=self.quality)
 
     def _scale_sprite(self, spr: pygame.Surface, zoom=None):
         """Return a cached sprite scaled to the current isometric camera zoom."""
@@ -92,9 +123,10 @@ class Renderer:
             drawn_items += 1
         self._draw_bullets(bullets)
         self._draw_particles()
-        self._apply_lighting(world, player)
+        self._apply_lighting(world, player, zombies)
         self.visual.draw_atmosphere(self.screen, self.cam, world,
-                                    self.time, self.quality)
+                                    self.time, self.quality,
+                                    fog_extra=self.weather.fog_density)
         # cache counts for the debug overlay
         cam_x, cam_y = cam.fx, cam.fy
         psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \
@@ -396,23 +428,136 @@ class Renderer:
         self.particles.draw(self.screen, self.cam, self.quality)
 
     # ------------------------------------------------------------------
-    def _apply_lighting(self, world, player) -> None:
+    def tick_weather(self, dt: float) -> Optional[str]:
+        """Advance the weather clock, shake decay and ambient particles.
+
+        Returns a weather event name ("lightning") when it fired this
+        frame so the caller can hook sounds; the visual reactions
+        (flash, shake) are applied here automatically.
+        """
+        self.shake.update(dt)
+        ev = self.weather.update(dt)
+        self.particles.set_wind(self.weather.wind * self.weather.wind_dir)
+        if ev == "lightning":
+            self.post.on_lightning(self.weather.lightning)
+            self.shake.add(5.0, 0.6)
+        return ev
+
+    # ------------------------------------------------------------------
+    def set_battery(self, battery: float) -> None:
+        """Feed the survival system's flashlight battery to the lighting
+        layer (drives the critical-low flicker)."""
+        self._battery = float(battery)
+
+    # ------------------------------------------------------------------
+    def _draw_rain(self, dt: float) -> None:
+        """Pooled screen-space rain streaks, slanted by the wind.
+
+        Drawn *before* the lighting pass so the streaks darken properly
+        in the night overlay.  The pool is capped by the quality preset.
+        """
+        w = self.weather
+        if w.rain_amount < 0.06 or self.quality < 1:
+            if self._rain:
+                self._rain = []
+            return
+        scale = quality_settings.particle_scale(self.quality)
+        target = int((40 + 70 * w.rain_amount) * scale)
+        while len(self._rain) < target:
+            self._rain.append([random.uniform(0, self.W),
+                               random.uniform(0, self.H),
+                               random.uniform(0.6, 1.35)])
+        if len(self._rain) > target:
+            del self._rain[target:]
+        slant = w.wind_dir * (0.18 + 0.5 * w.wind)
+        for d in self._rain:
+            sp = d[2]
+            d[0] += slant * 260 * sp * dt
+            d[1] += 320 * sp * dt
+            if d[1] > self.H:
+                d[1] = -8.0
+                d[0] = random.uniform(0, self.W)
+            if d[0] > self.W + 10:
+                d[0] -= self.W + 20
+            elif d[0] < -10:
+                d[0] += self.W + 20
+            ln = int(7 + 9 * sp)
+            x1, y1 = int(d[0]), int(d[1])
+            x2 = int(d[0] + slant * ln * 0.5)
+            # draw.line per streak (draw.lines is broken in some
+            # pygame-ce builds, and per-line cost is trivial at this
+            # particle count)
+            pygame.draw.line(self.screen, (115, 130, 160),
+                             (x1, y1), (x2, y1 + ln))
+
+    # ------------------------------------------------------------------
+    def _enemy_lights(self, player, zombies: Sequence):
+        """Subtle cool glow around nearby pursuing enemies (max 4, so
+        light sources never reveal positions across the map)."""
+        out = []
+        if player is None:
+            return out
+        for z in zombies:
+            if len(out) >= 4:
+                break
+            if not z.alive or z.state not in ("pursue", "attack",
+                                              "investigate"):
+                continue
+            if z.dist2(player) > 30.0:
+                continue
+            sx, sy = self.cam.iso_to_screen(z.x, z.y, 0.0)
+            out.append((sx, sy, 2.6, 0.30))
+        return out
+
+    # ------------------------------------------------------------------
+    def _apply_lighting(self, world, player, zombies=()) -> None:
         # Lighting and post-processing are cached by VisualEnhancement.
         # Keep a stable integration point for all quality presets and avoid
         # rebuilding full-resolution NumPy arrays on every frame.
-        self.visual.apply_lighting(self.screen, self.cam, world, player,
-                                   self.quality)
+        fog_beam = self.weather.rain_amount > 0.2
+        self.visual.apply_lighting(
+            self.screen, self.cam, world, player, self.quality,
+            battery=self._battery, fog_beam=fog_beam,
+            time_value=self.time,
+            extra_lights=self._enemy_lights(player, zombies))
 
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,
-                     dt: float) -> None:
+                     dt: float, tension: float = 0.0) -> None:
+        """Render one full frame: world -> rain -> lighting -> mist ->
+        cinematic post-processing.  The HUD is drawn by the caller on top
+        of the result, so UI stays perfectly readable."""
         self.time += dt
         if dt > 0:
             self._fps = self._fps * 0.9 + (1.0 / dt) * 0.1
         self.screen.fill((30, 26, 20))
         self.draw_world(world, player, zombies, pickups, bullets)
+        self._draw_rain(dt)
+        # -- cinematic post-processing (before the HUD) ------------------
+        if player is not None:
+            hp = getattr(player, "hp", 0.0)
+            if self._last_hp is not None and hp < self._last_hp - 0.01:
+                amt = min(1.0, (self._last_hp - hp) / 12.0)
+                self.post.on_damage(amt)
+                self.shake.add(4.0, 0.5)
+            self._last_hp = hp
+            w = player.weapon
+            if w is not None and w.muzzle_timer > 0.04:
+                self.shake.add(1.4, 0.18)     # restrained recoil kick
+        self.post.update(dt, tension)
+        if self.post.enabled:
+            self.post.scene.blit(self.screen, (0, 0))
+            off = self.shake.offset()
+            if off != (0, 0):
+                self.screen.fill((16, 13, 10))  # hide the exposed edge strip
+            self.post.present(self.screen, player,
+                              low_hp=(player is not None and
+                                      player.hp < 30.0),
+                              dt=dt, tension=tension, offset=off)
         if self.show_debug:
             self._draw_debug()
+
+
 
     # ------------------------------------------------------------------
     def _draw_debug(self) -> None:

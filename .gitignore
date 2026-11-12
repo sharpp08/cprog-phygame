@@ -28,3 +28,9 @@ Thumbs.db
 # Game runtime artifacts
 saves/*.json
 !saves/.gitkeep
+
+# Graphics upgrade: generated review screenshots + scratch smoke tool
+graphics_screenshots/
+test_render_screenshot.png
+tools_smoke_test.py
+
