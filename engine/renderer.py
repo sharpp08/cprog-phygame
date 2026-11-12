@@ -28,6 +28,8 @@ class Renderer:
         self.visual = VisualEnhancement(self.W, self.H)
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
+        self._tree_sway_cache: dict = {}
+        self._flip_cache: dict = {}
         self._beacon_glow = pygame.Surface((48, 48), pygame.SRCALPHA)
         pygame.draw.circle(self._beacon_glow, (255, 210, 120, 110),
                            (24, 24), 23)
@@ -172,6 +174,19 @@ class Renderer:
             pygame.draw.ellipse(self.screen,
                                 (190, 220, 240, a),
                                 (int(x - 12), int(y - 5), 24, 9), 0)
+        # A few larger, translucent ripple rings sell the water movement.
+        ripple = self.assets.spr.get("ripple")
+        if ripple is not None and world.water_tiles:
+            phase = int(self.time * 1.7)
+            for i, (tx, ty) in enumerate(world.water_tiles):
+                if (i + phase * 3) % 13:
+                    continue
+                if tx < minx or tx > maxx or ty < miny or ty > maxy:
+                    continue
+                x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
+                ripple.set_alpha(42 + int(24 * (0.5 + 0.5 *
+                                                math.sin(self.time * 2 + i))))
+                self.screen.blit(ripple, (x - 20, y - 12))
 
     # ------------------------------------------------------------------
     def _depth_items(self, world, player, zombies, pickups) -> list:
@@ -235,6 +250,16 @@ class Renderer:
 
     def _draw_obstacle(self, o) -> None:
         spr = self.assets.sprite(o.kind, o.variant)
+        if o.kind == "tree" and self.quality >= 1:
+            sway = int(round(math.sin(self.time * 1.15 +
+                                      o.x * 0.63 + o.y * 0.41) * 1.25))
+            if sway:
+                key = (id(spr), sway)
+                moved = self._tree_sway_cache.get(key)
+                if moved is None:
+                    moved = pygame.transform.rotate(spr, sway * 1.15)
+                    self._tree_sway_cache[key] = moved
+                spr = moved
         cam = self.cam
         cx, cy = cam.iso_to_screen(o.x, o.y, 0.0)
         if cx < -160 or cx > self.W + 160 or cy < -180 or cy > self.H + 80:
@@ -244,6 +269,14 @@ class Renderer:
         oy = -o.z * config.SCALE_Z
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + oy + 8))
+        if o.kind == "waterfall" and self.quality >= 1:
+            mist = self.assets.spr.get("mist")
+            if mist is not None:
+                mist.set_alpha(105 if self.quality == 1 else 145)
+                drift = math.sin(self.time * 0.8) * 5
+                self.screen.blit(mist, (cx - 42 + drift,
+                                         cy - 32 + math.sin(
+                                             self.time * 1.3) * 2))
 
     def _draw_zombie(self, z) -> None:
         key = f"zombie_{z.ztype}"
@@ -309,7 +342,12 @@ class Renderer:
         flist = self.assets.player_frames(p.anim_state)
         spr = flist[p.frame_index % len(flist)]
         if p.facing < 0:
-            spr = pygame.transform.flip(spr, True, False)
+            key = id(spr)
+            flipped = self._flip_cache.get(key)
+            if flipped is None:
+                flipped = pygame.transform.flip(spr, True, False)
+                self._flip_cache[key] = flipped
+            spr = flipped
         # flicker while invulnerable
         if p.invuln > 0 and int(p.invuln * 20) % 2 == 0:
             spr = spr.copy()
