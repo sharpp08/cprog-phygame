@@ -82,9 +82,57 @@ The current renderer now includes a procedural, cached art pipeline and an atmos
 - Cool night ambience, cached radial light falloff, a directional flashlight beam, and a subtle screen vignette.
 - Layered ground mist, high-quality film grain, fireflies, animated water ripples, waterfall mist, and gentle tree sway.
 - Reusable shadow and sprite-scale caches to reduce per-frame surface creation.
-- Low, Medium, and High quality presets remain available in Settings; atmospheric detail scales with the selected preset.
+- Low, Medium, High, and Ultra quality presets remain available in
+  Settings; atmospheric detail scales with the selected preset. A
+  Post-FX toggle (Auto / On / Off) lets integrated GPUs disable the
+  cinematic chain without changing the quality preset.
 
 The procedural assets are generated at startup and cached; the playable map is still composed from world tiles and objects, not a screenshot background. Headless render validation captures review scenes for the forest, player/vegetation, zombie encounters, shrine/pond, and flashlight lighting.
+
+### Cinematic post-processing pipeline (graphics upgrade)
+
+The world renders to the scene surface, then the cinematic chain runs
+before the HUD is drawn (the HUD always stays perfectly readable):
+
+- **Color grade** - dark, desaturated environment, cool blue-green
+  shadows, warm lantern highlights, controlled contrast (256-entry
+  LUT + strength mix).
+- **Dynamic vignette** - cinematic edge darkening that reacts to the
+  horror director's tension, horror events, and a low-HP heartbeat.
+- **Film grain** - animated, rotating noise tiles; stronger under
+  tension and supernatural events.
+- **Chromatic aberration** - restrained RGB edge split on damage,
+  lightning and high tension; eases back to normal.
+- **Bloom** - threshold + double 3x3 box blur (HDR-style glow around
+  the flashlight pool, embers and muzzle flashes).
+- **Screen distortion** - heat-warp style sine field, eased in/out
+  for horror events.
+- **Camera shake** - exponential-decay shake with per-event intensity
+  (damage, lightning, horror events, restrained recoil).
+
+All passes run at a downscaled effect resolution (8x/4x/2x depending on
+the quality preset) so the cost is small on integrated graphics. The
+NumPy pipeline is the reference implementation and keeps the game fully
+playable with no GPU; the GLSL sources in `shaders/` mirror the same
+passes and are compile-validated with ModernGL (optional dependency,
+`pip install -e .[gl]`) when a GL context is available.
+
+### Weather, particles and audio-reactive effects
+
+- Dynamic weather: clear -> mist -> light rain -> heavy rain, with wind
+  gusts, pooled screen-space rain streaks and lightning (a blue-white
+  flash + synthesized thunder + camera shake).
+- Ambient particle population: drifting leaves, dust motes and shrine
+  embers, all wind-aware and quality-scaled.
+- Rain ambience loops under the music; the flashlight beam gains a
+  volumetric-style boost during rain and flickers smoothly when the
+  battery is critically low (the survival battery mechanics are
+  unchanged).
+- Horror events from the director spike the vignette, grain and
+  distortion, and give the camera a gentle shake.
+- Close pursuing enemies cast a subtle cool glow so threats read in the
+  dark without revealing distant positions.
+
 
 ## Gameplay
 

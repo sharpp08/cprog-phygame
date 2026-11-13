@@ -32,7 +32,7 @@ class SettingsMenu:
                    settings.get("zoom", config.DEFAULT_ZOOM),
                    config.ZOOM_MIN, config.ZOOM_MAX, 0.05, self._on_zoom),
         ]
-        # right column: resolution / fullscreen / quality
+        # right column: resolution / fullscreen / quality / post-FX
         rx = 520
         self.res_button = Button(
             f"Resolution: {self.RES_NAMES[settings.get('resolution', 1)]}",
@@ -43,7 +43,15 @@ class SettingsMenu:
         self.q_button = Button(
             "Graphics: " + self.QUAL_NAMES[settings.get("quality", 1)],
             rx, 258, 240, 44, lambda: None)
+        self.pf_button = Button(
+            "Post FX: " + self._pf_label(),
+            rx, 312, 240, 44, lambda: None)
         self.back = Button("Back", 44, self.H - 80, 160, 52, lambda: None)
+
+    def _pf_label(self) -> str:
+        v = self.settings.get("post_fx")
+        return {None: "Auto", True: "On", False: "Off"}[v]
+
 
     # ------------------------------------------------------------------
     def set_back_target(self, target: str) -> None:
@@ -87,7 +95,13 @@ class SettingsMenu:
                 self._refresh_labels()
             elif self.q_button.rect.collidepoint(event.pos):
                 self.settings["quality"] = \
-                    (self.settings.get("quality", 1) + 1) % 3
+                    (self.settings.get("quality", 1) + 1) \
+                    % len(self.QUAL_NAMES)
+                self._refresh_labels()
+            elif self.pf_button.rect.collidepoint(event.pos):
+                cur = self.settings.get("post_fx")
+                self.settings["post_fx"] = \
+                    None if cur is None else (not cur)
                 self._refresh_labels()
             elif self.back.rect.collidepoint(event.pos):
                 return "back"
@@ -100,6 +114,7 @@ class SettingsMenu:
             str(bool(self.settings.get("fullscreen", False)))
         self.q_button.label = "Graphics: " + \
             self.QUAL_NAMES[self.settings.get("quality", 1)]
+        self.pf_button.label = "Post FX: " + self._pf_label()
 
     # ------------------------------------------------------------------
     def draw(self, screen, fonts: FontSet) -> None:
@@ -107,7 +122,8 @@ class SettingsMenu:
              (240, 220, 160), "center", True)
         for s in self.sliders:
             s.draw(screen, fonts)
-        for b in (self.res_button, self.fs_button, self.q_button):
+        for b in (self.res_button, self.fs_button, self.q_button,
+                  self.pf_button):
             b.draw(screen, fonts)
         # controls reference
         text(screen, fonts,

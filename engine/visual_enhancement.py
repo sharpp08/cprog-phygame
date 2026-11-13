@@ -85,8 +85,18 @@ class VisualEnhancement:
         return radial
 
     def apply_lighting(self, screen: pygame.Surface, cam, world,
-                       player, quality: int) -> None:
-        """Apply cool night ambience and cached radial light falloff."""
+                       player, quality: int,
+                       battery: float = 100.0, fog_beam: bool = False,
+                       time_value: float = 0.0,
+                       extra_lights=()) -> None:
+        """Apply cool night ambience and cached radial light falloff.
+
+        ``battery`` drives critical-low flicker; ``fog_beam`` boosts the
+        volumetric-style beam so it reads against rain/fog; the beam also
+        eases in and out instead of snapping (FLASHLIGHT_SMOOTH).
+        ``extra_lights`` are (sx, sy, world_radius, strength) tuples in
+        screen space (used for close-enemy glow).
+        """
         if quality <= 0:
             alpha = 48
         elif quality == 1:
@@ -96,17 +106,45 @@ class VisualEnhancement:
         self._shade.fill((4, 8, 19, alpha))
         zoom = max(0.4, float(cam.zoom))
         lights = []
-        for wx, wy, radius, intensity in getattr(world, "lights", ()):
+        for i, (wx, wy, radius, intensity) in enumerate(
+                getattr(world, "lights", ())):
             sx, sy = cam.iso_to_screen(wx, wy, 0.0)
+            # environmental lights breathe very slightly (fire flicker)
+            breathe = 0.92 + 0.08 * math.sin(time_value * 4.2 + i * 1.7)
             lights.append((sx / 4.0, sy / 4.0,
                            radius * 32.0 * zoom / 4.0,
-                           max(0.0, min(1.0, float(intensity)))))
+                           max(0.0, min(1.0, float(intensity) * breathe))))
         if player is not None and getattr(player, "flashlight_on", True):
+            # smooth on/off transition
+            target = 1.0
+            step = min(1.0, abs(time_value - getattr(
+                self, "_last_lt", time_value)) * config
+                      .FLASHLIGHT_SMOOTH) if hasattr(config,
+                                                      "FLASHLIGHT_SMOOTH") \
+                else 0.3
+            self._last_lt = time_value
+            lvl = getattr(self, "_fl_level", 0.0)
+            lvl += (target - lvl) * step
+            # critical-battery flicker (never turns the light off itself;
+            # the survival system owns forced-off behaviour)
+            flick = 1.0
+            if battery < config.FLASHLIGHT_LOW_BATTERY:
+                sev = 1.0 - battery / config.FLASHLIGHT_LOW_BATTERY
+                flick = 1.0 - sev * 0.45 * (
+                    0.5 + 0.5 * math.sin(time_value * 11.0)
+                    * math.sin(time_value * 3.7 + 1.0))
+            lvl *= flick
+            self._fl_level = lvl
             sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
             # Focused flashlight pool: a soft centre and a fast outer falloff.
+            base_r = 7.4 * 32.0 * zoom / 4.0
+            base_s = 0.92
+            if fog_beam:
+                base_r *= 1.1
+                base_s = min(1.0, base_s + 0.15)
             lights.append((sx / 4.0, sy / 4.0,
-                           7.4 * 32.0 * zoom / 4.0, 0.92))
-            if quality >= 1:
+                           base_r * max(0.0, lvl), base_s * max(0.0, lvl)))
+            if quality >= 1 and lvl > 0.03:
                 aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
                 dx = (aim_x - aim_y) * config.SCALE_X
                 dy = (aim_x + aim_y) * config.SCALE_Y
@@ -117,16 +155,25 @@ class VisualEnhancement:
                 ex, ey = ox + dx * radius, oy + dy * radius
                 px, py = -dy * radius * 0.34, dx * radius * 0.34
                 self._beam.fill((0, 0, 0, 0))
+                b0 = int(42 * lvl * (1.4 if fog_beam else 1.0))
+                b1 = int(24 * lvl * (1.4 if fog_beam else 1.0))
                 pygame.draw.polygon(
-                    self._beam, (0, 0, 0, 42),
+                    self._beam, (0, 0, 0, b0),
                     [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
                      (int(ex - px), int(ey - py))])
                 pygame.draw.polygon(
-                    self._beam, (0, 0, 0, 24),
+                    self._beam, (0, 0, 0, b1),
                     [(int(ox), int(oy)), (int(ox + dx * radius),
                                           int(oy + dy * radius)),
                      (int(ox + dx * radius * 0.88 + px * 0.55),
                       int(oy + dy * radius * 0.88 + py * 0.55))])
+        else:
+            self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
+        # close-enemy glow: subtle cool light so pursuers read in the dark
+        for sx, sy, wrad, strength in extra_lights:
+            lights.append((sx / 4.0, sy / 4.0,
+                           wrad * 32.0 * zoom / 4.0,
+                           max(0.0, min(1.0, float(strength)))))
         for lx, ly, radius, strength in lights:
             r = max(8, min(220, int(radius)))
             radial = self._radial(r)
@@ -142,23 +189,32 @@ class VisualEnhancement:
         screen.blit(self._vignette, (0, 0))
 
     def draw_atmosphere(self, screen: pygame.Surface, cam, world,
-                        time_value: float, quality: int) -> None:
+                        time_value: float, quality: int,
+                        fog_extra: float = 0.0) -> None:
+        """Screen-space drifting ground mist (broad, subtle, non-occluding).
+
+        ``fog_extra`` (0..1, from the weather system) thickens the mist
+        during rain / fog states so the weather is visible, not just heard.
+        """
         if quality < 1:
             return
         self._fog.fill((0, 0, 0, 0))
         # Low, slow-moving ground mist; screen-space puffs are intentionally
         # broad and subtle so they never obscure the player or UI.
-        strength = 18 if quality == 1 else 27
-        for i in range(5 if quality == 1 else 8):
+        n_puffs = 5 if quality == 1 else 8
+        base = (18 + 30 * float(fog_extra)) if quality == 1 else \
+            (27 + 22 * float(fog_extra))
+        for i in range(n_puffs):
             phase = time_value * (0.10 + i * 0.009) + i * 1.73
             x = int((0.5 + 0.42 * math.sin(phase)) * self._lw)
             y = int((0.58 + 0.25 * math.sin(phase * 0.71 + i)) * self._lh)
             rx = 22 + (i % 3) * 9
             ry = 5 + (i % 2) * 3
-            color = (115, 139, 157, strength)
+            color = (115, 139, 157, min(255, int(base)))
             pygame.draw.ellipse(self._fog, color,
                                 (x - rx, y - ry, rx * 2, ry * 2))
-            pygame.draw.ellipse(self._fog, (145, 164, 176, strength // 2),
+            pygame.draw.ellipse(self._fog,
+                                (145, 164, 176, min(255, int(base // 2))),
                                 (x - rx // 2, y - ry - 2, rx, ry * 2))
         pygame.transform.scale(self._fog, (self.width, self.height),
                                self._fog_full)
