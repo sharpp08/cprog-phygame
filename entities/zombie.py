@@ -90,6 +90,7 @@ class Zombie(Entity):
         self.alerted = False
         self.variation = random.uniform(0.92, 1.08)  # per-zombie variation
         self.speed *= self.variation
+        self._speed_current = self.speed * 0.68
         self.detect *= random.uniform(0.95, 1.05)
 
     # ------------------------------------------------------------------
@@ -147,7 +148,11 @@ class Zombie(Entity):
             self._stumble = random.uniform(2.0, 5.0)
             self._stumble_t = random.uniform(0.25, 0.5)
             self._stumble_dir = random.choice((-1.0, 1.0))
-        speed = self.speed
+        target_factor = (0.68 if self.state in ("idle", "wandering", "stalking")
+                         else 1.0)
+        target_speed = self.speed * target_factor
+        self._speed_current += (target_speed - self._speed_current) * min(1.0, dt * 1.8)
+        speed = self._speed_current
         if self._stumble_t > 0:
             speed *= 0.35
             self._stumble_t -= dt
