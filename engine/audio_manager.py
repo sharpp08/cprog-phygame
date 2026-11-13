@@ -141,6 +141,18 @@ class AudioManager:
         self.sfx["zombie_scream"] = _f32_to_sound(
             scream / max(1.0, np.max(np.abs(scream))) * 0.85)
 
+        # Brief environmental stingers used by false alarms and suspense cues.
+        n = int(r * 0.42)
+        crack = self._noise(n) * self._decay(n, 24.0)
+        crack = self._lp(crack, 0.65) * 0.8
+        self.sfx["branch_snap"] = _f32_to_sound(crack)
+
+        n = int(r * 1.1)
+        whisper = self._lp(self._noise(n), 0.035)
+        whisper *= (0.35 + 0.65 * np.sin(np.pi * np.arange(n) / n))
+        whisper += np.sin(2 * np.pi * 92 * np.arange(n) / r) * 0.08
+        self.sfx["forest_whisper"] = _f32_to_sound(whisper * 0.38)
+
         n = int(r * 0.4)
         t = np.arange(n) / r
         sig = (np.sin(2 * np.pi * 880 * t) +
