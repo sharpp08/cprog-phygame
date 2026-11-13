@@ -81,7 +81,7 @@ class Player(Entity):
         self.aim = (dirx, diry)
         if abs(dirx) > 0.04:
             self._facing_target = -1.0 if dirx < 0 else 1.0
-        self.facing = self._facing_target
+        # Facing is eased in update() so aim changes do not snap the sprite.
 
     def apply_movement(self, mv: Tuple[float, float], running: bool,
                        dt: float, grid) -> None:
@@ -174,6 +174,9 @@ class Player(Entity):
         self.dmg_flash = max(0.0, self.dmg_flash - dt)
         self._shoot_flash = max(0.0, self._shoot_flash - dt)
         self.weapon.update(dt)
+        # Smoothly rotate the sprite toward aim; this is frame-rate independent.
+        facing_blend = 1.0 - math.exp(-18.0 * max(0.0, dt))
+        self.facing += (self._facing_target - self.facing) * facing_blend
 
         # Animation state machine: prioritise hurt > reload > shoot > move.
         if self.damage_timer > 0:
