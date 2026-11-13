@@ -524,7 +524,8 @@ class Game:
                                        self.combat.bullets, self.dt,
                                        tension=tension)
             self.hud.draw(self.screen, self.player, self.progression,
-                          self.survival, self.story, self.dt)
+                          self.survival, self.story, self.dt,
+                          horror=self.horror)
         elif self.state not in ("playing", "paused", "settings"):
             self.audio.stop_rain()
         if self.state == "menu":
