@@ -92,13 +92,6 @@ class TestHorrorDirector(unittest.TestCase):
                                   progression)
         self.assertIsNotNone(message)
         self.assertEqual(progression.message, message)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-"""Regression tests for paced horror and fair, sound-attracted hordes."""
 import unittest
 
 from systems.horde_director import HordeDirector
