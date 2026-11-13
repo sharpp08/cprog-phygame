@@ -109,6 +109,21 @@ class AudioManager:
         sig = self._noise(n) * self._decay(n, 18)
         self.sfx["zombie_hit"] = _f32_to_sound(self._lp(sig, 0.4) * 0.8)
 
+        # Restrained heartbeat and exhausted breathing cues.
+        n = int(r * 0.72)
+        t = np.arange(n) / r
+        beat = np.zeros(n)
+        for start, freq, amp in ((0.05, 58.0, 1.0), (0.24, 48.0, 0.72)):
+            mask = t >= start
+            local = t[mask] - start
+            beat[mask] += np.sin(2 * np.pi * freq * local) * np.exp(-local * 28) * amp
+        self.sfx["heartbeat"] = _f32_to_sound(beat * 0.75)
+
+        n = int(r * 0.85)
+        breath = self._lp(self._noise(n), 0.045)
+        envelope = np.sin(np.pi * np.arange(n) / max(1, n)) ** 1.6
+        self.sfx["breathing"] = _f32_to_sound(breath * envelope * 0.32)
+
         n = int(r * 0.7)
         t = np.arange(n) / r
         f0 = np.linspace(160, 55, n)
