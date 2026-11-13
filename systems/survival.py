@@ -1,4 +1,4 @@
-"""Lightweight survival resources: stamina and a rechargeable flashlight."""
+"""Survival resources: stamina, finite flashlight cells and scavenging."""
 from __future__ import annotations
 
 
@@ -9,6 +9,7 @@ class SurvivalSystem:
         self.flashlight_battery = 100.0
         self.flashlight_on = True
         self.low_battery_warned = False
+        self.battery_cells = 2
         self.scrap = 0
 
     def toggle_flashlight(self) -> bool:
@@ -18,16 +19,28 @@ class SurvivalSystem:
             self.flashlight_on = True
         return self.flashlight_on
 
+    def replace_battery(self) -> bool:
+        """Install one spare cell; returns False when none are available."""
+        if self.battery_cells <= 0 or self.flashlight_battery >= 98.0:
+            return False
+        self.battery_cells -= 1
+        self.flashlight_battery = 100.0
+        self.flashlight_on = True
+        self.low_battery_warned = False
+        return True
+
+    def add_battery_cells(self, amount: int = 1) -> None:
+        self.battery_cells = max(0, min(9, self.battery_cells + int(amount)))
+
     def update(self, dt: float, running: bool) -> bool:
         """Update resources; return whether the player may sprint this frame."""
+        dt = max(0.0, min(float(dt), 0.25))
         if self.flashlight_on:
             self.flashlight_battery = max(
                 0.0, self.flashlight_battery - 1.15 * dt)
             if self.flashlight_battery <= 0:
                 self.flashlight_on = False
-        else:
-            self.flashlight_battery = min(
-                100.0, self.flashlight_battery + 0.32 * dt)
+        # A switched-off cell does not recharge: replacement cells are loot.
 
         can_run = self.stamina > 1.0
         if running and can_run:
