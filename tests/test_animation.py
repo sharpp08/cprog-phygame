@@ -41,6 +41,17 @@ class TestPlayerAnimation(unittest.TestCase):
         player.update(0.2)
         self.assertEqual(player.anim_blend, 1.0)
 
+    def test_aim_facing_eases_without_snapping(self):
+        player = Player(2.0, 2.0)
+        player.set_aim(-1.0, 0.0)
+        self.assertEqual(player.facing, 1.0)
+        player.update(1.0 / 60.0)
+        self.assertLess(player.facing, 1.0)
+        self.assertGreater(player.facing, -1.0)
+        for _ in range(60):
+            player.update(1.0 / 60.0)
+        self.assertLess(player.facing, -0.9)
+
     def test_reload_progress_is_monotonic(self):
         weapon = Weapon("pistol")
         weapon.mag = 1
