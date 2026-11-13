@@ -37,14 +37,28 @@ class FakeController:
 
 
 class TestSurvival(unittest.TestCase):
-    def test_flashlight_drains_and_recharges(self):
+    def test_flashlight_drains_without_passive_recharge(self):
         system = SurvivalSystem()
         system.update(10.0, False)
         self.assertLess(system.flashlight_battery, 100.0)
         system.toggle_flashlight()
         before = system.flashlight_battery
         system.update(10.0, False)
-        self.assertGreater(system.flashlight_battery, before)
+        self.assertEqual(system.flashlight_battery, before)
+
+    def test_battery_replacement_consumes_spare_cell(self):
+        system = SurvivalSystem()
+        system.flashlight_battery = 12.0
+        self.assertTrue(system.replace_battery())
+        self.assertEqual(system.flashlight_battery, 100.0)
+        self.assertEqual(system.battery_cells, 1)
+        self.assertTrue(system.flashlight_on)
+
+    def test_battery_cannot_be_replaced_without_spare_cells(self):
+        system = SurvivalSystem()
+        system.battery_cells = 0
+        system.flashlight_battery = 10.0
+        self.assertFalse(system.replace_battery())
 
     def test_sprint_consumes_stamina(self):
         system = SurvivalSystem()
