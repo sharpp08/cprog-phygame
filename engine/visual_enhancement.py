@@ -169,7 +169,7 @@ class VisualEnhancement:
             if flashlight_on:
                 ambient_tiles, ambient_strength = 6.2, 0.60
             else:
-                ambient_tiles, ambient_strength = 11.5, 0.44
+                ambient_tiles, ambient_strength = 11.5, 0.26
             ambient_radius = ambient_tiles * 32.0 * zoom / 4.0
             lights.append((psx / 4.0, psy / 4.0,
                            ambient_radius, ambient_strength))
