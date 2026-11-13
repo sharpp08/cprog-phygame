@@ -4,6 +4,7 @@ import unittest
 from systems.survival import SurvivalSystem
 from systems.storytelling import StorySystem
 from systems.horror_director import HorrorDirector
+from systems.horde_director import HordeDirector
 
 
 class FakeWorld:
@@ -92,10 +93,6 @@ class TestHorrorDirector(unittest.TestCase):
                                   progression)
         self.assertIsNotNone(message)
         self.assertEqual(progression.message, message)
-import unittest
-
-from systems.horde_director import HordeDirector
-from systems.horror_director import HorrorDirector
 
 
 class FakePlayer:
