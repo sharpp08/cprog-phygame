@@ -24,7 +24,7 @@ class HorrorDirector:
         dt = max(0.0, min(float(dt), 0.25))
         nearby = sum(1 for z in controller.zombies
                      if z.alive and not getattr(z, "spawning", False)
-                     and z.dist(player) < 9.0)
+                     and z.dist((player.x, player.y)) < 9.0)
         health_pressure = 1.0 - max(
             0.0, min(1.0, player.hp / max(1.0, player.max_hp)))
         threat = min(1.0, nearby / 5.0)
