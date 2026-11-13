@@ -81,6 +81,8 @@ class Game:
         self.horror: Optional[HorrorDirector] = None
         self.hordes: Optional[HordeDirector] = None
         self._prev_hp = 0.0
+        self._heartbeat_timer = 0.0
+        self._breath_timer = 0.0
         self._last = pygame.time.get_ticks()
 
     # ------------------------------------------------------------------
@@ -471,6 +473,8 @@ class Game:
                     "Gunfire echoes through the forest. Something is coming.", 4.0)
                 if self.horror is not None:
                     self.horror.begin_recovery(5.0)
+        # Short, non-looping physiological cues; timers prevent repetition.
+        self._update_survival_audio(dt, player)
         # dynamic combat/ambient music based on nearby threat
         self._update_dynamic_music(player)
         self.wm.world.update(dt)
@@ -491,6 +495,24 @@ class Game:
         if self.progression.check_lose(player) or \
                 self.progression.state == "won":
             self._enter_gameover()
+
+    def _update_survival_audio(self, dt: float, player) -> None:
+        """Trigger restrained heartbeat/breathing cues from survival pressure."""
+        self._heartbeat_timer = max(0.0, self._heartbeat_timer - dt)
+        self._breath_timer = max(0.0, self._breath_timer - dt)
+        nearby = sum(
+            1 for z in self.wm.controller.zombies
+            if z.alive and not getattr(z, "spawning", False)
+            and z.dist(player) < 7.0)
+        critical = player.hp <= 35.0 or nearby >= 3
+        exhausted = (self.survival is not None
+                     and self.survival.stamina <= 28.0)
+        if critical and self._heartbeat_timer <= 0.0:
+            self.audio.play("heartbeat")
+            self._heartbeat_timer = 1.05 if player.hp <= 20.0 else 1.45
+        if exhausted and self._breath_timer <= 0.0:
+            self.audio.play("breathing")
+            self._breath_timer = 1.65
 
     def _update_dynamic_music(self, player) -> None:
         """Crossfade between ambient and combat music based on threat."""
