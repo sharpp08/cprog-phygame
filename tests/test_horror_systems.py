@@ -85,7 +85,7 @@ class TestSurvival(unittest.TestCase):
 
     def test_battery_pickup_adds_cell_to_inventory(self):
         system = SurvivalSystem()
-        pickup = SimpleNamespace(ptype="battery", value=1, taken=False)
+        pickup = SimpleNamespace(ptype="battery", value=1, taken=False, spec={})
         apply_pickup(SimpleNamespace(), pickup, survival=system)
         self.assertEqual(system.battery_cells, 3)
         self.assertTrue(pickup.taken)
