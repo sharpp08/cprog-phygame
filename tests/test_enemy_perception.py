@@ -72,6 +72,7 @@ class TestZombiePerception(unittest.TestCase):
         self.player.flashlight_on = False
         zombie = Zombie(5.0, 5.0, "stalker")
         zombie.spawning = False
+        zombie._repath_cd = 0.5
         zombie.search_timer = 2.0
         zombie.last_known = (12.0, 5.0)
         controller.zombies = [zombie]
