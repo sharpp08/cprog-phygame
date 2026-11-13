@@ -190,6 +190,10 @@ Enemy AI is intended to include detection, pursuit, navigation, obstacle avoidan
 Planned pickups include ammunition, medical supplies, weapons, and other survival items. Player status is expected to include health, current weapon, ammunition, inventory, and survival state.
 
 
+## Character animation update
+
+Player and all eight infected archetypes now have dedicated eight-pose running cycles with articulated leg motion, foot lift, counter-swinging arms, forward sprint lean, and movement-synchronized footstep timing. Enemy run cycles retain individual movement styles, from fast infected to heavy brutes and low crawlers.
+
 ## Implemented horror and survival systems
 
 The current `main` branch integrates the following playable systems with the existing Pygame architecture:
