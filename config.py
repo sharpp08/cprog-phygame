@@ -175,6 +175,7 @@ PICKUP_TYPES = {
     "ammo_shotgun": {"color": (170, 130, 90), "value": 12},
     "ammo_rifle": {"color": (150, 160, 190), "value": 48},
     "medkit": {"color": (230, 70, 70), "value": 40},
+    "battery": {"color": (175, 190, 105), "value": 1},
     "weapon_shotgun": {"color": (210, 180, 120), "value": 1},
     "weapon_rifle": {"color": (200, 210, 230), "value": 1},
 }
