@@ -349,7 +349,7 @@ class ZombieController:
 
     def _can_see_player(self, z, player, distance=None) -> bool:
         """Check range, stealth, weather and solid geometry before detection."""
-        distance = z.dist(player) if distance is None else distance
+        distance = z.dist((player.x, player.y)) if distance is None else distance
         flashlight = bool(getattr(player, "flashlight_on", True))
         crouching = bool(getattr(player, "crouching", False))
         range_scale = 1.12 if flashlight else 0.68
