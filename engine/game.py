@@ -454,7 +454,7 @@ class Game:
         nearby_threats = sum(
             1 for z in self.wm.controller.zombies
             if z.alive and not getattr(z, "spawning", False)
-            and z.dist(player) < 9.0)
+            and z.dist((player.x, player.y)) < 9.0)
         if (self.horror is not None and self._last_nearby_threats >= 2
                 and nearby_threats == 0):
             self.horror.begin_recovery(14.0)
