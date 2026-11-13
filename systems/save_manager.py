@@ -41,6 +41,7 @@ class SaveManager:
                 "scrap": survival.scrap if survival else 0,
                 "flashlight_battery": survival.flashlight_battery if survival else 100.0,
                 "flashlight_on": survival.flashlight_on if survival else True,
+                "battery_cells": survival.battery_cells if survival else 2,
             },
             "settings": settings,
         }
