@@ -65,13 +65,15 @@ class CombatSystem:
                 continue
             # hit a zombie
             for z in zombies:
-                if not z.alive:
+                if not z.alive or getattr(z, "spawning", False):
                     continue
                 dx = b.x - z.x
                 dy = b.y - z.y
                 rr = z.radius + 0.15
                 if dx * dx + dy * dy < rr * rr:
-                    z.on_hit(b.damage, b)
+                    # Knock the zombie away from the shot (direction-aware).
+                    m = (dx * dx + dy * dy) ** 0.5 or 1.0
+                    z.on_hit(b.damage, b, knock_dir=dx / m)
                     b.active = False
                     if particles:
                         particles.burst(

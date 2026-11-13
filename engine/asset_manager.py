@@ -12,6 +12,7 @@ bridge and a misty waterfall.
 """
 from __future__ import annotations
 
+import math
 import random
 from typing import Dict, Tuple
 
@@ -506,7 +507,15 @@ class AssetManager:
 
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
                   reach: float = 0.0, crouch: float = 0.0,
-                  flash: bool = False):
+                  flash: bool = False, phase: float = 0.0,
+                  fall: int = 0, gait: float = 1.0):
+        """Procedural humanoid frame.
+
+        ``pose`` drives the base stance; ``phase`` (0..1) animates a
+        4-frame gait cycle so legs/arms actually swing; ``fall`` orients a
+        death pose (0 forward, 1 sideways, 2 backward); ``gait`` stretches
+        the swing for asymmetric zombie shambles.
+        """
         p = self._PALETTE[kind]
         sc = p["size"]
         W, H = 44, 66
@@ -517,26 +526,37 @@ class AssetManager:
         pygame.draw.ellipse(s, (0, 0, 0, 80),
                             (cx - 12 * sc, gy - 4, 24 * sc, 9))
         if pose == "dead":
-            pygame.draw.ellipse(s, (0, 0, 0, 60),
-                                (cx - 14 * sc, 44, 28 * sc, 10))
-            pygame.draw.ellipse(s, shade(top, -0.2),
-                                (cx - 16 * sc, 46, 30 * sc, 12))
-            pygame.draw.ellipse(s, skin,
-                                (cx + 8 * sc, 44, 9 * sc, 9))
+            self._dead_pose(s, kind, sc, gy, fall)
             return s
-        hip_y = gy - 18 * sc
-        shoulder_y = gy - 34 * sc
-        head_cy = gy - 40 * sc
-        lean = 6 * reach if pose in ("walk", "run", "idle") else 0
-        if pose == "run":
-            fA = (cx - 9 * sc + (6 if leg else -4), gy)
-            fB = (cx + 9 * sc - (6 if leg else -4), gy - 2)
-        elif pose == "walk":
-            fA = (cx - 7 * sc + (5 if leg else -3), gy)
-            fB = (cx + 7 * sc - (5 if leg else -3), gy)
-        else:
-            fA, fB = (cx - 5 * sc, gy), (cx + 5 * sc, gy)
+        if pose == "emerge":
+            self._emerge_pose(s, kind, sc, gy, reach, crouch, phase)
+            return s
+
+        # Gait phase drives the limb swing.  For a 4-frame cycle the phase
+        # is the cycle position (0, 0.25, 0.5, 0.75) and leg alternates.
+        amp = 0.5 + 0.5 * abs(gait)
+        swing = math.sin(phase * math.pi * 2.0) * amp
+        legA_f = swing * 9.0      # front foot offset (px)
+        legB_f = -swing * 9.0     # back foot (opposite phase)
+        # Body bob: highest mid-stride, lowest at foot contact.
+        bob = (abs(swing) if pose in ("walk", "run") else 0.0)
+        bob_px = bob * (3.0 if pose == "walk" else 5.0)
+        hip_y = gy - 18 * sc - bob_px * 0.5
+        shoulder_y = gy - 34 * sc - bob_px
+        head_cy = gy - 40 * sc - bob_px
+        lean = (6 * reach if pose in ("walk", "run", "idle") else 0.0)
+        # Run leans forward more; zombie types hunch.
+        lean += 4.0 if pose == "run" else 0.0
+
         hx, hy = cx - lean * 0.4, hip_y
+        # Foot positions: gait offset + pose base
+        fA_x = cx - (7 if pose == "walk" else 9) * sc + (legA_f if pose in ("walk", "run") else 0)
+        fB_x = cx + (7 if pose == "walk" else 9) * sc + (legB_f if pose in ("walk", "run") else 0)
+        fA = (fA_x, gy)
+        fB = (fB_x, gy - 2)
+        # Arms swing opposite to the same-side leg.
+        armA = -swing * 8.0 * (0.8 if pose == "walk" else 1.0)
+        armB = swing * 8.0 * (0.8 if pose == "walk" else 1.0)
         pygame.draw.line(s, shade(bot, -0.15), (hx - 2, hy), fA, int(5 * sc))
         pygame.draw.line(s, shade(bot, -0.35), (hx + 2, hy), fB, int(5 * sc))
         ty = shoulder_y + (4 if crouch else 0)
@@ -561,7 +581,7 @@ class AssetManager:
         pygame.draw.circle(s, e_col, (int(hx + 3), int(head_cy)), 1)
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
-        ax, ay = hx + 5 * sc + lean * 0.3, arm_y
+        ax, ay = hx + 5 * sc + lean * 0.3, arm_y + armA
         guncol = p["gun"]
         if pose == "shoot":
             pygame.draw.line(s, shade(top, -0.1),
@@ -588,7 +608,7 @@ class AssetManager:
         else:
             arms_ahead = reach > 0.2
             gx = hx + 6 * sc + reach_px
-            gyw = arm_y + (2 if arms_ahead else 4)
+            gyw = arm_y + (2 if arms_ahead else 4) + armA
             pygame.draw.line(s, shade(top, -0.1),
                              (hx + 4 * sc, arm_y), (gx, gyw), int(4 * sc))
             pygame.draw.line(s, shade(top, -0.3),
@@ -631,31 +651,113 @@ class AssetManager:
                                  (hx + 6 * sc, head_cy + 5), 2)
         return s
 
+    def _dead_pose(self, s, kind, sc, gy, fall):
+        """Lay the body down; ``fall`` orients the collapse direction."""
+        p = self._PALETTE[kind]
+        cx = 22
+        skin, top, bot = p["skin"], p["top"], p["bot"]
+        # Ground shadow stretches with the fall.
+        shw = 30 + 8 * (fall % 3)
+        pygame.draw.ellipse(s, (0, 0, 0, 70),
+                            (cx - shw * sc / 2, 48, shw * sc, 12))
+        tilt = [-8, 0, 8][fall % 3]
+        by = 50
+        # Torso laid back
+        pygame.draw.polygon(s, shade(top, -0.35),
+                            [(cx - 14 * sc + tilt, by),
+                             (cx + 12 * sc + tilt, by - 6),
+                             (cx + 14 * sc + tilt, by + 6),
+                             (cx - 12 * sc + tilt, by + 8)])
+        # Legs trailing
+        pygame.draw.line(s, shade(bot, -0.4),
+                         (cx - 10 * sc, by + 4), (cx - 20 * sc, by + 10 + tilt),
+                         int(5 * sc))
+        pygame.draw.line(s, shade(bot, -0.5),
+                         (cx - 10 * sc, by + 4), (cx - 18 * sc, by + 12 - tilt),
+                         int(5 * sc))
+        # Head
+        pygame.draw.ellipse(s, shade(skin, -0.2),
+                            (cx + 8 * sc + tilt, by - 4, 11 * sc, 11 * sc))
+        pygame.draw.ellipse(s, skin,
+                            (cx + 9 * sc + tilt, by - 3, 9 * sc, 9 * sc))
+        # A little blood pool sells the kill.
+        pygame.draw.ellipse(s, (90, 20, 18, 150),
+                            (cx - 22 * sc, 56, 30 * sc, 8))
+
+    def _emerge_pose(self, s, kind, sc, gy, reach, crouch, phase):
+        """Zombie pulling itself up out of the ground (0 = buried, 1 = up)."""
+        p = self._PALETTE[kind]
+        cx = 22
+        skin, top, bot = p["skin"], p["top"], p["bot"]
+        rise = phase  # 0..1
+        # Dirt mound + roots of the grave.
+        pygame.draw.ellipse(s, (60, 45, 30, 200), (cx - 16 * sc, 56, 32 * sc, 12))
+        pygame.draw.ellipse(s, (40, 30, 20, 220), (cx - 10 * sc, 58, 20 * sc, 8))
+        # Body rises up out of the mound.
+        body_top = 52 - rise * 34 * sc
+        hip_y = 56 - rise * 20 * sc
+        # Torso emerging
+        pygame.draw.polygon(s, shade(top, -0.4),
+                            [(cx - 7 * sc, body_top),
+                             (cx + 7 * sc, body_top),
+                             (cx + 5 * sc, hip_y), (cx - 5 * sc, hip_y)])
+        # Arms clawing out of the dirt
+        for side in (-1, 1):
+            ax = cx + side * (9 * sc)
+            ay = hip_y - 2
+            pygame.draw.line(s, shade(skin, -0.2),
+                             (ax, ay), (ax + side * 6, ay + 8), int(4 * sc))
+            pygame.draw.line(s, skin,
+                             (ax, ay - 2), (ax + side * 4, ay + 4), int(3 * sc))
+        # Head breaks the surface last
+        if rise > 0.4:
+            head_y = body_top - 4
+            pygame.draw.ellipse(s, shade(skin, -0.3),
+                                (cx - 5 * sc, head_y, 10 * sc, 10 * sc))
+            pygame.draw.ellipse(s, skin,
+                                (cx - 4 * sc, head_y + 1, 8 * sc, 8 * sc))
+
     def _make_character(self) -> None:
         frames = self.frames
+        # Player: 4-frame walk and run cycles driven by gait phase so the
+        # legs alternate naturally and the body bobs.
         pl = {
-            "idle": [self._humanoid("player", "idle")],
-            "walk": [self._humanoid("player", "walk", leg=0),
-                     self._humanoid("player", "walk", leg=1)],
-            "run": [self._humanoid("player", "run", leg=0),
-                    self._humanoid("player", "run", leg=1)],
+            "idle": [self._humanoid("player", "idle", phase=k / 4.0)
+                     for k in range(4)],
+            "walk": [self._humanoid("player", "walk", phase=k / 4.0)
+                     for k in range(4)],
+            "run": [self._humanoid("player", "run", phase=k / 4.0,
+                                   gait=1.4)
+                    for k in range(4)],
             "shoot": [self._humanoid("player", "shoot", flash=True)],
-            "reload": [self._humanoid("player", "reload", leg=0),
-                       self._humanoid("player", "reload", leg=1)],
-            "hit": [self._humanoid("player", "hit")],
-            "dead": [self._humanoid("player", "dead")],
+            "reload": [self._humanoid("player", "reload", phase=k / 4.0)
+                       for k in range(4)],
+            "hit": [self._humanoid("player", "hit", reach=0.2, crouch=0.3)],
+            "dead": [self._humanoid("player", "dead", fall=k % 3)
+                     for k in range(3)],
+            "emerge": [self._humanoid("player", "emerge", phase=k / 3.0)
+                       for k in range(3)],
         }
         frames["player"] = pl
         for zt in ("regular", "fast", "tank"):
+            # Asymmetric gait per type: fast stumbles, tank drags.
+            gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6}[zt]
             z = {
-                "idle": [self._humanoid(zt, "idle", reach=0.5, crouch=0.4)],
-                "walk": [self._humanoid(zt, "walk", reach=0.55, crouch=0.4),
-                         self._humanoid(zt, "walk", reach=0.55, crouch=0.4,
-                                        leg=1)],
-                "attack": [self._humanoid(zt, "attack", reach=1.0,
-                                          crouch=0.5)],
+                "idle": [self._humanoid(zt, "idle", reach=0.5, crouch=0.4,
+                                         phase=k / 4.0)
+                         for k in range(4)],
+                "walk": [self._humanoid(zt, "walk", reach=0.55, crouch=0.4,
+                                        phase=k / 4.0, gait=gait)
+                         for k in range(4)],
+                "attack": [self._humanoid(zt, "attack", reach=1.0, crouch=0.5,
+                                          phase=k / 4.0)
+                           for k in range(4)],
                 "hit": [self._humanoid(zt, "hit", reach=0.5, crouch=0.4)],
-                "dead": [self._humanoid(zt, "dead")],
+                "dead": [self._humanoid(zt, "dead", fall=k % 3)
+                         for k in range(3)],
+                "emerge": [self._humanoid(zt, "emerge", reach=0.5,
+                                          crouch=0.4, phase=k / 3.0)
+                           for k in range(3)],
             }
             frames[f"zombie_{zt}"] = z
 

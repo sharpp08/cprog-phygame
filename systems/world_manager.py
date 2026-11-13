@@ -25,7 +25,8 @@ class WorldManager:
     # ------------------------------------------------------------------
     def setup(self, player, audio, particles) -> None:
         self.controller.set_context(player, audio, particles,
-                                    self.world.spawn_points)
+                                    self.world.spawn_points,
+                                    world=self.world)
         self.controller.safe_zones = [
             (float(self.world.start[0]), float(self.world.start[1]), 3.5)]
         # Initial zombies scattered around the map at safe distances.
@@ -35,7 +36,7 @@ class WorldManager:
             zt = random.choice(["regular", "regular", "fast"])
             z = self.controller.add_zombie(None, x, y, zt)
             z.path = self.nav.a_star((int(x), int(y)),
-                                     (int(player.x), int(player.y)))
+                                      (int(player.x), int(player.y)))
             z.path_i = 0
 
     def _random_clear_tile(self):
