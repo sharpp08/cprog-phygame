@@ -79,6 +79,7 @@ class Game:
         self.survival: Optional[SurvivalSystem] = None
         self.story: Optional[StorySystem] = None
         self.horror: Optional[HorrorDirector] = None
+        self.hordes: Optional[HordeDirector] = None
         self._prev_hp = 0.0
         self._last = pygame.time.get_ticks()
 
@@ -205,6 +206,7 @@ class Game:
         self.survival = SurvivalSystem()
         self.story = StorySystem(self.wm.world)
         self.horror = HorrorDirector()
+        self.hordes = HordeDirector()
         self.story.discovered.update(pg.get("clues", []))
         sd = data.get("survival", {})
         self.survival.stamina = float(sd.get("stamina", 100.0))
