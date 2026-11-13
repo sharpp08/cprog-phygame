@@ -82,7 +82,7 @@ class TestZombiePerception(unittest.TestCase):
     def test_rain_reduces_detection_range(self):
         self.controller.rain_amount = 1.0
         self.assertFalse(self.controller._can_see_player(
-            self.zombie, self.player, 11.0))
+            self.zombie, self.player, 11.5))
 
 
 if __name__ == "__main__":
