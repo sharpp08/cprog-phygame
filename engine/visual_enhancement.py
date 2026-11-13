@@ -107,9 +107,11 @@ class VisualEnhancement:
         sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
         cx = int(sx * self._bw / self.width)
         cy = int(sy * self._bh / self.height)
-        inner = max(5, int(78 * self._bw / self.width))
-        outer = max(inner + 4, int(190 * self._bw / self.width))
-        max_alpha = (38, 48, 56, 62)[max(0, min(3, int(quality)))]
+        # Keep the full player sprite sharp, not just the feet/pivot.
+        # The blur is only allowed to fade in well beyond the character.
+        inner = max(8, int(170 * self._bw / self.width))
+        outer = max(inner + 8, int(300 * self._bw / self.width))
+        max_alpha = (24, 30, 36, 42)[max(0, min(3, int(quality)))]
 
         self._blur_mask.fill((255, 255, 255, max_alpha))
         # Nested circles create a gradual alpha ramp rather than a hard blur edge.
@@ -157,13 +159,18 @@ class VisualEnhancement:
                            radius * 32.0 * zoom / 4.0,
                            max(0.0, min(1.0, float(intensity) * breathe))))
         if player is not None:
-            # Weak local ambient visibility remains around the survivor even
-            # with the flashlight switched off; it never lights the wider map.
+            # A restrained player halo is always present. With the flashlight
+            # off, widen it so nearby terrain remains navigable without
+            # revealing the whole forest.
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
-            # Slightly wider and brighter local reveal while keeping the forest dark.
-            ambient_radius = 3.5 * 32.0 * zoom / 4.0
+            flashlight_on = bool(getattr(player, "flashlight_on", True))
+            if flashlight_on:
+                ambient_tiles, ambient_strength = 3.5, 0.42
+            else:
+                ambient_tiles, ambient_strength = 5.4, 0.56
+            ambient_radius = ambient_tiles * 32.0 * zoom / 4.0
             lights.append((psx / 4.0, psy / 4.0,
-                           ambient_radius, 0.42))
+                           ambient_radius, ambient_strength))
         if player is not None and getattr(player, "flashlight_on", True):
             # smooth on/off transition
             target = 1.0
