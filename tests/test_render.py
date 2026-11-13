@@ -184,6 +184,10 @@ class TestRender(unittest.TestCase):
         world, player, cam, assets, renderer, controller, \
             trees, rocks = self._build_test_scene()
 
+        # Vegetation must remain present in the scene before lighting.
+        # The real night-lighting pass intentionally removes most green pixels,
+        # so test foliage rendering independently from the darkness treatment.
+        renderer._apply_lighting = lambda *_args, **_kwargs: None
         renderer.render_frame(world, player, controller.zombies,
                               [], [], 1.0 / 60.0)
 
