@@ -130,17 +130,27 @@ ZOMBIE_TYPES = {
     "regular": {
         "hp": 60, "speed": 1.6, "damage": 10, "attack_cd": 0.9,
         "range": 1.0, "color": (110, 140, 90), "score": 10,
-        "radius": 0.42, "detect": 11.0,
+        "radius": 0.42, "detect": 11.0, "label": "Standard Zombie",
     },
     "fast": {
         "hp": 34, "speed": 3.3, "damage": 8, "attack_cd": 0.6,
         "range": 1.0, "color": (150, 120, 80), "score": 18,
-        "radius": 0.38, "detect": 15.0,
+        "radius": 0.38, "detect": 15.0, "label": "Runner Zombie",
     },
     "tank": {
         "hp": 240, "speed": 0.9, "damage": 26, "attack_cd": 1.4,
         "range": 1.25, "color": (70, 95, 70), "score": 45,
-        "radius": 0.6, "detect": 12.0,
+        "radius": 0.6, "detect": 12.0, "label": "Tank Zombie",
+    },
+    "crawler": {
+        "hp": 45, "speed": 1.2, "damage": 12, "attack_cd": 0.8,
+        "range": 0.95, "color": (120, 105, 70), "score": 22,
+        "radius": 0.36, "detect": 9.0, "label": "Crawler Zombie",
+    },
+    "exploder": {
+        "hp": 50, "speed": 1.9, "damage": 18, "attack_cd": 1.1,
+        "range": 1.15, "color": (130, 150, 70), "score": 30,
+        "radius": 0.4, "detect": 10.5, "label": "Exploder Zombie",
     },
 }
 ZOMBIE_START_COUNT = 12

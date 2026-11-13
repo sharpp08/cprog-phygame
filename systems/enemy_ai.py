@@ -108,10 +108,16 @@ class ZombieController:
                    key=lambda s: (s[0] - pos[0]) ** 2 + (s[1] - pos[1]) ** 2)
         x, y = best[0] + random.uniform(-0.5, 0.5), \
             best[1] + random.uniform(-0.5, 0.5)
-        weights = [0.6, 0.3, 0.1]
+        weights = [("regular", 0.5), ("fast", 0.22), ("tank", 0.1),
+                   ("crawler", 0.1), ("exploder", 0.08)]
         r = random.random()
-        ztype = "regular" if r < weights[0] else (
-            "fast" if r < weights[0] + weights[1] else "tank")
+        acc = 0.0
+        ztype = "regular"
+        for name, w in weights:
+            acc += w
+            if r <= acc:
+                ztype = name
+                break
         z = self.add_zombie(None, x, y, ztype)
         if self._audio:
             self._audio.play("zombie_groan")
@@ -169,39 +175,93 @@ class ZombieController:
                 "leaf", z.x, z.y, 0.4, 2, (150, 110, 55),
                 speed=0.6, life=0.8, size=2.0)
 
+    def _separation(self, z, dt: float):
+        """Steer away from nearby zombies to avoid stacking/clumping."""
+        sx = sy = 0.0
+        count = 0
+        for other in self.zombies:
+            if other is z or not other.alive or getattr(other, "spawning", False):
+                continue
+            dx = z.x - other.x
+            dy = z.y - other.y
+            d2 = dx * dx + dy * dy
+            min_d = z.radius + other.radius + 0.15
+            if d2 < min_d * min_d and d2 > 1e-6:
+                d = d2 ** 0.5
+                push = (min_d - d) / min_d
+                sx += (dx / d) * push
+                sy += (dy / d) * push
+                count += 1
+        if count:
+            return sx, sy
+        return 0.0, 0.0
+
     # ------------------------------------------------------------------
     def _behaviour(self, z, dt: float, p) -> None:
         if not z.alive:
             return
         d = z.dist(p)
-        # The abandoned starting camp is a temporary safe zone. Enemies
-        # lose the trail while the survivor is inside its boundary.
+        # temporary safe zone: lose trail while survivor hides in start camp
         if any(((p.x - sx) ** 2 + (p.y - sy) ** 2) <= radius ** 2
                for sx, sy, radius in self.safe_zones):
-            z.state = "idle"
+            z.state = "wandering"
+            z.search_timer = 0.0
             z.apply_move(0.0, 0.0, dt, self.grid)
             return
-        # Running and gunfire carry farther than cautious walking.
+        # stagger interrupts actions briefly
+        z.stagger_timer = max(0.0, getattr(z, "stagger_timer", 0.0) - dt)
+        if z.stagger_timer > 0:
+            z.state = "staggering"
+            z.apply_move(0.0, 0.0, dt, self.grid)
+            return
+
+        # noise investigation
         noise_target = None
         if self.noise_pos is not None and self.noise_timer > 0:
             nd = ((z.x - self.noise_pos[0]) ** 2 +
                   (z.y - self.noise_pos[1]) ** 2) ** 0.5
             if nd <= self.noise_radius:
                 noise_target = self.noise_pos
-        # State machine: attack visible targets, investigate sounds, then
-        # resume normal detection and patrol behaviour.
+
+        # detection + memory
+        can_see = d < z.detect
+        if can_see:
+            z.last_known = (p.x, p.y)
+            z.search_timer = 3.5
+            z.suspicion = min(1.0, getattr(z, "suspicion", 0.0) + dt * 1.5)
+            z.alerted = True
+            # group alert: nearby zombies react
+            self._alert_nearby(z, 6.0)
+        else:
+            z.suspicion = max(0.0, getattr(z, "suspicion", 0.0) - dt * 0.4)
+            z.search_timer = max(0.0, getattr(z, "search_timer", 0.0) - dt)
+
+        # state selection
         if d <= z.attack_range:
             z.state = "attack"
-        elif d < z.detect or noise_target is not None:
-            z.state = "investigate" if noise_target is not None and d >= z.detect else "pursue"
+        elif can_see:
+            z.state = "pursue"
+        elif noise_target is not None or z.suspicion > 0.35:
+            z.state = "investigating"
+        elif z.search_timer > 0 and getattr(z, "last_known", None):
+            z.state = "searching"
+        elif z.wander_target is not None or z.repath_timer > 0:
+            z.state = "wandering"
         else:
             z.state = "idle"
 
-        if z.state in ("pursue", "investigate"):
+        if z.state in ("pursue", "investigating", "searching"):
             z.repath_timer -= dt
-            target = noise_target if z.state == "investigate" else (p.x, p.y)
-            if ((target[0] - z.x) ** 2 + (target[1] - z.y) ** 2) < 0.16:
+            if z.state == "pursue":
+                target = (p.x, p.y)
+            elif z.state == "investigating" and noise_target is not None:
+                target = noise_target
+            else:
+                target = getattr(z, "last_known", (p.x, p.y))
+            if ((target[0] - z.x) ** 2 + (target[1] - z.y) ** 2) < 0.20:
                 z.apply_move(0.0, 0.0, dt, self.grid)
+                if z.state == "searching":
+                    z.search_timer = max(0.0, z.search_timer - dt * 2.0)
                 return
             if z.repath_timer <= 0 or z.path is None:
                 z._tx, z._ty = target[0], target[1]
@@ -209,35 +269,73 @@ class ZombieController:
                 z.repath_timer = z._repath_cd
             vx, vy = self.nav.velocity(z, target[0], target[1])
             if abs(vx) + abs(vy) < 1e-8:
+                # stuck: force a short wander repath
+                z.path = None
+                z.repath_timer = 0.0
                 return
-            z.apply_move(vx, vy, dt, self.grid)
+            sx, sy = self._separation(z, dt)
+            vx += sx * 0.9
+            vy += sy * 0.9
+            spd_mult = 1.0
+            if z.ztype == "crawler":
+                spd_mult = 0.85
+            z.apply_move(vx * spd_mult, vy * spd_mult, dt, self.grid)
         elif z.state == "attack":
             z.apply_move(0.0, 0.0, dt, self.grid)
             if z._attack_timer <= 0 and d <= z.attack_range * 1.2:
                 z._attack_timer = z.attack_cd
-                p.take_damage(z.damage)
+                dmg = z.damage
+                # exploder deals extra damage up close and hurts itself
+                if z.ztype == "exploder" and d < 1.4:
+                    dmg *= 1.6
+                    z.hp -= 8
+                    if self._particles:
+                        self._particles.burst("smoke", z.x, z.y, 0.3, 10,
+                                              (160, 120, 60), speed=1.8,
+                                              life=0.5, upward=True)
+                    if z.hp <= 0:
+                        self.kill(z)
+                        return
+                p.take_damage(dmg)
                 if self._audio:
                     self._audio.play("zombie_hit")
                 if self._particles:
                     self._particles.burst(
                         "blood", p.x, p.y, 0.4, 6, (150, 30, 30),
                         speed=1.2, life=0.5, upward=True)
-            # back to chasing once the player steps away
             if d > z.attack_range * 1.5:
                 z.state = "pursue"
-        else:  # idle wander
+        else:  # idle / wandering
             z.repath_timer -= dt
             if z.wander_target is None or z.repath_timer <= 0:
                 z.wander_target = self._rand_walk_target(z)
                 z.path = self.nav.a_star((int(z.x), int(z.y)),
                                           z.wander_target)
                 z.path_i = 0
-                z.repath_timer = random.uniform(2.0, 4.0)
+                z.repath_timer = random.uniform(1.5, 3.5)
             if z.path:
                 vx, vy = self.nav.velocity(z, z.wander_target[0],
                                             z.wander_target[1])
-                # walk slowly when idle
-                z.apply_move(vx * 0.5, vy * 0.5, dt, self.grid)
+                z.apply_move(vx * 0.45, vy * 0.45, dt, self.grid)
+
+    def _alert_nearby(self, source, radius: float) -> None:
+        """Share last known player position with nearby zombies."""
+        lk = getattr(source, "last_known", None)
+        if lk is None:
+            return
+        r2 = radius * radius
+        for z in self.zombies:
+            if z is source or not z.alive or getattr(z, "spawning", False):
+                continue
+            dx = z.x - source.x
+            dy = z.y - source.y
+            if dx * dx + dy * dy <= r2:
+                z.last_known = lk
+                z.search_timer = max(getattr(z, "search_timer", 0.0), 2.0)
+                z.suspicion = max(getattr(z, "suspicion", 0.0), 0.5)
+                z.alerted = True
+                if z.state in ("idle", "wandering"):
+                    z.state = "investigating"
 
     def _rand_walk_target(self, z):
         for _ in range(6):

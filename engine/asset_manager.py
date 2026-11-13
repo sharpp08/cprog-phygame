@@ -503,6 +503,12 @@ class AssetManager:
         "tank": dict(skin=(120, 140, 90), top=(70, 80, 54),
                     bot=(54, 54, 50), gun=(50, 50, 50),
                     hair=(60, 66, 52), size=1.3),
+        "crawler": dict(skin=(140, 130, 80), top=(85, 78, 58),
+                    bot=(58, 54, 46), gun=(60, 60, 60),
+                    hair=(78, 70, 56), size=0.85),
+        "exploder": dict(skin=(140, 170, 90), top=(90, 100, 58),
+                    bot=(62, 58, 50), gun=(55, 55, 55),
+                    hair=(70, 82, 52), size=1.05),
     }
 
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
@@ -739,24 +745,27 @@ class AssetManager:
                        for k in range(3)],
         }
         frames["player"] = pl
-        for zt in ("regular", "fast", "tank"):
-            # Asymmetric gait per type: fast stumbles, tank drags.
-            gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6}[zt]
+        for zt in ("regular", "fast", "tank", "crawler", "exploder"):
+            # Asymmetric gait per type: fast stumbles, tank drags, crawler low, exploder lurches.
+            gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6,
+                    "crawler": 0.7, "exploder": 1.0}.get(zt, 0.9)
+            reach = 0.55 if zt != "crawler" else 0.35
+            crouch = 0.4 if zt != "crawler" else 0.9
             z = {
-                "idle": [self._humanoid(zt, "idle", reach=0.5, crouch=0.4,
+                "idle": [self._humanoid(zt, "idle", reach=reach, crouch=crouch,
                                          phase=k / 4.0)
                          for k in range(4)],
-                "walk": [self._humanoid(zt, "walk", reach=0.55, crouch=0.4,
+                "walk": [self._humanoid(zt, "walk", reach=reach, crouch=crouch,
                                         phase=k / 4.0, gait=gait)
                          for k in range(4)],
-                "attack": [self._humanoid(zt, "attack", reach=1.0, crouch=0.5,
+                "attack": [self._humanoid(zt, "attack", reach=1.0, crouch=min(0.5, crouch),
                                           phase=k / 4.0)
                            for k in range(4)],
-                "hit": [self._humanoid(zt, "hit", reach=0.5, crouch=0.4)],
+                "hit": [self._humanoid(zt, "hit", reach=reach, crouch=crouch)],
                 "dead": [self._humanoid(zt, "dead", fall=k % 3)
                          for k in range(3)],
-                "emerge": [self._humanoid(zt, "emerge", reach=0.5,
-                                          crouch=0.4, phase=k / 3.0)
+                "emerge": [self._humanoid(zt, "emerge", reach=reach,
+                                          crouch=crouch, phase=k / 3.0)
                            for k in range(3)],
             }
             frames[f"zombie_{zt}"] = z

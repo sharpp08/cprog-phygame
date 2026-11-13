@@ -83,7 +83,16 @@ class World:
         out = []
         for i, (x, y) in enumerate(spots):
             r = random.random()
-            zt = "fast" if r < 0.4 else ("tank" if r < 0.6 else "regular")
+            if r < 0.34:
+                zt = "regular"
+            elif r < 0.54:
+                zt = "fast"
+            elif r < 0.70:
+                zt = "tank"
+            elif r < 0.86:
+                zt = "crawler"
+            else:
+                zt = "exploder"
             out.append((x + random.uniform(-0.4, 0.4),
                         y + random.uniform(-0.4, 0.4), zt))
         return out

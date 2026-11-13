@@ -368,7 +368,7 @@ class Game:
         if self.player is not None and self.progression is not None \
                 and self.progression.state == "playing":
             self.save_manager.save(self.player, self.progression,
-                                   self.settings)
+                                   self.settings, self.story, self.survival)
         self.state = "menu"
         self.settings_menu = None
         self.pause_menu = None
@@ -445,6 +445,8 @@ class Game:
                 # supernatural event: visual tension spike + gentle shake
                 self.renderer.post.on_event(1.0)
                 self.renderer.shake.add(2.5, 0.8)
+        # dynamic combat/ambient music based on nearby threat
+        self._update_dynamic_music(player)
         self.wm.world.update(dt)
         self.particles.update(dt, self.wm.world)
         # weather + flashlight battery (drives flicker / rain / fog visuals)
@@ -463,6 +465,27 @@ class Game:
         if self.progression.check_lose(player) or \
                 self.progression.state == "won":
             self._enter_gameover()
+
+    def _update_dynamic_music(self, player) -> None:
+        """Crossfade between ambient and combat music based on threat."""
+        if self.wm is None or self.progression is None:
+            return
+        close = 0
+        for z in self.wm.controller.zombies:
+            if not z.alive or getattr(z, "spawning", False):
+                continue
+            d2 = (z.x - player.x) ** 2 + (z.y - player.y) ** 2
+            if d2 < 100.0:  # within ~10 tiles
+                close += 1
+                if d2 < 25.0 or z.state in ("attack", "pursue", "investigate"):
+                    close += 1
+        in_combat = close >= 3 or (self.progression.phase == "shrine"
+                                   and self.wm.controller.alive_count > 0)
+        target = "combat" if in_combat else "ambient"
+        if self.audio.playing_music in ("menu", None):
+            self.audio.play_music(target)
+        elif self.audio.playing_music != target and self.state == "playing":
+            self.audio.play_music(target)
 
     # ------------------------------------------------------------------
     def _render(self) -> None:

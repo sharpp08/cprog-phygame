@@ -74,7 +74,17 @@ class Zombie(Entity):
 
         # Zombie-specific gait feel by type.
         self._gait_stretch = {"regular": 0.9, "fast": 1.15,
-                              "tank": 0.6}[ztype]
+                              "tank": 0.6, "crawler": 0.55,
+                              "exploder": 1.0}.get(ztype, 0.9)
+        # Extended AI state support
+        self.search_timer = 0.0
+        self.stagger_timer = 0.0
+        self.suspicion = 0.0
+        self.last_known = (x, y)
+        self.alerted = False
+        self.variation = random.uniform(0.92, 1.08)  # per-zombie variation
+        self.speed *= self.variation
+        self.detect *= random.uniform(0.95, 1.05)
 
     # ------------------------------------------------------------------
     @property
@@ -159,6 +169,11 @@ class Zombie(Entity):
         # Recoil impulse away from the hit source (applied in apply_move).
         self._hit_knock = 0.5
         self._hit_knock_dir = 1.0 if knock_dir >= 0 else -1.0
+        # Powerful hits stagger non-tank zombies briefly.
+        if dmg >= 20 and self.ztype != "tank":
+            self.stagger_timer = max(getattr(self, "stagger_timer", 0.0), 0.18)
+        elif dmg >= 35:
+            self.stagger_timer = max(getattr(self, "stagger_timer", 0.0), 0.28)
         if self.hp <= 0:
             self.hp = 0
             self.alive = False

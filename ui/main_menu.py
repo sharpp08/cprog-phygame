@@ -46,9 +46,9 @@ class MainMenu:
     # ------------------------------------------------------------------
     def draw(self, screen, fonts: FontSet) -> None:
         f = self.fonts
-        text(screen, f, "PHYGAME", self.W // 2, self.H // 4, 90,
+        text(screen, f, "WHEN THE WOODS BLEED", self.W // 2, self.H // 4, 64,
              (240, 210, 120), "center", True)
-        text(screen, f, "An Isometric Zombie Survival", self.W // 2,
-             self.H // 4 + 60, 26, (190, 180, 150), "center")
+        text(screen, f, "Isometric Zombie Survival Horror", self.W // 2,
+             self.H // 4 + 56, 26, (190, 180, 150), "center")
         for _, b in self.buttons:
             b.draw(screen, fonts)

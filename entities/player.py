@@ -88,9 +88,8 @@ class Player(Entity):
         if self.moving:
             # Normalise the move vector so diagonal speed is constant.
             m = (mv[0] ** 2 + mv[1] ** 2) ** 0.5 or 1.0
-            n = m
-            dx = (mv[0] / n) * self._cur_speed * dt
-            dy = (mv[1] / n) * self._cur_speed * dt
+            dx = (mv[0] / m) * self._cur_speed * dt
+            dy = (mv[1] / m) * self._cur_speed * dt
             self.x, self.y = grid.move_circle(
                 (self.x, self.y), (dx, dy), self.radius)
             # Advance the gait cycle in proportion to distance travelled.

@@ -120,7 +120,21 @@ class HUD:
             text(screen, f, f"SCRAP {survival.scrap}  [C] CRAFT MEDKIT (3)",
                  24, 124, 16, (190, 170, 135), "left")
         if story is not None:
-            text(screen, f, f"CLUES {len(story.discovered)}/{len(story.clues)}  [E] INVESTIGATE",
+            clue_hint = ""
+            try:
+                px, py = player.x, player.y
+                nearest = None
+                for i, clue in enumerate(story.clues):
+                    if i in story.discovered:
+                        continue
+                    d2 = (px - clue["pos"][0]) ** 2 + (py - clue["pos"][1]) ** 2
+                    if nearest is None or d2 < nearest:
+                        nearest = d2
+                if nearest is not None and nearest <= 4.0:
+                    clue_hint = "  -  [E] INVESTIGATE NEARBY"
+            except Exception:
+                clue_hint = ""
+            text(screen, f, f"CLUES {len(story.discovered)}/{len(story.clues)}  [E] INVESTIGATE{clue_hint}",
                  self.W // 2, self.H - 24, 17, (205, 190, 155), "center")
 
         # objective (top-centre)

@@ -335,8 +335,8 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
-        type_scale = 1.3 if z.ztype == "tank" else (
-            0.92 if z.ztype == "fast" else 1.0)
+        type_scale = {"tank": 1.3, "fast": 0.92, "regular": 1.0,
+                      "crawler": 0.85, "exploder": 1.08}.get(z.ztype, 1.0)
         spr = self._scale_sprite(spr, self.cam.zoom * type_scale)
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + 10 * cam.zoom))
@@ -504,7 +504,7 @@ class Renderer:
             if len(out) >= 4:
                 break
             if not z.alive or z.state not in ("pursue", "attack",
-                                              "investigate"):
+                                              "investigating", "searching"):
                 continue
             if z.dist2(player) > 30.0:
                 continue

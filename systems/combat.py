@@ -73,12 +73,15 @@ class CombatSystem:
                 if dx * dx + dy * dy < rr * rr:
                     # Knock the zombie away from the shot (direction-aware).
                     m = (dx * dx + dy * dy) ** 0.5 or 1.0
-                    z.on_hit(b.damage, b, knock_dir=dx / m)
+                    # Headshot: near-center hits deal bonus damage.
+                    center_ratio = ((dx * dx + dy * dy) ** 0.5) / max(0.01, rr)
+                    dmg = b.damage * (1.6 if center_ratio < 0.45 else 1.0)
+                    z.on_hit(dmg, b, knock_dir=dx / m)
                     b.active = False
                     if particles:
                         particles.burst(
-                            "blood", z.x, z.y, 0.4, 8,
-                            (130, 40, 30), speed=1.4, life=0.6,
+                            "blood", z.x, z.y, 0.4, 10 if center_ratio < 0.45 else 8,
+                            (130, 40, 30), speed=1.5, life=0.6,
                             upward=True)
                     if audio:
                         audio.play("zombie_hit")
