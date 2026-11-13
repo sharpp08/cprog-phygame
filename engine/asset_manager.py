@@ -509,6 +509,12 @@ class AssetManager:
         "exploder": dict(skin=(140, 170, 90), top=(90, 100, 58),
                     bot=(62, 58, 50), gun=(55, 55, 55),
                     hair=(70, 82, 52), size=1.05),
+        "screamer": dict(skin=(190, 185, 110), top=(135, 112, 65),
+                    bot=(72, 64, 48), gun=(65, 65, 55),
+                    hair=(110, 95, 65), size=1.0),
+        "armored": dict(skin=(115, 135, 150), top=(68, 88, 110),
+                    bot=(48, 58, 72), gun=(48, 55, 66),
+                    hair=(60, 72, 84), size=1.22),
     }
 
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
