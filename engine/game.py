@@ -20,6 +20,7 @@ from systems.inventory import apply_pickup
 from systems.navigation import Navigation
 from systems.progression import Progression
 from systems.horror_director import HorrorDirector
+from systems.horde_director import HordeDirector
 from systems.storytelling import StorySystem
 from systems.survival import SurvivalSystem
 from systems.save_manager import SaveManager
@@ -125,6 +126,7 @@ class Game:
         self.player.flashlight_on = self.survival.flashlight_on
         self.story = StorySystem(self.wm.world)
         self.horror = HorrorDirector()
+        self.hordes = HordeDirector()
         self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
@@ -440,11 +442,25 @@ class Game:
         self.progression.update(dt, player, self.wm.controller, self.wm.world)
         if self.horror is not None:
             horror_msg = self.horror.update(
-                dt, player, self.wm.controller, self.progression)
+                dt, player, self.wm.controller, self.progression,
+                self.survival,
+                self.wm.controller.noise_radius,
+                self.renderer.weather.rain_amount if self.renderer else 0.0)
             if horror_msg is not None and self.renderer is not None:
                 # supernatural event: visual tension spike + gentle shake
                 self.renderer.post.on_event(1.0)
                 self.renderer.shake.add(2.5, 0.8)
+        # Sustained gunfire draws a delayed horde from distant spawn lanes.
+        if self.hordes is not None:
+            spawned = self.hordes.update(
+                dt, player, self.wm.controller, self.progression.time,
+                self.wm.controller.noise_radius,
+                self.wm.controller.noise_timer)
+            if spawned:
+                self.progression.notify(
+                    "Gunfire echoes through the forest. Something is coming.", 4.0)
+                if self.horror is not None:
+                    self.horror.begin_recovery(5.0)
         # dynamic combat/ambient music based on nearby threat
         self._update_dynamic_music(player)
         self.wm.world.update(dt)
