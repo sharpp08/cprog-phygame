@@ -528,7 +528,7 @@ class Game:
         nearby = sum(
             1 for z in self.wm.controller.zombies
             if z.alive and not getattr(z, "spawning", False)
-            and z.dist(player) < 7.0)
+            and z.dist((player.x, player.y)) < 7.0)
         critical = player.hp <= 35.0 or nearby >= 3
         exhausted = (self.survival is not None
                      and self.survival.stamina <= 28.0)
