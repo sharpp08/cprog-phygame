@@ -59,7 +59,7 @@ class HUD:
 
     # ------------------------------------------------------------------
     def draw(self, screen, player, progression, survival=None, story=None,
-             dt: float = 0.016) -> None:
+             dt: float = 0.016, horror=None) -> None:
         f = self.fonts
         dt = max(0.001, min(0.1, float(dt)))
         ratio = max(0.0, player.hp / max(1.0, player.max_hp))
@@ -119,6 +119,8 @@ class HUD:
                       flash=survival.flashlight_battery < 25)
             text(screen, f, f"SCRAP {survival.scrap}  [C] CRAFT MEDKIT (3)",
                  24, 124, 16, (190, 170, 135), "left")
+            text(screen, f, "[CTRL] CROUCH / REDUCE NOISE",
+                 24, 146, 14, (145, 155, 135), "left")
         if story is not None:
             clue_hint = ""
             try:
@@ -148,6 +150,14 @@ class HUD:
              (240, 210, 120), "right", True)
         text(screen, f, f"Score {progression.score}", rx, 54, 20,
              (210, 200, 180), "right")
+        if horror is not None:
+            threat_colors = {"quiet": (125, 145, 125),
+                             "uneasy": (190, 175, 110),
+                             "danger": (220, 130, 75),
+                             "critical": (225, 75, 65)}
+            level = getattr(horror, "level", "quiet")
+            text(screen, f, f"THREAT  {level.upper()}", rx, 80, 16,
+                 threat_colors.get(level, (180, 170, 150)), "right", True)
 
         # temporary message
         if progression.message_timer > 0:
