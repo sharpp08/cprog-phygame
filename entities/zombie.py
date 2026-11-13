@@ -80,7 +80,8 @@ class Zombie(Entity):
         # Zombie-specific gait feel by type.
         self._gait_stretch = {"regular": 0.9, "fast": 1.15,
                               "tank": 0.6, "crawler": 0.55,
-                              "exploder": 1.0}.get(ztype, 0.9)
+                              "exploder": 1.0, "screamer": 0.95,
+                              "armored": 0.62}.get(ztype, 0.9)
         # Extended AI state support
         self.search_timer = 0.0
         self.stagger_timer = 0.0
@@ -195,6 +196,8 @@ class Zombie(Entity):
 
     # ------------------------------------------------------------------
     def on_hit(self, dmg: float, src, knock_dir: float = 1.0) -> None:
+        if self.ztype == "armored":
+            dmg *= 0.58
         self.hp -= dmg
         self.hit_flash = 0.12
         # Recoil impulse away from the hit source (applied in apply_move).
