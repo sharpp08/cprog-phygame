@@ -152,6 +152,16 @@ ZOMBIE_TYPES = {
         "range": 1.15, "color": (130, 150, 70), "score": 30,
         "radius": 0.4, "detect": 10.5, "label": "Exploder Zombie",
     },
+    "screamer": {
+        "hp": 72, "speed": 1.25, "damage": 7, "attack_cd": 1.2,
+        "range": 0.95, "color": (185, 175, 85), "score": 42,
+        "radius": 0.4, "detect": 16.0, "label": "Screamer",
+    },
+    "armored": {
+        "hp": 165, "speed": 1.05, "damage": 18, "attack_cd": 1.25,
+        "range": 1.1, "color": (85, 105, 125), "score": 38,
+        "radius": 0.55, "detect": 10.5, "label": "Armored Zombie",
+    },
 }
 ZOMBIE_START_COUNT = 12
 ZOMBIE_MAX_ACTIVE = 42
