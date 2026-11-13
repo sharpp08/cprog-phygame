@@ -214,6 +214,7 @@ class Game:
         self.survival.stamina = float(sd.get("stamina", 100.0))
         self.survival.scrap = int(sd.get("scrap", 0))
         self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
+        self.survival.battery_cells = int(sd.get("battery_cells", 2))
         self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
         self.player.flashlight_on = self.survival.flashlight_on
         self.progression.phase = pg.get("phase", "explore")
