@@ -41,6 +41,20 @@ class TestPlayerAnimation(unittest.TestCase):
         player.update(0.2)
         self.assertEqual(player.anim_blend, 1.0)
 
+    def test_crouching_uses_crouch_animation_state(self):
+        player = Player(2.0, 2.0)
+        player.crouching = True
+        player.update(0.016)
+        self.assertEqual(player.anim_state, "crouch")
+
+    def test_crouch_speed_scale_reduces_movement(self):
+        normal = Player(2.0, 2.0)
+        crouched = Player(2.0, 2.0)
+        normal.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
+        crouched.apply_movement((1.0, 0.0), False, 0.1, OpenGrid(),
+                                speed_scale=0.52)
+        self.assertLess(crouched.actual_speed, normal.actual_speed)
+
     def test_aim_facing_eases_without_snapping(self):
         player = Player(2.0, 2.0)
         player.set_aim(-1.0, 0.0)
