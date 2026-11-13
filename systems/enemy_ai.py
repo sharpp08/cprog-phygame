@@ -35,6 +35,7 @@ class ZombieController:
         self.noise_radius = 0.0
         self.noise_timer = 0.0
         self.safe_zones = []
+        self.rain_amount = 0.0
 
     # ------------------------------------------------------------------
     def set_context(self, player, audio, particles,
@@ -220,11 +221,12 @@ class ZombieController:
         if self.noise_pos is not None and self.noise_timer > 0:
             nd = ((z.x - self.noise_pos[0]) ** 2 +
                   (z.y - self.noise_pos[1]) ** 2) ** 0.5
-            if nd <= self.noise_radius:
+            masked_radius = self.noise_radius * (1.0 - 0.28 * self.rain_amount)
+            if nd <= masked_radius:
                 noise_target = self.noise_pos
 
         # detection + memory
-        can_see = d < z.detect
+        can_see = self._can_see_player(z, p, d)
         if can_see:
             z.last_known = (p.x, p.y)
             z.search_timer = 3.5
@@ -253,7 +255,11 @@ class ZombieController:
         if z.state in ("pursue", "investigating", "searching"):
             z.repath_timer -= dt
             if z.state == "pursue":
-                target = (p.x, p.y)
+                # Different approach lanes reduce enemy stacking.
+                import math
+                angle = math.atan2(z.y - p.y, z.x - p.x)
+                target = (p.x + math.cos(angle) * 0.75,
+                          p.y + math.sin(angle) * 0.75)
             elif z.state == "investigating" and noise_target is not None:
                 target = noise_target
             else:
@@ -317,6 +323,28 @@ class ZombieController:
                 vx, vy = self.nav.velocity(z, z.wander_target[0],
                                             z.wander_target[1])
                 z.apply_move(vx * 0.45, vy * 0.45, dt, self.grid)
+
+
+    def _can_see_player(self, z, player, distance=None) -> bool:
+        """Check range, stealth, weather and solid geometry before detection."""
+        import math
+        distance = z.dist(player) if distance is None else distance
+        flashlight = bool(getattr(player, "flashlight_on", True))
+        crouching = bool(getattr(player, "crouching", False))
+        range_scale = 1.12 if flashlight else 0.68
+        if crouching:
+            range_scale *= 0.58
+        range_scale *= 1.0 - 0.18 * max(0.0, min(1.0, self.rain_amount))
+        if distance >= z.detect * range_scale:
+            return False
+        steps = max(1, int(distance / 0.45))
+        for index in range(1, steps):
+            t = index / steps
+            x = z.x + (player.x - z.x) * t
+            y = z.y + (player.y - z.y) * t
+            if self.grid.is_blocked(int(x), int(y)):
+                return False
+        return True
 
     def _alert_nearby(self, source, radius: float) -> None:
         """Share last known player position with nearby zombies."""
