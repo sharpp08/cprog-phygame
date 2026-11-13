@@ -207,6 +207,26 @@ class AudioManager:
             self._rain.stop()
         self._rain_level = 0.0
 
+    def play_spatial(self, name: str, relative_x: float,
+                     distance: float, max_distance: float = 24.0) -> None:
+        """Play a positional cue with stereo pan and distance attenuation."""
+        if not self._ready or name not in self.sfx:
+            return
+        max_distance = max(1.0, float(max_distance))
+        distance = max(0.0, float(distance))
+        attenuation = max(0.0, 1.0 - distance / max_distance)
+        if attenuation <= 0.0:
+            return
+        pan = max(-1.0, min(1.0, float(relative_x) / max_distance))
+        volume = self.sfx_vol * self.master * attenuation
+        left = volume * (1.0 - max(0.0, pan))
+        right = volume * (1.0 + min(0.0, pan))
+        channel = pygame.mixer.find_channel(False)
+        if channel is None:
+            return
+        channel.set_volume(left, right)
+        channel.play(self.sfx[name])
+
     def play(self, name: str) -> None:
         if not self._ready or name not in self.sfx:
             return
