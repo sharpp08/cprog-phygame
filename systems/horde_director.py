@@ -48,6 +48,19 @@ class HordeDirector:
             if 8.0 <= distance <= 22.0:
                 if not controller.grid.is_blocked(int(x), int(y)):
                     candidates.append((x, y))
+        # Fixed map-edge spawn lanes can be too far away or behind the
+        # survivor. Add clear radial approach points around the current area.
+        for index in range(16):
+            angle = (2.0 * math.pi * index) / 16.0
+            radius = 11.0 + (index % 3) * 2.0
+            x = player.x + math.cos(angle) * radius
+            y = player.y + math.sin(angle) * radius
+            if not (1.0 <= x < controller.w - 1
+                    and 1.0 <= y < controller.h - 1):
+                continue
+            if controller.grid.is_blocked(int(x), int(y)):
+                continue
+            candidates.append((x, y))
         # Prefer different approach directions; never spawn beside the player.
         self.rng.shuffle(candidates)
         chosen = []
