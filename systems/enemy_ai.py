@@ -212,7 +212,7 @@ class ZombieController:
     def _behaviour(self, z, dt: float, p) -> None:
         if not z.alive:
             return
-        d = z.dist(p)
+        d = z.dist((p.x, p.y))
         # temporary safe zone: lose trail while survivor hides in start camp
         if any(((p.x - sx) ** 2 + (p.y - sy) ** 2) <= radius ** 2
                for sx, sy, radius in self.safe_zones):
