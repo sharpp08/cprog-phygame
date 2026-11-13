@@ -97,13 +97,16 @@ class VisualEnhancement:
         ``extra_lights`` are (sx, sy, world_radius, strength) tuples in
         screen space (used for close-enemy glow).
         """
-        if quality <= 0:
-            alpha = 48
-        elif quality == 1:
-            alpha = 76
-        else:
-            alpha = 94
-        self._shade.fill((4, 8, 19, alpha))
+        # Strong, quality-independent nighttime darkness.  The darkness
+        # layer is cleared only by real light sources below, so the player
+        # must use the flashlight to explore instead of relying on ambient
+        # screen brightness.  Keep a small quality bias without weakening
+        # the horror lighting on Low settings.
+        darkness = max(0.0, min(1.0, float(
+            getattr(config, "NIGHT_DARKNESS", 0.78))))
+        quality_bias = (-8, 0, 6, 6)[max(0, min(3, int(quality)))]
+        alpha = max(0, min(220, int(112 + darkness * 82 + quality_bias)))
+        self._shade.fill((3, 6, 14, alpha))
         zoom = max(0.4, float(cam.zoom))
         lights = []
         for i, (wx, wy, radius, intensity) in enumerate(
@@ -137,8 +140,10 @@ class VisualEnhancement:
             self._fl_level = lvl
             sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
             # Focused flashlight pool: a soft centre and a fast outer falloff.
-            base_r = 7.4 * 32.0 * zoom / 4.0
-            base_s = 0.92
+            # Keep a compact pool around the player's feet; the forward
+            # beam does the useful exploration lighting.
+            base_r = 5.8 * 32.0 * zoom / 4.0
+            base_s = 0.96
             if fog_beam:
                 base_r *= 1.1
                 base_s = min(1.0, base_s + 0.15)
@@ -150,13 +155,15 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                radius = 9.0 * 32.0 * zoom / 4.0
+                radius = 10.5 * 32.0 * zoom / 4.0
                 ox, oy = sx / 4.0, sy / 4.0
                 ex, ey = ox + dx * radius, oy + dy * radius
                 px, py = -dy * radius * 0.34, dx * radius * 0.34
                 self._beam.fill((0, 0, 0, 0))
-                b0 = int(42 * lvl * (1.4 if fog_beam else 1.0))
-                b1 = int(24 * lvl * (1.4 if fog_beam else 1.0))
+                # Stronger center and softer edge reveal terrain without
+                # washing out the whole scene.
+                b0 = int(76 * lvl * (1.25 if fog_beam else 1.0))
+                b1 = int(38 * lvl * (1.25 if fog_beam else 1.0))
                 pygame.draw.polygon(
                     self._beam, (0, 0, 0, b0),
                     [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
