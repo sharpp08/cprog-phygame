@@ -765,8 +765,8 @@ class AssetManager:
 
     def _make_character(self) -> None:
         frames = self.frames
-        # Player: 4-frame walk and run cycles driven by gait phase so the
-        # legs alternate naturally and the body bobs.
+        # Eight-pose player gait cycles use articulated knees, lifted feet,
+        # counter-swinging arms and a forward sprint pitch.
         pl = {
             "idle": [self._humanoid("player", "idle", phase=k / 4.0)
                      for k in range(4)],
@@ -790,7 +790,8 @@ class AssetManager:
         }
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
-            # Asymmetric gait per type: fast stumbles, tank drags, crawler low, exploder lurches.
+            # Each infected type gets its own eight-pose run silhouette and
+            # stride personality: runners spring, brutes drag, crawlers stay low.
             gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6,
                     "crawler": 0.7, "exploder": 1.0,
                     "screamer": 1.0, "armored": 0.62, "stalker": 1.05}.get(zt, 0.9)
