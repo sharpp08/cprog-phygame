@@ -13,6 +13,13 @@ class TestZombieArchetypes(unittest.TestCase):
         self.assertLess(screamer.damage, regular.damage)
         self.assertEqual(config.ZOMBIE_TYPES["screamer"]["label"], "Screamer")
 
+    def test_stalker_has_a_distinct_stealth_profile(self):
+        stalker = Zombie(10.0, 10.0, "stalker")
+        regular = Zombie(10.0, 10.0, "regular")
+        self.assertNotEqual(stalker.speed, regular.speed)
+        self.assertLess(stalker.detect, regular.detect)
+        self.assertEqual(config.ZOMBIE_TYPES["stalker"]["label"], "Stalker")
+
     def test_armored_zombie_reduces_incoming_damage(self):
         armored = Zombie(10.0, 10.0, "armored")
         before = armored.hp
