@@ -28,7 +28,7 @@ class HordeDirector:
         if self.noise_exposure < 2.2 or self.cooldown > 0:
             return 0
         # A small early response, with a gradual increase over long runs.
-        requested = 2 + min(4, int(max(0.0, survival_time) / 180.0))
+        requested = 3 + min(5, int(max(0.0, survival_time) / 180.0))
         active = sum(1 for zombie in controller.zombies if zombie.alive)
         capacity = max(0, min(requested, 30 - active))
         if capacity <= 0:
