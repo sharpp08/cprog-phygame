@@ -81,7 +81,7 @@ class Zombie(Entity):
         self._gait_stretch = {"regular": 0.9, "fast": 1.15,
                               "tank": 0.6, "crawler": 0.55,
                               "exploder": 1.0, "screamer": 0.95,
-                              "armored": 0.62}.get(ztype, 0.9)
+                              "armored": 0.62, "stalker": 1.05}.get(ztype, 0.9)
         # Extended AI state support
         self.search_timer = 0.0
         self.stagger_timer = 0.0
