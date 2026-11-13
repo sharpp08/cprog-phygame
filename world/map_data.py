@@ -185,6 +185,7 @@ def generate_map(seed: int = 1234) -> Dict:
 
     put_loot(start[0], start[1], "medkit")
     put_loot(start[0] + 1, start[1], "ammo_pistol")
+    put_loot(start[0] + 2, start[1] - 1, "battery")
     put_loot(rx, ry - 1, "weapon_rifle")
     put_loot(rx, ry, "ammo_rifle")
     put_loot(sx, sy - 3, "ammo_shotgun")
@@ -194,6 +195,7 @@ def generate_map(seed: int = 1234) -> Dict:
     for x in range(2, 6):
         put_loot(x, 6, "medkit")
     put_loot(40, 4, "weapon_shotgun")
+    put_loot(39, 5, "battery")
 
     spawn_points = [(2, 2), (W - 3, 2), (2, H - 3), (W - 3, H - 3)]
     lights = [(float(sx), float(sy), config.LIGHT_RADIUS_SHRINE, 1.0),
