@@ -613,7 +613,7 @@ class Renderer:
                 getattr(player, "flashlight_on", True)):
             darkness = pygame.Surface((self.W, self.H))
             darkness.fill((0, 0, 1))
-            darkness.set_alpha(252)
+            darkness.set_alpha(72)
             self.screen.blit(darkness, (0, 0))
 
         if self.show_debug:
