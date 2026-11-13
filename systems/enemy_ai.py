@@ -110,9 +110,9 @@ class ZombieController:
                    key=lambda s: (s[0] - pos[0]) ** 2 + (s[1] - pos[1]) ** 2)
         x, y = best[0] + random.uniform(-0.5, 0.5), \
             best[1] + random.uniform(-0.5, 0.5)
-        weights = [("regular", 0.43), ("fast", 0.20), ("tank", 0.09),
-                   ("crawler", 0.09), ("exploder", 0.07),
-                   ("screamer", 0.05), ("armored", 0.06), ("stalker", 0.06)]
+        weights = [("regular", 0.40), ("fast", 0.19), ("tank", 0.08),
+                   ("crawler", 0.08), ("exploder", 0.06),
+                   ("screamer", 0.05), ("armored", 0.06), ("stalker", 0.08)]
         r = random.random()
         acc = 0.0
         ztype = "regular"
