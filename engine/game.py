@@ -310,6 +310,13 @@ class Game:
                     clue = self.story.interact(self.player.x, self.player.y)
                     if clue:
                         self.progression.notify(clue["text"], 6.0)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
+                if self.survival and self.survival.replace_battery():
+                    self.player.flashlight_on = self.survival.flashlight_on
+                    self.progression.notify("Fresh flashlight cell installed", 2.0)
+                    self.audio.play("pickup")
+                elif self.survival:
+                    self.progression.notify("No spare cell or battery is already full", 2.0)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
                 if self.survival and self.survival.craft_medkit(self.player):
                     self.progression.notify("Field dressing crafted (+35 HP)", 2.5)
@@ -402,6 +409,8 @@ class Game:
         player.crouching = crouching
         sprinting = requested_run and not crouching
         can_run = self.survival.update(dt, sprinting) if self.survival else True
+        if self.survival is not None:
+            player.flashlight_on = self.survival.flashlight_on
         player.apply_movement(mv, sprinting and can_run, dt, self.wm.grid,
                               speed_scale=0.52 if crouching else 1.0)
         player.update(dt)
@@ -449,7 +458,7 @@ class Game:
                                        if z.alive]
         # pickups
         for p in self.wm.player_pickup_zone(player):
-            apply_pickup(player, p, self.audio)
+            apply_pickup(player, p, self.audio, self.survival)
         # progression + world + particles
         self.progression.update(dt, player, self.wm.controller, self.wm.world)
         if self.horror is not None:
