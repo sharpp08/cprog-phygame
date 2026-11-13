@@ -114,10 +114,12 @@ class VisualEnhancement:
         max_alpha = (24, 30, 36, 42)[max(0, min(3, int(quality)))]
 
         self._blur_mask.fill((255, 255, 255, max_alpha))
-        # Nested circles create a gradual alpha ramp rather than a hard blur edge.
+        # The player-safe center must have ZERO blur opacity. Draw the
+        # outer-to-inner circles with decreasing alpha so the mask fades
+        # smoothly from the fully sharp inner area to the blurred distance.
         for step in range(12, -1, -1):
             radius = inner + int((outer - inner) * step / 12)
-            alpha = int(max_alpha * (1.0 - step / 12.0))
+            alpha = int(max_alpha * step / 12.0)
             pygame.draw.circle(self._blur_mask, (255, 255, 255, alpha),
                                (cx, cy), radius)
         self._blur_full.blit(
