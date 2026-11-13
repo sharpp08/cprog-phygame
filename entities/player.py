@@ -197,7 +197,6 @@ class Player(Entity):
         self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.16)
 
         # Body bob driven by the gait cycle (highest mid-stride).
-        import math
         if self.anim_state in ("walk", "run"):
             self._bob = abs(math.sin(self._gait * math.pi)) \
                 * (2.0 if self.anim_state == "walk" else 4.0)
