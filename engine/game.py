@@ -480,10 +480,15 @@ class Game:
                 self.survival,
                 self.wm.controller.noise_radius,
                 self.renderer.weather.rain_amount if self.renderer else 0.0)
-            if horror_msg is not None and self.renderer is not None:
-                # supernatural event: visual tension spike + gentle shake
-                self.renderer.post.on_event(1.0)
-                self.renderer.shake.add(2.5, 0.8)
+            if horror_msg is not None:
+                if "branch" in horror_msg.lower():
+                    self.audio.play("branch_snap")
+                else:
+                    self.audio.play("forest_whisper")
+                if self.renderer is not None:
+                    # A restrained visual sting; keep the scene sharp.
+                    self.renderer.post.on_event(1.0)
+                    self.renderer.shake.add(2.5, 0.8)
         # Sustained gunfire draws a delayed horde from distant spawn lanes.
         if self.hordes is not None:
             spawned = self.hordes.update(
