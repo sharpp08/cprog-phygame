@@ -331,15 +331,42 @@ class Renderer:
         key = f"zombie_{z.ztype}"
         frames = self.assets.frames[key]
         flist = frames.get(z.anim_state, frames["idle"])
-        spr = flist[z.frame_index % len(flist)]
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
         type_scale = {"tank": 1.3, "fast": 0.92, "regular": 1.0,
                       "crawler": 0.85, "exploder": 1.08}.get(z.ztype, 1.0)
-        spr = self._scale_sprite(spr, self.cam.zoom * type_scale)
-        self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10 * cam.zoom))
+
+        def zombie_frame(state, index):
+            choices = frames.get(state, frames["idle"])
+            frame = self._scale_sprite(
+                choices[index % len(choices)], self.cam.zoom * type_scale)
+            if z.facing < 0:
+                cache_key = id(frame)
+                flipped = self._flip_cache.get(cache_key)
+                if flipped is None:
+                    flipped = pygame.transform.flip(frame, True, False)
+                    self._flip_cache[cache_key] = flipped
+                frame = flipped
+            return frame
+
+        blend = max(0.0, min(1.0, float(getattr(z, "anim_blend", 1.0))))
+        base_y = cy - float(getattr(z, "bob", 0.0)) * cam.zoom
+        sway_x = math.sin(getattr(z, "_sway_ph", 0.0)) * \
+            getattr(z, "_sway", 0.0) * 1.2 * cam.zoom
+        if blend < 1.0 and z.prev_anim_state != z.anim_state:
+            previous = zombie_frame(z.prev_anim_state,
+                                    z.prev_frame_index).copy()
+            previous.set_alpha(int(255 * (1.0 - blend)))
+            self.screen.blit(previous, (cx + sway_x - previous.get_width() / 2,
+                                        base_y - previous.get_height()
+                                        + 10 * cam.zoom))
+        spr = zombie_frame(z.anim_state, z.frame_index)
+        if blend < 1.0:
+            spr = spr.copy()
+            spr.set_alpha(int(255 * blend))
+        self.screen.blit(spr, (cx + sway_x - spr.get_width() / 2,
+                               base_y - spr.get_height() + 10 * cam.zoom))
         if z.hit_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(180 * z.hit_flash / 0.12))
@@ -414,8 +441,12 @@ class Renderer:
             spr = spr.copy()
             spr.set_alpha(120 if blend >= 1.0 else
                           int(120 * blend))
-        self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height() + 10 * cam.zoom))
+        player_bob = float(getattr(p, "bob", 0.0)) * cam.zoom
+        move_x, move_y = getattr(p, "_velocity", (0.0, 0.0))
+        lean_x = max(-2.0, min(2.0, (move_x - move_y) * 0.012)) * cam.zoom
+        self.screen.blit(spr, (cx + lean_x - spr.get_width() / 2,
+                               cy - player_bob - spr.get_height()
+                               + 10 * cam.zoom))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(200 * p.dmg_flash))
