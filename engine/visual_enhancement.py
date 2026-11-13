@@ -147,7 +147,7 @@ class VisualEnhancement:
                 base_s = min(1.0, base_s + 0.15)
             lights.append((sx / 4.0, sy / 4.0,
                            base_r * max(0.0, lvl), base_s * max(0.0, lvl)))
-            if quality >= 1 and lvl > 0.03:
+            if lvl > 0.03:
                 aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
                 dx = (aim_x - aim_y) * config.SCALE_X
                 dy = (aim_x + aim_y) * config.SCALE_Y
@@ -185,7 +185,7 @@ class VisualEnhancement:
             radial.set_alpha(int(255 * strength))
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
                              special_flags=pygame.BLEND_RGBA_SUB)
-        if player is not None and getattr(player, "flashlight_on", True) and quality >= 1:
+        if player is not None and getattr(player, "flashlight_on", True):
             self._shade.blit(self._beam, (0, 0),
                              special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),
