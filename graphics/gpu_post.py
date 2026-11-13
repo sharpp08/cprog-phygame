@@ -147,6 +147,8 @@ class GpuPostExecutor:
         grain = float(s.get("grain", 0.0))
         chroma = float(s.get("chroma", 0.0))
         distort = float(s.get("distort", 0.0))
+        ao = float(s.get("ao", 0.0))
+        detail = float(s.get("detail", 0.0))
         tension = state._tension
 
         # 1) upload the native-res scene (the base image is never softened)
@@ -188,6 +190,8 @@ class GpuPostExecutor:
         self.p_comp["u_flash_red"] = state._flash_red
         self.p_comp["u_flash_white"] = state._flash_white
         self.p_comp["u_bloom_strength"] = strength
+        self.p_comp["u_ao"] = ao
+        self.p_comp["u_detail"] = detail
         self.fbo_out.use()
         self.ctx.viewport = (0, 0, self.W, self.H)
         self.vao_comp.render()
