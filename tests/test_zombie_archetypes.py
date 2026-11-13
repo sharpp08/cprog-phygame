@@ -25,6 +25,17 @@ class TestZombieArchetypes(unittest.TestCase):
         self.assertGreater(zombie._speed_current, initial)
         self.assertLess(zombie._speed_current, zombie.speed)
 
+    def test_all_infected_archetypes_enter_their_run_cycle_when_chasing(self):
+        for ztype in config.ZOMBIE_TYPES:
+            with self.subTest(ztype=ztype):
+                zombie = Zombie(10.0, 10.0, ztype)
+                zombie.spawning = False
+                zombie.state = "pursue"
+                zombie.moving = True
+                zombie._actual_speed = zombie.speed
+                zombie.update(1.0 / 60.0)
+                self.assertEqual(zombie.anim_state, "run")
+
     def test_stalker_has_a_distinct_stealth_profile(self):
         stalker = Zombie(10.0, 10.0, "stalker")
         regular = Zombie(10.0, 10.0, "regular")
