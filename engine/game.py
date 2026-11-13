@@ -242,6 +242,7 @@ class Game:
         self.renderer._prep_fog()
         self.hud = HUD(w, h)
         self._prev_hp = self.player.hp
+        self._last_nearby_threats = 0
         self.state = "playing"
         self.audio.play_music("ambient")
         # restore persisted graphics / audio settings from the save
