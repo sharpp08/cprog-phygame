@@ -55,6 +55,14 @@ class TestPlayerAnimation(unittest.TestCase):
                                 speed_scale=0.52)
         self.assertLess(crouched.actual_speed, normal.actual_speed)
 
+    def test_sprint_uses_eight_phase_run_cycle(self):
+        player = Player(2.0, 2.0)
+        player._move_amt = 0.9
+        player._gait = 0.625
+        player.update(1.0 / 60.0)
+        self.assertEqual(player.anim_state, "run")
+        self.assertEqual(player.frame_index, 5)
+
     def test_aim_facing_eases_without_snapping(self):
         player = Player(2.0, 2.0)
         player.set_aim(-1.0, 0.0)
