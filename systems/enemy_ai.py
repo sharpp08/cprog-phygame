@@ -143,11 +143,11 @@ class ZombieController:
                 audible = min(
                     (z for z in self.zombies
                      if z.alive and not z.spawning and z.ztype != "stalker"),
-                    key=lambda z: z.dist(p), default=None)
+                    key=lambda z: z.dist((p.x, p.y)), default=None)
                 if audible is not None and hasattr(self._audio, "play_spatial"):
                     relative_x = (audible.x - p.x) - (audible.y - p.y)
                     self._audio.play_spatial(
-                        "zombie_groan", relative_x, audible.dist(p), 24.0)
+                        "zombie_groan", relative_x, audible.dist((p.x, p.y)), 24.0)
                 elif audible is not None:
                     self._audio.play("zombie_groan")
         for z in self.zombies:
