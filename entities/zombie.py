@@ -262,14 +262,25 @@ class Zombie(Entity):
             state = "attack"
             self._action_phase = (self._action_phase + dt * 1.7) % 1.0
         elif self.moving:
-            state = "walk"
+            # Every infected archetype has a distinct run cycle. Heavy types
+            # need a higher speed ratio before their lumbering sprint engages;
+            # the crawler uses its low, fast crawl cycle instead.
+            chase_state = self.state in ("pursue", "investigating", "searching")
+            run_threshold = {
+                "regular": 0.66, "fast": 0.42, "tank": 0.78,
+                "crawler": 0.55, "exploder": 0.62, "screamer": 0.62,
+                "armored": 0.80, "stalker": 0.88,
+            }.get(self.ztype, 0.66)
+            speed_ratio = self._actual_speed / max(0.1, self.speed)
+            state = ("run" if chase_state and speed_ratio >= run_threshold
+                     else "walk")
         else:
             state = "idle"
         self._set_anim_state(state)
         self.anim_blend = min(1.0, self.anim_blend + dt * 3.5)
 
-        if state == "walk":
-            self.frame_index = int(self._gait * 4) % 4
+        if state in ("walk", "run"):
+            self.frame_index = int(self._gait * 8) % 8
         elif state == "attack":
             # Attack wind-up cycles on its own clock so the lunge reads
             # clearly even though the body is stationary.
@@ -282,10 +293,12 @@ class Zombie(Entity):
 
         # Body bob + lateral sway for a shambling, off-balance feel.  The
         # walk bob scales with real speed so faster zombies pump more.
-        if state == "walk":
-            amp = 1.6 + 1.4 * min(1.0, self._actual_speed /
-                                  max(0.1, self.speed))
-            self._bob = abs(math.sin(self._gait * math.pi)) * amp
+        if state in ("walk", "run"):
+            amp = (1.6 if state == "walk" else 3.1) + 1.2 * min(
+                1.0, self._actual_speed / max(0.1, self.speed))
+            if self.ztype == "crawler":
+                amp *= 0.55
+            self._bob = abs(math.sin(self._gait * math.pi * 2.0)) * amp
         elif state == "attack":
             self._bob = math.sin(self._action_phase * math.pi) * 2.0
         else:
