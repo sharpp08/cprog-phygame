@@ -71,6 +71,22 @@ class TestZombieAnimation(unittest.TestCase):
         self.assertEqual(zombie._gait, gait)
         self.assertFalse(zombie.moving)
 
+    def test_zombie_emergence_blend_finishes(self):
+        zombie = Zombie(2.0, 2.0)
+        for _ in range(40):
+            zombie.update(0.05)
+        self.assertFalse(zombie.spawning)
+        self.assertEqual(zombie.anim_blend, 1.0)
+
+    def test_zombie_death_blend_finishes(self):
+        zombie = Zombie(2.0, 2.0)
+        zombie.spawning = False
+        zombie.alive = False
+        for _ in range(30):
+            zombie.update(1.0 / 30.0)
+        self.assertEqual(zombie.anim_state, "dead")
+        self.assertEqual(zombie.anim_blend, 1.0)
+
     def test_zombie_types_have_distinct_motion_profiles(self):
         runner = Zombie(2.0, 2.0, "fast")
         tank = Zombie(2.0, 2.0, "tank")
