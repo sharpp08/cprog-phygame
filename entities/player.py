@@ -186,6 +186,8 @@ class Player(Entity):
             next_anim_state = "reload"
         elif self._shoot_flash > 0:
             next_anim_state = "shoot"
+        elif self.crouching:
+            next_anim_state = "crouch"
         elif self._move_amt > 0.7:
             next_anim_state = "run"
         elif self._move_amt > 0.15:
@@ -198,15 +200,15 @@ class Player(Entity):
         self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.16)
 
         # Body bob driven by the gait cycle (highest mid-stride).
-        if self.anim_state in ("walk", "run"):
-            self._bob = abs(math.sin(self._gait * math.pi)) \
-                * (2.0 if self.anim_state == "walk" else 4.0)
+        if self.anim_state in ("walk", "run", "crouch"):
+            bob_amount = 1.0 if self.anim_state == "crouch" else (2.0 if self.anim_state == "walk" else 4.0)
+            self._bob = abs(math.sin(self._gait * math.pi)) * bob_amount
         else:
             self._bob = 0.0
 
         # Pick the gait frame.  Walk/run use the 4-frame cycle indexed by
         # the gait phase; idle gently breathes through the idle frames.
-        if self.anim_state in ("walk", "run"):
+        if self.anim_state in ("walk", "run", "crouch"):
             self.frame_index = int(self._gait * 4) % 4
         elif self.anim_state == "idle":
             self.anim_timer += dt
