@@ -14,6 +14,7 @@ import numpy as np
 import pygame
 
 import config
+from engine.flashlight import trace_flashlight_beam
 
 
 class VisualEnhancement:
@@ -210,25 +211,32 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                radius = 19.5 * 32.0 * zoom / 4.0
-                ox, oy = sx / 4.0, sy / 4.0
-                ex, ey = ox + dx * radius, oy + dy * radius
-                px, py = -dy * radius * 0.56, dx * radius * 0.56
+                max_range = 19.5
                 self._beam.fill((0, 0, 0, 0))
-                # Stronger center and softer edge reveal terrain without
-                # washing out the whole scene.
-                b0 = int(176 * lvl * (1.18 if fog_beam else 1.0))
-                b1 = int(104 * lvl * (1.18 if fog_beam else 1.0))
-                pygame.draw.polygon(
-                    self._beam, (0, 0, 0, b0),
-                    [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
-                     (int(ex - px), int(ey - py))])
-                pygame.draw.polygon(
-                    self._beam, (0, 0, 0, b1),
-                    [(int(ox), int(oy)), (int(ox + dx * radius),
-                                          int(oy + dy * radius)),
-                     (int(ox + dx * radius * 0.88 + px * 0.55),
-                      int(oy + dy * radius * 0.88 + py * 0.55))])
+                # Trace through the actual tile/obstacle layout. Each ray
+                # stops at the first solid object, so trees and rocks cast
+                # angular shadows instead of being lit through.
+                ray_count = (25, 37, 49, 65)[max(0, min(3, int(quality)))]
+                rays = trace_flashlight_beam(
+                    world, (player.x, player.y), (aim_x, aim_y),
+                    max_range=max_range, ray_count=ray_count,
+                    half_spread=0.52)
+                ox, oy = sx / 4.0, sy / 4.0
+                previous = None
+                fog_gain = 1.08 if fog_beam else 1.0
+                for end_x, end_y, energy, _surface in rays:
+                    ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
+                    current = (int(ex / 4.0), int(ey / 4.0))
+                    if previous is not None:
+                        # Per-wedge attenuation includes distance, surface
+                        # reflectance and the estimated terrain normal.
+                        strength = max(0.0, min(1.0, energy))
+                        edge_alpha = int(176 * lvl * strength * fog_gain)
+                        if edge_alpha > 0:
+                            pygame.draw.polygon(
+                                self._beam, (0, 0, 0, edge_alpha),
+                                [(int(ox), int(oy)), previous, current])
+                    previous = current
         else:
             self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
         # close-enemy glow: subtle cool light so pursuers read in the dark
