@@ -738,6 +738,9 @@ class AssetManager:
                      for k in range(4)],
             "walk": [self._humanoid("player", "walk", phase=k / 4.0)
                      for k in range(4)],
+            "crouch": [self._humanoid("player", "walk", crouch=0.8,
+                                      phase=k / 4.0, gait=0.55)
+                       for k in range(4)],
             "run": [self._humanoid("player", "run", phase=k / 4.0,
                                    gait=1.4)
                     for k in range(4)],
