@@ -95,9 +95,8 @@ class VisualEnhancement:
 
     def _apply_dark_edge_blur(self, screen: pygame.Surface, cam,
                               player, quality: int) -> None:
-        """Softly defocus only distant, unlit scenery; keep the player area sharp."""
-        if player is None:
-            return
+        """Disabled: preserve crisp player and world pixels at every distance."""
+        return
         # An 1/8-resolution copy gives a restrained optical defocus at low cost.
         pygame.transform.smoothscale(
             screen, (self._bw, self._bh), self._blur_small)
@@ -167,9 +166,9 @@ class VisualEnhancement:
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
             flashlight_on = bool(getattr(player, "flashlight_on", True))
             if flashlight_on:
-                ambient_tiles, ambient_strength = 5.0, 0.54
+                ambient_tiles, ambient_strength = 6.2, 0.60
             else:
-                ambient_tiles, ambient_strength = 9.0, 0.74
+                ambient_tiles, ambient_strength = 11.5, 0.78
             ambient_radius = ambient_tiles * 32.0 * zoom / 4.0
             lights.append((psx / 4.0, psy / 4.0,
                            ambient_radius, ambient_strength))
@@ -198,7 +197,7 @@ class VisualEnhancement:
             # Focused flashlight pool: a soft centre and a fast outer falloff.
             # Keep a compact pool around the player's feet; the forward
             # beam does the useful exploration lighting.
-            base_r = 8.2 * 32.0 * zoom / 4.0
+            base_r = 9.5 * 32.0 * zoom / 4.0
             base_s = 0.99
             if fog_beam:
                 base_r *= 1.1
@@ -211,15 +210,15 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                radius = 16.5 * 32.0 * zoom / 4.0
+                radius = 19.5 * 32.0 * zoom / 4.0
                 ox, oy = sx / 4.0, sy / 4.0
                 ex, ey = ox + dx * radius, oy + dy * radius
-                px, py = -dy * radius * 0.50, dx * radius * 0.50
+                px, py = -dy * radius * 0.56, dx * radius * 0.56
                 self._beam.fill((0, 0, 0, 0))
                 # Stronger center and softer edge reveal terrain without
                 # washing out the whole scene.
-                b0 = int(170 * lvl * (1.18 if fog_beam else 1.0))
-                b1 = int(98 * lvl * (1.18 if fog_beam else 1.0))
+                b0 = int(176 * lvl * (1.18 if fog_beam else 1.0))
+                b1 = int(104 * lvl * (1.18 if fog_beam else 1.0))
                 pygame.draw.polygon(
                     self._beam, (0, 0, 0, b0),
                     [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
