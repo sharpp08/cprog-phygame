@@ -192,29 +192,34 @@ Planned pickups include ammunition, medical supplies, weapons, and other surviva
 
 ## Implemented horror and survival systems
 
-The current feature branch adds the following playable systems on top of the graphics upgrade:
+The current `main` branch integrates the following playable systems with the existing Pygame architecture:
 
-- **Adaptive horror director:** tracks nearby enemy pressure, player health, and elapsed time to pace unsettling ambient events with cooldowns.
-- **Smarter zombie investigation:** running footsteps and gunfire emit noise events; nearby zombies path toward the sound source before returning to normal player detection.
-- **Flashlight battery:** press **F** to toggle the flashlight. It drains while on and recharges while switched off; the player light pool and directional beam now follow the toggle.
+- **Adaptive horror director:** tracks nearby threats, player health, ammunition pressure, noise, and survival time. Four tension levels pace scares, while recovery windows prevent constant attacks.
+- **Smarter zombie perception:** solid geometry blocks sight; flashlight use, crouching, and heavy rain modify detection range. Zombies investigate noise, remember the last known player position, and share alerts.
+- **Sound-attracted hordes:** sustained gunfire can draw delayed groups from distant spawn lanes. Spawn distance, group spacing, cooldowns, and an active-population cap prevent unfair spawns and uncontrolled entity growth.
+- **Special infected:** Runners, Brutes/Tanks, Crawlers, Exploders, Screamers, and Armored zombies use different stat profiles. Screamers alert nearby enemies; Armored zombies resist incoming damage.
+- **Finite flashlight cells:** press **F** to toggle the flashlight. It drains while on and does not recharge while off. Press **B** to install a spare cell; collectible cells are placed in the forest and spare-cell inventory is saved.
+- **Stealth:** hold **Left Ctrl** to crouch, move more slowly, make less noise, and reduce zombie sight range. A dedicated crouch animation is generated with the existing procedural sprite system.
 - **Stamina:** sprinting consumes stamina and resting restores it. Sprinting is temporarily disabled when stamina is depleted.
+- **Audio feedback:** nearby zombie groans use stereo positioning and distance attenuation. Screamers have a distinct synthesized call; low health and exhaustion trigger restrained heartbeat and breathing cues.
 - **Crafting:** defeated zombies yield scrap; press **C** to craft a 35-HP field dressing for 3 scrap.
-- **Safe zone:** the starting camp briefly protects the player from zombie pursuit and attacks.
-- **Environmental clues:** press **E** near discoverable journal/stone clues at forest landmarks. Clues are recorded and shown in the HUD.
-- **Psychological atmosphere:** the director schedules changing distant sounds, footsteps, bells, and unnatural quiet messages based on threat pressure.
-- **Multiple endings:** completing the shrine encounter produces one of three story outcomes based on how many clues were discovered.
-- **Save support:** discovered clues, stamina, flashlight charge, and flashlight state are persisted with the existing save data.
+- **Safe zone and environmental clues:** the starting camp briefly protects the player from pursuit. Press **E** near discoverable journal/stone clues at forest landmarks.
+- **Psychological atmosphere and endings:** distant sounds, footsteps, bells, and unnatural quiet messages are paced by the horror director. The shrine encounter produces one of three story outcomes based on discovered clues.
+- **Save support:** discovered clues, stamina, scrap, flashlight charge/state, and spare battery cells persist through the existing save system.
 
-### New controls
+### Controls
 
 | Input | Action |
 |---|---|
 | F | Toggle flashlight |
+| B | Replace flashlight cell |
+| Left Ctrl | Crouch / reduce noise and visibility |
 | E | Investigate a nearby clue |
 | C | Craft a medkit (3 scrap) |
 | Shift | Sprint (uses stamina) |
+| R | Reload |
 
-The systems are modular under `systems/` and include headless unit tests in `tests/test_horror_systems.py`. They use the existing Pygame architecture and do not add runtime dependencies.
+The systems are modular under `systems/` and include headless unit tests under `tests/`. The GitHub Actions workflow in `.github/workflows/tests.yml` compiles the Python sources and runs `python -m unittest discover -v` on pushes to `main`.
 
 ## Technical Design
 
