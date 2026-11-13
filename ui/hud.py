@@ -119,6 +119,8 @@ class HUD:
                       flash=survival.flashlight_battery < 25)
             text(screen, f, f"SCRAP {survival.scrap}  [C] CRAFT MEDKIT (3)",
                  24, 124, 16, (190, 170, 135), "left")
+            text(screen, f, f"CELLS {survival.battery_cells}  [B] REPLACE BATTERY",
+                 24, 166, 14, (175, 185, 135), "left")
             text(screen, f, "[CTRL] CROUCH / REDUCE NOISE",
                  24, 146, 14, (145, 155, 135), "left")
         if story is not None:
