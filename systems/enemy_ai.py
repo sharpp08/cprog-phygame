@@ -109,8 +109,9 @@ class ZombieController:
                    key=lambda s: (s[0] - pos[0]) ** 2 + (s[1] - pos[1]) ** 2)
         x, y = best[0] + random.uniform(-0.5, 0.5), \
             best[1] + random.uniform(-0.5, 0.5)
-        weights = [("regular", 0.5), ("fast", 0.22), ("tank", 0.1),
-                   ("crawler", 0.1), ("exploder", 0.08)]
+        weights = [("regular", 0.43), ("fast", 0.20), ("tank", 0.09),
+                   ("crawler", 0.09), ("exploder", 0.07),
+                   ("screamer", 0.06), ("armored", 0.06)]
         r = random.random()
         acc = 0.0
         ztype = "regular"
@@ -227,6 +228,7 @@ class ZombieController:
 
         # detection + memory
         can_see = self._can_see_player(z, p, d)
+        z._scream_timer = max(0.0, getattr(z, "_scream_timer", 0.0) - dt)
         if can_see:
             z.last_known = (p.x, p.y)
             z.search_timer = 3.5
@@ -234,6 +236,11 @@ class ZombieController:
             z.alerted = True
             # group alert: nearby zombies react
             self._alert_nearby(z, 6.0)
+            if z.ztype == "screamer" and z._scream_timer <= 0.0:
+                z._scream_timer = 18.0
+                self._alert_nearby(z, 14.0)
+                if self._audio:
+                    self._audio.play("zombie_scream")
         else:
             z.suspicion = max(0.0, getattr(z, "suspicion", 0.0) - dt * 0.4)
             z.search_timer = max(0.0, getattr(z, "search_timer", 0.0) - dt)
