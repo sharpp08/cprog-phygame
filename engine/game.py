@@ -23,6 +23,7 @@ from systems.horror_director import HorrorDirector
 from systems.storytelling import StorySystem
 from systems.survival import SurvivalSystem
 from systems.save_manager import SaveManager
+from graphics.shader_manager import build_manager
 from ui.game_over import GameOver
 from ui.hud import HUD
 from ui.main_menu import MainMenu
@@ -44,6 +45,11 @@ class Game:
         self.audio = AudioManager()
         self.assets = AssetManager()
         self.particles = ParticleSystem()
+        # Pre-compile the GLSL post-processing shaders at startup so no
+        # shader work ever happens inside the gameplay loop.  The live
+        # context is only used when ModernGL works on this machine; the
+        # NumPy post pipeline stays the guaranteed fallback.
+        self.shaders = build_manager(live=True)
         self.input = InputManager()
         self.save_manager = SaveManager()
         self.fonts = FontSet()
@@ -124,7 +130,7 @@ class Game:
         self.cam.set_target(self.player.x, self.player.y)
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
-                                 self.particles)
+                                 self.particles, self.shaders)
         self.renderer._apply_quality(int(self.settings["quality"]))
         self.renderer.set_post_fx(self.settings.get("post_fx"))
         self.renderer.weather.set_audio(self.audio)
@@ -218,7 +224,7 @@ class Game:
         self.cam.set_target(self.player.x, self.player.y)
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
         self.renderer = Renderer(self.screen, self.cam, self.assets,
-                                 self.particles)
+                                 self.particles, self.shaders)
         self.renderer._apply_quality(int(self.settings["quality"]))
         self.renderer.set_post_fx(self.settings.get("post_fx"))
         self.renderer.weather.set_audio(self.audio)
@@ -255,6 +261,8 @@ class Game:
         self.audio.play_music("menu")
         while self.running:
             self._frame()
+        if self.shaders is not None:
+            self.shaders.release()
         pygame.quit()
 
     # ------------------------------------------------------------------

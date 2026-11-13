@@ -25,7 +25,10 @@ def _base() -> Dict:
         "sway": False,          # tree / foliage wind sway
         # post-processing feature switches (see graphics/post_processing.py)
         "post_fx": False,
-        "fx_res": 8,            # downscale factor for effect textures
+        # bloom downscale factor: ONLY the bloom glow buffer is small.
+        # Every other effect runs at native resolution so the game image
+        # never gets softened; a smaller number = smoother glow (costlier).
+        "fx_res": 8,
         "bloom": 0.0,
         "grade": 0.0,
         "vignette": 0.0,
@@ -43,7 +46,7 @@ def specs_for(quality: int) -> Dict:
     if q >= 1:  # MEDIUM
         s.update(particles=0.7, fireflies=True, water_anim=True,
                  mist=True, sway=True,
-                 post_fx=True, fx_res=8,
+                 post_fx=True, fx_res=6,
                  bloom=0.35, grade=0.7, vignette=0.6, grain=0.25)
     if q >= 2:  # HIGH
         s.update(particles=1.0, fx_res=4,
@@ -66,6 +69,9 @@ def particle_scale(quality: int) -> float:
 
 
 def fx_downscale(quality: int) -> int:
+    """Bloom-glow buffer downscale factor (the scene itself is always
+    processed and presented at native resolution — see
+    :mod:`graphics.post_processing`)."""
     return int(specs_for(quality)["fx_res"])
 
 

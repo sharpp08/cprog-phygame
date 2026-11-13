@@ -51,6 +51,7 @@ class ShaderManager:
         self.programs: Dict[str, ShaderProgram] = {}
         self.gl_available = False
         self.errors: List[str] = []
+        self.ctx = None
         self._load_sources()
 
     # ------------------------------------------------------------------
@@ -72,6 +73,8 @@ class ShaderManager:
             "film_grain": "post_processing/film_grain.frag",
             "chromatic_aberration": "post_processing/chromatic_aberration.frag",
             "bloom": "post_processing/bloom.frag",
+            "bloom_extract": "post_processing/bloom_extract.frag",
+            "final_composite": "post_processing/final_composite.frag",
             "distortion": "post_processing/distortion.frag",
             "fog": "environment/fog.frag",
             "flashlight": "lighting/flashlight.frag",
@@ -90,13 +93,18 @@ class ShaderManager:
             return ("attribute vec2 a_pos;\n"
                     "void main(){ gl_Position=vec4(a_pos,0.0,1.0); }")
 
-    def try_compile(self) -> bool:
+    def try_compile(self, keep_context: bool = False) -> bool:
         """Compile every program with ModernGL in a standalone context.
 
         Returns True when all passes compiled (GL path usable).  Failure is
         never fatal: the NumPy fallback keeps working, the errors are kept
         on ``self.errors`` for diagnostics and the programs stay
         source-only.
+
+        ``keep_context=True`` keeps the GL context alive in ``self.ctx``
+        so a GPU post-processing executor can render through the compiled
+        programs (see :mod:`graphics.gpu_post`).  Call
+        :meth:`release` when the game shuts down.
         """
         if not self.programs:
             return False
@@ -129,15 +137,33 @@ class ShaderManager:
             except Exception as exc:
                 self.errors.append(f"{name}: {exc}")
                 ok = False
-        # Free the validation context; the game renders through pygame's
-        # CPU pipeline anyway (see PostPipeline) so programs are compiled
-        # for validation / documentation only.
-        try:
-            ctx.release()
-        except Exception:
-            pass
+        if keep_context:
+            self.ctx = ctx
+        else:
+            try:
+                ctx.release()
+            except Exception:
+                pass
         self.gl_available = ok
         return ok
+
+    # ------------------------------------------------------------------
+    def release(self) -> None:
+        """Free the live GL context (if kept) and its programs."""
+        try:
+            if self.ctx is not None:
+                self.ctx.release()
+        except Exception:
+            pass
+        self.ctx = None
+        self.gl_available = False
+
+    def live_program(self, name: str):
+        """Compiled program for ``name``, or None when the GL path is off."""
+        p = self.programs.get(name)
+        if p is None or p.gl is None or self.ctx is None:
+            return None
+        return p.gl
 
     # ------------------------------------------------------------------
     def is_pass_available(self, name: str) -> bool:
@@ -146,11 +172,16 @@ class ShaderManager:
         return p is not None and p.available()
 
 
-def build_manager(root: Optional[str] = None) -> ShaderManager:
-    """Create a ShaderManager and attempt GL compilation (never raises)."""
+def build_manager(root: Optional[str] = None, live: bool = False) -> ShaderManager:
+    """Create a ShaderManager and attempt GL compilation (never raises).
+
+    With ``live=True`` the compiled context is kept so the GPU post
+    executor (:mod:`graphics.gpu_post`) can render with it; with
+    ``live=False`` (the default) it is a validation-only compile.
+    """
     mgr = ShaderManager(root)
     try:
-        mgr.try_compile()
+        mgr.try_compile(keep_context=live)
     except Exception as exc:  # pragma: no cover - defensive
         mgr.errors.append(f"compile crashed: {exc}")
     return mgr

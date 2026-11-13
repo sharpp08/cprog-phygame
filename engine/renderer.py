@@ -20,7 +20,7 @@ from engine.collision import distance2
 
 
 class Renderer:
-    def __init__(self, screen, cam, assets, particles) -> None:
+    def __init__(self, screen, cam, assets, particles, shaders=None) -> None:
         self.screen = screen
         self.cam = cam
         self.assets = assets
@@ -32,6 +32,9 @@ class Renderer:
         self.visual = VisualEnhancement(self.W, self.H)
         # graphics upgrade: post pipeline, smooth camera shake and weather
         self.post = PostPipeline(self.W, self.H, self.quality)
+        self.shaders = shaders
+        if shaders is not None:
+            self.post.attach_gl(shaders)
         self.shake = ScreenShake()
         self.weather = Weather(seed=1)
         self._battery = 100.0

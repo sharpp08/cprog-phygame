@@ -5,14 +5,19 @@ drawn, and before the HUD is blitted to the real screen.  The pipeline is a
 NumPy implementation of the same passes defined as GLSL in ``shaders/``
 (see ``graphics/shader_manager.py``):
 
-    bloom -> color grade -> vignette -> film grain -> chromatic aberration
-    -> distortion -> damage / lightning flash
+    bloom (low-res glow only) -> color grade -> chromatic aberration
+    -> distortion -> vignette -> film grain -> damage / lightning flash
 
-All full-screen work happens at a downscaled resolution (``fx_res``) and is
-scaled back up once, so the cost is small on integrated GPUs.  Every effect
-intensity is tweened (exponential smoothing) so events never cause sudden
-flashes, and the whole system degrades gracefully: when disabled (low
-quality, ``post_fx`` off) the pipeline simply copies the scene through.
+The scene is ALWAYS processed at native resolution so forest, sprites,
+particles and UI-adjacent detail stay razor sharp.  The ONLY part of the
+pipeline that runs on a downscaled buffer is the bloom glow: bright
+pixels are extracted at low resolution, blurred, and upscaled back so the
+resulting glow is composited onto the untouched full-resolution frame.
+
+All effect intensities are tweened (exponential smoothing) so events
+never cause sudden flashes, and the whole system degrades gracefully:
+when disabled (low quality, ``post_fx`` off) the pipeline simply copies
+the scene through.
 
 No GL context is required: this module is the reference implementation and
 is used when ModernGL is unavailable or the display is headless.
@@ -78,13 +83,42 @@ class PostPipeline:
         # explicit override (settings toggle) wins over the preset default
         self.enabled = bool(self._specs["post_fx"] if post_fx is None
                             else post_fx)
+        self._gl = None          # optional GpuPostExecutor
+        self._tension = 0.0
         self.resize(self.W, self.H, self.quality, self.enabled)
+
+    # ------------------------------------------------------------------
+    def attach_gl(self, mgr) -> bool:
+        """Attach the ModernGL GPU executor to this pipeline.
+
+        Effect state/tweens stay on this pipeline; only the per-frame
+        execution moves to the GPU.  Returns True when the GPU path is
+        active (False -> the NumPy reference path keeps being used).
+        Never raises.
+        """
+        if mgr is None or not getattr(mgr, "gl_available", False) \
+                or getattr(mgr, "ctx", None) is None:
+            return False
+        try:
+            from graphics.gpu_post import GpuPostExecutor
+        except Exception:
+            return False
+        self._gl = GpuPostExecutor(mgr, self.W, self.H, self.quality)
+        if self._gl.failed:
+            self._gl = None
+        return self._gl is not None
 
     # ------------------------------------------------------------------
     def resize(self, width: int, height: int,
                quality: Optional[int] = None,
                enabled: Optional[bool] = None) -> None:
-        """Rebuild surfaces / cached textures (window or quality change)."""
+        """Rebuild surfaces / cached textures (window or quality change).
+
+        The scene buffer and the final output surface are always created at
+        *native* resolution.  Quality only changes how much work each
+        effect pass does and the bloom buffer size — it never reduces the
+        resolution of the image that reaches the screen.
+        """
         if quality is not None:
             self.quality = max(0, min(3, int(quality)))
             self._specs = quality_settings.specs_for(self.quality)
@@ -95,20 +129,45 @@ class PostPipeline:
         self.W = max(16, int(width))
         self.H = max(16, int(height))
         self.scene = pygame.Surface((self.W, self.H))
+        # Native-resolution output surface: the final frame is ALWAYS the
+        # screen size; post-processing never presents a stretched low-res
+        # image any more.
+        self._out = pygame.Surface((self.W, self.H))
+        # ---- bloom: the ONLY low-resolution part of the pipeline ----
+        # fx_res scales the bloom glow buffer only: bright-pixel extraction
+        # + blur happen there, and the blurred glow is the only thing that
+        # gets upscaled (composited back onto the sharp frame).
         res = int(self._specs.get("fx_res", 4))
         self._fxw = max(32, self.W // res)
         self._fxh = max(32, self.H // res)
-        self._fx_buf = pygame.Surface((self._fxw, self._fxh))
-        self._fx_out = pygame.Surface((self._fxw, self._fxh))
-        self._vignette = self._build_vignette()
-        self._grain_tiles = [self._grain_tile(i) for i in range(4)]
-        # cached 3-channel grain + coordinate grid (avoid per-frame rebuild)
-        self._grain_3ch = [np.concatenate([g[..., None]] * 3, axis=2)
-                           for g in self._grain_tiles]
-        self._mgrid = np.mgrid[0:self._fxh, 0:self._fxw]
-        self._lut = self._build_lut()
+        self._fx_buf = pygame.Surface((self._fxw, self._fxh))   # bloom src
+        self._fx_out = pygame.Surface((self._fxw, self._fxh))   # bloom out
+        self._bloom_full = pygame.Surface((self.W, self.H))
         # one blur pass at medium/high, two at ultra
         self._blur_passes = 2 if self.quality >= 3 else 1
+        # ---- native-resolution cached masks (rebuilt on resize only) ----
+        # Per-pixel effect math stays in uint8 at native resolution: fast
+        # on integrated GPUs and it never softens the image.  Float32
+        # scratch is used only for event-only passes (distortion /
+        # desaturation).
+        self._vignette = self._build_vignette()            # f32 mask (H,W)
+        self._vig_u8 = (self._vignette * 255.0).astype(np.uint8)
+        self._v2d = np.empty((self.H, self.W), dtype=np.uint8)
+        self._grain_tiles = [self._grain_tile(i) for i in range(4)]
+        self._grain_dev = [(t.astype(np.int16) - 128).astype(np.int8)
+                           for t in self._grain_tiles]
+        self._mgrid_f = np.mgrid[0:self.H, 0:self.W].astype(np.float32)
+        self._lut = self._build_lut()
+        # reusable native-res buffers
+        self._px = np.empty((self.H, self.W, 3), dtype=np.uint8)   # work
+        self._gtmp = np.empty((self.H, self.W, 3), dtype=np.uint8)
+        self._i16 = np.empty((self.H, self.W, 3), dtype=np.int16)  # grain
+        self._i8 = np.empty((self.H, self.W, 3), dtype=np.int8)   # grain
+        self._img = np.zeros((self.H, self.W, 3), dtype=np.float32)
+        self._tmp = np.empty((self.H, self.W, 3), dtype=np.float32)
+        # keep the GPU executor's buffers in sync
+        if self._gl is not None:
+            self._gl.resize(self.W, self.H, self.quality)
         # smooth, per-effect intensities (target vs current)
         self._flash_red = 0.0      # damage feedback
         self._flash_white = 0.0    # lightning / supernatural
@@ -123,18 +182,23 @@ class PostPipeline:
 
     # -- texture / LUT builders -----------------------------------------
     def _build_vignette(self) -> np.ndarray:
-        yy, xx = np.mgrid[0:self._fxh, 0:self._fxw]
-        nx = (xx - self._fxw * 0.5) / max(1, self._fxw * 0.5)
-        ny = (yy - self._fxh * 0.5) / max(1, self._fxh * 0.5)
+        """Native-resolution vignette mask (0 = no darkening, 1 = max).
+
+        Cached once per resize so the per-frame vignette pass is a single
+        uint8 multiply against the full-resolution work frame.
+        """
+        yy, xx = np.mgrid[0:self.H, 0:self.W]
+        nx = (xx - self.W * 0.5) / max(1, self.W * 0.5)
+        ny = (yy - self.H * 0.5) / max(1, self.H * 0.5)
         r = np.sqrt(nx * nx + ny * ny)
         mask = np.clip((r - 0.42) / 0.85, 0.0, 1.0) ** 1.8
         return (mask * 0.55).astype(np.float32)   # up to ~55% darkening
 
     def _grain_tile(self, seed: int) -> np.ndarray:
+        """Native-resolution uint8 noise tile (rebuilt on resize only)."""
         rng = np.random.default_rng(1000 + seed)
-        tile = rng.integers(0, 255, size=(self._fxh, self._fxw),
-                            dtype=np.uint8).astype(np.float32) - 127.5
-        return tile * (0.5 / 127.5)          # roughly +/-0.5
+        return rng.integers(0, 256, size=(self.H, self.W, 3),
+                            dtype=np.uint8)
 
     def _build_lut(self) -> np.ndarray:
         """256-entry cinematic grade: cool shadows, warm highlights,
@@ -223,6 +287,12 @@ class PostPipeline:
             screen.blit(self.scene, offset)
             return
         self.set_low_health(low_hp, dt)
+        self._tension = tension
+        # GPU path: run the same effect state through the GLSL chain at
+        # native resolution (the NumPy chain below stays as fallback).
+        if self._gl is not None and self._gl.present(
+                self.scene, screen, self, offset, self._out):
+            return
         s = self._specs
         bloom = float(s.get("bloom", 0.0))
         grade = float(s.get("grade", 0.0))
@@ -231,84 +301,135 @@ class PostPipeline:
         chroma = float(s.get("chroma", 0.0))
         distort = float(s.get("distort", 0.0))
 
-        # 1) downscale the scene to effect resolution
-        pygame.transform.scale(self.scene, (self._fxw, self._fxh),
-                               self._fx_buf)
-        arr = pygame.surfarray.array3d(self._fx_buf).transpose(1, 0, 2)
-        img = arr.astype(np.float32)
+        # Native-resolution uint8 work frame.  The scene is NEVER
+        # downscaled: every pass below runs on the full-size frame, so the
+        # presented image keeps its native pixel detail.  Steady-state
+        # passes (grade / vignette / grain / flash) are pure uint8 integer
+        # math — cheap on integrated GPUs.  The only low-resolution buffer
+        # in the pipeline is the bloom glow extraction.
+        src = pygame.surfarray.array3d(self.scene).transpose(1, 0, 2)
+        px = self._px
+        px[...] = src
 
-        # 2) bloom: threshold + blur + add
+        # 1) bloom: extract bright pixels in a SMALL buffer, blur, then
+        #    composite the upscaled GLOW onto the sharp native frame.
         if bloom > 0:
+            pygame.transform.scale(self.scene, (self._fxw, self._fxh),
+                                   self._fx_buf)
+            b = pygame.surfarray.array3d(self._fx_buf).transpose(1, 0, 2)
+            b = b.astype(np.float32)
             thr = 190.0 - 70.0 * min(1.0, bloom * 1.2)
-            bright = np.clip(img - thr, 0.0, 255.0) / 255.0
+            bright = np.clip(b - thr, 0.0, 255.0) / 255.0
             for _ in range(self._blur_passes):
                 bright = self._box_blur(bright, 3)
-            img += bright * 40.0 * min(1.0, bloom * 1.3)
+            self._fx_out.fill((0, 0, 0))
+            pygame.surfarray.blit_array(
+                self._fx_out,
+                (bright * 255.0).astype(np.uint8).transpose(1, 0, 2))
+            pygame.transform.scale(self._fx_out, (self.W, self.H),
+                                   self._bloom_full)
+            glow = pygame.surfarray.array3d(self._bloom_full) \
+                   .transpose(1, 0, 2)
+            s8 = int(round(40.0 * min(1.0, bloom * 1.3)))
+            np.multiply(glow, s8, out=self._gtmp, casting="unsafe")
+            self._gtmp //= 255
+            np.add(px, self._gtmp, out=px, casting="unsafe")
 
-        # 3) cinematic color grade (per-channel LUT, strength-scaled mix)
+        # 2) cinematic color grade (per-channel LUT, full resolution;
+        #    the lookup runs on the untouched uint8 source)
         if grade > 0:
-            li = np.clip(img, 0, 255).astype(np.uint8)
-            graded = np.empty_like(img)
+            g8 = int(round(grade * 255.0))
+            a8 = 255 - g8
             for ch in range(3):
-                graded[..., ch] = self._lut[li[..., ch], ch]
-            img = img * (1.0 - grade) + graded * grade
+                self._gtmp[..., ch] = self._lut[src[..., ch], ch]
+            np.multiply(px, a8, out=px, casting="unsafe")
+            np.multiply(self._gtmp, g8, out=self._gtmp, casting="unsafe")
+            np.add(px, self._gtmp, out=px, casting="unsafe")
+            px //= 255
             # extra desaturation driven by the low-health heartbeat
             ds = self._desat_cur * 0.35
             if ds > 0.01:
+                img = self._img
+                img[...] = px
                 lum = img @ np.array([0.299, 0.587, 0.114], np.float32)
-                img = img * (1.0 - ds) + lum[..., None] * ds
+                img *= (1.0 - ds)
+                img += lum[..., None] * ds
+                np.clip(img, 0.0, 255.0, out=self._tmp)
+                px[...] = self._tmp
 
-        # 4) chromatic aberration: split R/B near the edges
+        # 3) chromatic aberration: 1-2 px R/B split (kept restrained so
+        #    the image stays readable)
         off_r = int(math.ceil(min(2.0, self._ca_cur * chroma * 1.6)))
         if off_r and chroma > 0:
-            img[..., 0] = np.roll(img[..., 0], off_r, axis=1)
-            img[..., 2] = np.roll(img[..., 2], -off_r, axis=1)
+            px[..., 0] = np.roll(px[..., 0], off_r, axis=1)
+            px[..., 2] = np.roll(px[..., 2], -off_r, axis=1)
             half = max(1, off_r // 2)
-            img[..., 0] = np.roll(img[..., 0], -half, axis=0)
-            img[..., 2] = np.roll(img[..., 2], half, axis=0)
+            px[..., 0] = np.roll(px[..., 0], -half, axis=0)
+            px[..., 2] = np.roll(px[..., 2], half, axis=0)
 
-        # 5) spatial distortion (heat-warp style sine field)
+        # 4) spatial distortion (heat-warp sine field, event only).
+        #    Sub-pixel warps are invisible, so the expensive float32
+        #    gather only runs once the effect has actually ramped up.
         dw = self._distort_cur * distort * 1.4
-        if dw > 0.05 and distort > 0:
-            yy, xx = self._mgrid
+        if dw > 0.12 and distort > 0:
+            img = self._img
+            img[...] = px
+            yy, xx = self._mgrid_f
             ox = np.sin(yy * 0.11 + self._time * 2.1) * dw * 2.0
             oy = np.cos(xx * 0.13 - self._time * 1.7) * dw * 1.5
-            ys = np.clip((yy + oy).astype(np.int32), 0, self._fxh - 1)
-            xs = np.clip((xx + ox).astype(np.int32), 0, self._fxw - 1)
+            ys = np.clip((yy + oy).astype(np.int32), 0, self.H - 1)
+            xs = np.clip((xx + ox).astype(np.int32), 0, self.W - 1)
             img = img[ys, xs, :]
+            np.clip(img, 0.0, 255.0, out=self._tmp)
+            px[...] = self._tmp
 
-        # 6) vignette (cinematic + event boost + low-HP heartbeat)
+        # 5) vignette (cinematic + event boost + low-HP heartbeat),
+        #    multiplied against the native-resolution frame
         if vign > 0:
             vi = min(1.0, vign * (0.55 + 0.45 * tension))
             vi += self._vignette_extra * 0.6 + self._vignette_pulse * 0.5
-            vi = min(1.25, vi)
-            img *= (1.0 - self._vignette * vi)[..., None]
+            vi8 = int(min(1.25, vi) * 255.0)
+            if vi8:
+                np.multiply(self._vig_u8, vi8, out=self._v2d)
+                self._v2d //= 255
+                np.subtract(255, self._v2d, out=self._v2d)
+                np.multiply(px, self._v2d[..., None], out=px,
+                            casting="unsafe")
 
-        # 7) film grain (animated, stronger under tension / events)
+        # 6) film grain: cached native-res tile, integer multiply-add
         if grain > 0:
             ga = grain * (6.0 + 9.0 * tension + 14.0 * self._distort_cur)
-            img += self._grain_3ch[self._grain_tile_i] * ga
+            a8 = int(min(255.0, ga * 0.5 / 127.5 * 255.0))
+            if a8:
+                dev = self._grain_dev[self._grain_tile_i]
+                np.multiply(dev, a8, out=self._i16)
+                self._i16 //= 255
+                np.clip(self._i16, -128, 127, out=self._i8)
+                np.add(px, self._i8, out=px, casting="unsafe")
 
-        # 8) damage flash / lightning flash
+        # 7) damage flash / lightning flash
         if self._flash_red > 0.01:
-            img[..., 0] = img[..., 0] + 210.0 * self._flash_red
-            img[..., 1] = img[..., 1] * (1.0 - 0.45 * self._flash_red)
-            img[..., 2] = img[..., 2] * (1.0 - 0.45 * self._flash_red)
+            r8 = int(210.0 * self._flash_red)
+            f8 = int(round((1.0 - 0.45 * self._flash_red) * 255.0))
+            np.add(px[..., 0], r8, out=px[..., 0], casting="unsafe")
+            np.multiply(px[..., 1], f8, out=self._v2d)
+            self._v2d //= 255
+            px[..., 1] = self._v2d
+            np.multiply(px[..., 2], f8, out=self._v2d)
+            self._v2d //= 255
+            px[..., 2] = self._v2d
         if self._flash_white > 0.01:
-            img += (self._flash_white * 160.0) * np.array(
-                [0.75, 0.85, 1.0], dtype=np.float32)[None, None, :]
+            fw = self._flash_white
+            np.add(px[..., 0], int(0.75 * 160.0 * fw), out=px[..., 0],
+                   casting="unsafe")
+            np.add(px[..., 1], int(0.85 * 160.0 * fw), out=px[..., 1],
+                   casting="unsafe")
+            np.add(px[..., 2], int(160.0 * fw), out=px[..., 2],
+                   casting="unsafe")
 
-        np.clip(img, 0.0, 255.0, out=img)
-        out = img.astype(np.uint8)
-        if self._fx_out.get_size() != (self._fxw, self._fxh):
-            self._fx_out = pygame.Surface((self._fxw, self._fxh))
-        pygame.surfarray.blit_array(self._fx_out, out.transpose(1, 0, 2))
-        if self._fx_out.get_size() != screen.get_size():
-            # upscale the processed effect buffer back to screen size
-            scaled = pygame.transform.scale(self._fx_out, screen.get_size())
-            screen.blit(scaled, offset)
-        else:
-            screen.blit(self._fx_out, offset)
+        # 8) present the NATIVE-RESOLUTION composition
+        pygame.surfarray.blit_array(self._out, px.transpose(1, 0, 2))
+        screen.blit(self._out, offset)
 
 
     @staticmethod
