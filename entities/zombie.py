@@ -32,9 +32,14 @@ class Zombie(Entity):
         self._attack_timer = 0.0
         self.moving = False
         self.anim_state = "idle"
+        self.prev_anim_state = "idle"
+        self.prev_frame_index = 0
+        self.anim_blend = 1.0
         self.anim_timer = 0.0
         self.frame_index = 0
         self.hit_flash = 0.0
+        self._actual_speed = 0.0
+        self._action_phase = 0.0
 
         # AI / navigation
         self.wander_target = None
@@ -129,11 +134,12 @@ class Zombie(Entity):
         return False
 
     def apply_move(self, vx: float, vy: float, dt: float, grid) -> None:
+        """Advance the zombie; gait and facing follow actual displacement."""
         if self.spawning:
             self.moving = False
             return
-        import math
-        m = math.hypot(vx, vy) or 1.0
+        dt = max(0.0, min(float(dt), 0.1))
+        m = math.hypot(vx, vy)
         # Occasional stumble: brief speed dip + sideways lurch.
         self._stumble -= dt
         if self._stumble <= 0:
@@ -144,23 +150,48 @@ class Zombie(Entity):
         if self._stumble_t > 0:
             speed *= 0.35
             self._stumble_t -= dt
-        dx = vx / m * speed * dt
-        dy = vy / m * speed * dt
-        # Lateral shuffle during a stumble.
-        if self._stumble_t > 0:
-            dx += -vy / m * self._stumble_dir * speed * 0.6 * dt
-            dy += vx / m * self._stumble_dir * speed * 0.6 * dt
+        if m > 1e-6:
+            dx = vx / m * speed * dt
+            dy = vy / m * speed * dt
+            # Lateral shuffle during a stumble.
+            if self._stumble_t > 0:
+                dx += -vy / m * self._stumble_dir * speed * 0.6 * dt
+                dy += vx / m * self._stumble_dir * speed * 0.6 * dt
+        else:
+            dx = dy = 0.0
         # Hit recoil: rear up and back away from the attacker.
         if self._hit_knock > 0:
             k = self._hit_knock * 6.0 * dt
             dx += self._hit_knock_dir * k * 0.4
             dy += self._hit_knock_dir * k * 0.4
             self._hit_knock -= dt
-        self.x, self.y = grid.move_circle((self.x, self.y), (dx, dy),
+
+        old_x, old_y = self.x, self.y
+        self.x, self.y = grid.move_circle((old_x, old_y), (dx, dy),
                                           self.radius)
-        self.moving = (abs(vx) + abs(vy)) > 1e-5
-        # facing flips on the screen-horizontal axis of movement
-        self.facing = -1.0 if (vx - vy) < 0 else 1.0
+        travelled = math.hypot(self.x - old_x, self.y - old_y)
+        self._actual_speed = travelled / dt if dt > 0.0 else 0.0
+        self.moving = self._actual_speed > 0.05
+        if self.moving:
+            # Feet cycle in proportion to distance actually walked, so a
+            # zombie jammed against geometry never foot-slides.
+            self._gait = (self._gait + travelled * 0.8 *
+                          self._gait_rate) % 1.0
+            # Smoothly turn toward the intended travel direction.
+            target = -1.0 if (vx - vy) < 0 else 1.0
+            self.facing += (target - self.facing) * min(1.0, dt * 10.0)
+
+    def _set_anim_state(self, state: str) -> None:
+        """Blend into a new animation state without a hard frame cut."""
+        if state == self.anim_state:
+            return
+        self.prev_anim_state = self.anim_state
+        self.prev_frame_index = self.frame_index
+        self.anim_state = state
+        self.anim_timer = 0.0
+        self.anim_blend = 0.0
+        if state == "attack":
+            self._action_phase = 0.0
 
     # ------------------------------------------------------------------
     def on_hit(self, dmg: float, src, knock_dir: float = 1.0) -> None:
@@ -186,6 +217,7 @@ class Zombie(Entity):
     # ------------------------------------------------------------------
     def update(self, dt: float) -> None:
         """Animation + timers (AI decisions are made by enemy_ai)."""
+        dt = max(0.0, min(float(dt), 0.1))
         self._attack_timer = max(0.0, self._attack_timer - dt)
         self.hit_flash = max(0.0, self.hit_flash - dt)
         self._hit_knock = max(0.0, self._hit_knock - dt)
@@ -193,7 +225,7 @@ class Zombie(Entity):
         # Cinematic spawn first: the body rises, then control passes to AI.
         if self.spawning:
             done = self._step_emergence(dt)
-            self.anim_state = "emerge"
+            self._set_anim_state("emerge")
             self.frame_index = int(self.emerge_t * 3) % 3
             if done:
                 # First groan now that it's upright.
@@ -204,35 +236,48 @@ class Zombie(Entity):
 
         # Death: stagger, then hold the laid-down frame.
         if not self.alive:
-            self.anim_state = "dead"
+            self._set_anim_state("dead")
             self.frame_index = self.death_fall % 3
             return
 
-        self._attack_timer = max(0.0, self._attack_timer - dt)
-
-        # Advance the procedural gait + body sway.
-        self._gait += dt * self.speed * 0.8 * self._gait_rate
-        if self._gait > 1.0:
-            self._gait -= 1.0
+        # Advance the body sway.  The gait itself advances in apply_move,
+        # driven by actual displacement, so idle zombies keep their feet
+        # planted instead of cycling in place.
         self._sway_ph += dt * (1.6 + self.speed * 0.3)
 
-        if self.hit_flash > 0:
-            self.anim_state = "hit"
-            self.frame_index = 0
+        # State-based animation selection with a short blend on transition.
+        if self.hit_flash > 0 or getattr(self, "stagger_timer", 0.0) > 0:
+            state = "hit"
         elif self.state == "attack":
-            self.anim_state = "attack"
-            self.frame_index = int(self._gait * 4) % 4
+            state = "attack"
+            self._action_phase = (self._action_phase + dt * 1.7) % 1.0
         elif self.moving:
-            self.anim_state = "walk"
-            self.frame_index = int(self._gait * 4) % 4
+            state = "walk"
         else:
-            self.anim_state = "idle"
+            state = "idle"
+        self._set_anim_state(state)
+        self.anim_blend = min(1.0, self.anim_blend + dt * 3.5)
+
+        if state == "walk":
+            self.frame_index = int(self._gait * 4) % 4
+        elif state == "attack":
+            # Attack wind-up cycles on its own clock so the lunge reads
+            # clearly even though the body is stationary.
+            self.frame_index = int(self._action_phase * 4) % 4
+        elif state == "idle":
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 1.2) % 4
+        else:
+            self.frame_index = 0
 
-        # Body bob + lateral sway for a shambling, off-balance feel.
-        if self.anim_state == "walk":
-            self._bob = abs(math.sin(self._gait * math.pi)) * 2.0
+        # Body bob + lateral sway for a shambling, off-balance feel.  The
+        # walk bob scales with real speed so faster zombies pump more.
+        if state == "walk":
+            amp = 1.6 + 1.4 * min(1.0, self._actual_speed /
+                                  max(0.1, self.speed))
+            self._bob = abs(math.sin(self._gait * math.pi)) * amp
+        elif state == "attack":
+            self._bob = math.sin(self._action_phase * math.pi) * 2.0
         else:
             self._bob = math.sin(self._sway_ph) * 0.8
 

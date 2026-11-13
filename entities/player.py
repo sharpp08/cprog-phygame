@@ -1,6 +1,7 @@
 """The player character: movement, aiming and weapon/animation state."""
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 import config
@@ -22,12 +23,17 @@ class Player(Entity):
 
         self.aim: Tuple[float, float] = (0.0, 0.0)
         self.facing = 1.0
+        self._facing_target = 1.0
         self.speed = config.PLAYER_WALK_SPEED
         self.moving = False
         self.running = False
-        # Smoothed speed / movement amount so walk<->run<->idle blends.
+        # Velocity is eased independently on each axis. Animation is driven by
+        # measured post-collision displacement, never requested input, which
+        # prevents feet cycling while pressed against geometry.
+        self._velocity = (0.0, 0.0)
+        self.actual_speed = 0.0
         self._move_amt = 0.0        # 0 (idle)..1 (full run)
-        self._cur_speed = config.PLAYER_WALK_SPEED
+        self._cur_speed = 0.0
 
         self.invuln = 0.0
         self.damage_timer = 0.0
@@ -35,6 +41,9 @@ class Player(Entity):
         self._shoot_flash = 0.0
 
         self.anim_state = "idle"
+        self.prev_anim_state = "idle"
+        self.prev_frame_index = 0
+        self.anim_blend = 1.0
         self.anim_timer = 0.0
         self.frame_index = 0
         # Gait phase drives the 4-frame walk/run cycle (0..1, wraps).
@@ -70,40 +79,63 @@ class Player(Entity):
     # ------------------------------------------------------------------
     def set_aim(self, dirx: float, diry: float) -> None:
         self.aim = (dirx, diry)
-        self.facing = -1.0 if dirx < 0 else 1.0
+        if abs(dirx) > 0.04:
+            self._facing_target = -1.0 if dirx < 0 else 1.0
+        self.facing = self._facing_target
 
     def apply_movement(self, mv: Tuple[float, float], running: bool,
                        dt: float, grid) -> None:
-        self.moving = (mv[0] != 0.0 or mv[1] != 0.0)
-        self.running = running and self.moving
-        # Smoothly ease the effective movement amount 0->1 so starting and
-        # stopping do not snap; this drives speed, gait rate and bob.
-        target = 1.0 if self.running else (0.55 if self.moving else 0.0)
-        k = min(1.0, dt * 7.0)
-        self._move_amt += (target - self._move_amt) * k
-        self._cur_speed = (config.PLAYER_WALK_SPEED *
-                           (0.6 + 0.4 * self._move_amt) +
-                           (config.PLAYER_RUN_SPEED - config.PLAYER_WALK_SPEED)
-                           * max(0.0, self._move_amt - 0.55) / 0.45)
-        if self.moving:
-            # Normalise the move vector so diagonal speed is constant.
-            m = (mv[0] ** 2 + mv[1] ** 2) ** 0.5 or 1.0
-            dx = (mv[0] / m) * self._cur_speed * dt
-            dy = (mv[1] / m) * self._cur_speed * dt
-            self.x, self.y = grid.move_circle(
-                (self.x, self.y), (dx, dy), self.radius)
-            # Advance the gait cycle in proportion to distance travelled.
-            self._gait += dt * self._cur_speed * 0.85
-            if self._gait > 1.0:
-                self._gait -= 1.0
-            # Footstep cadence: a step on each half-stride, alternating feet.
-            self._stride += dt * self._cur_speed * 0.5
-            if self._stride >= 0.5:
-                self._stride -= 0.5
+        """Accelerated movement; gait follows measured displacement.
+
+        Velocity is eased toward the requested input so starting, stopping
+        and turning feel natural instead of snapping.  The gait phase and
+        footstep cadence advance from the actual post-collision distance
+        travelled, which prevents foot sliding while blocked by geometry.
+        """
+        dt = max(0.0, min(float(dt), 0.1))
+        requested = abs(mv[0]) + abs(mv[1]) > 1e-6
+        target_speed = (config.PLAYER_RUN_SPEED if running
+                        else config.PLAYER_WALK_SPEED)
+        if requested:
+            mag = math.hypot(mv[0], mv[1]) or 1.0
+            target_vx = mv[0] / mag * target_speed
+            target_vy = mv[1] / mag * target_speed
+        else:
+            target_vx = target_vy = 0.0
+
+        vx, vy = self._velocity
+        response = 16.0 if requested else 22.0
+        blend = 1.0 - math.exp(-response * dt)
+        vx += (target_vx - vx) * blend
+        vy += (target_vy - vy) * blend
+        if not requested and math.hypot(vx, vy) < 0.04:
+            vx = vy = 0.0
+        self._velocity = (vx, vy)
+
+        old_x, old_y = self.x, self.y
+        self.x, self.y = grid.move_circle(
+            (old_x, old_y), (vx * dt, vy * dt), self.radius)
+        travelled = math.hypot(self.x - old_x, self.y - old_y)
+        self.actual_speed = travelled / dt if dt > 0.0 else 0.0
+        self._cur_speed = self.actual_speed
+        self.moving = self.actual_speed > 0.05
+        self.running = (running and self.moving and
+                        self.actual_speed > config.PLAYER_WALK_SPEED * 1.05)
+        target_amt = min(1.0, self.actual_speed / config.PLAYER_RUN_SPEED)
+        self._move_amt += (target_amt - self._move_amt) * blend
+
+        if travelled > 1e-6:
+            # One gait cycle per ~1.18 world tiles; a collision-shortened
+            # step shortens the cycle by the same amount.
+            self._gait = (self._gait + travelled * 0.85) % 1.0
+            self._stride += travelled
+            step_length = 0.46 if self.running else 0.58
+            if self._stride >= step_length:
+                self._stride %= step_length
                 self._step_side = 1 - self._step_side
                 self.footstep_sound = True
                 self._last_footstep_state = 1
-        else:
+        elif not requested:
             # Decelerate: keep a short glide, then settle to idle.
             self._stride = 0.0
             self.footstep_sound = False
@@ -112,6 +144,16 @@ class Player(Entity):
     # ------------------------------------------------------------------
     def mark_shoot(self) -> None:
         self._shoot_flash = 0.12
+        self.anim_timer = 0.0
+
+    def _set_anim_state(self, state: str) -> None:
+        if state == self.anim_state:
+            return
+        self.prev_anim_state = self.anim_state
+        self.prev_frame_index = self.frame_index
+        self.anim_state = state
+        self.anim_timer = 0.0
+        self.anim_blend = 0.0
 
     def take_damage(self, dmg: float) -> None:
         if self.invuln > 0 or self.dead:

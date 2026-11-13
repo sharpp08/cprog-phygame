@@ -35,6 +35,14 @@ class Weapon:
     def is_empty(self) -> bool:
         return self.mag == 0
 
+    @property
+    def reload_progress(self) -> float:
+        """Normalised reload animation progress (zero when not reloading)."""
+        if not self.reloading:
+            return 0.0
+        total = max(0.001, float(self.spec["reload_time"]))
+        return max(0.0, min(1.0, 1.0 - self.reload_timer / total))
+
     # ------------------------------------------------------------------
     def try_fire(self) -> Optional[Dict]:
         """Return projectile parameters when a shot can be made, else None.
