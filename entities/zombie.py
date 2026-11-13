@@ -226,6 +226,7 @@ class Zombie(Entity):
         if self.spawning:
             done = self._step_emergence(dt)
             self._set_anim_state("emerge")
+            self.anim_blend = min(1.0, self.anim_blend + dt * 3.5)
             self.frame_index = int(self.emerge_t * 3) % 3
             if done:
                 # First groan now that it's upright.
@@ -237,6 +238,7 @@ class Zombie(Entity):
         # Death: stagger, then hold the laid-down frame.
         if not self.alive:
             self._set_anim_state("dead")
+            self.anim_blend = min(1.0, self.anim_blend + dt * 3.5)
             self.frame_index = self.death_fall % 3
             return
 
