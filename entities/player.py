@@ -128,9 +128,10 @@ class Player(Entity):
         if travelled > 1e-6:
             # One gait cycle per ~1.18 world tiles; a collision-shortened
             # step shortens the cycle by the same amount.
-            self._gait = (self._gait + travelled * 0.85) % 1.0
+            gait_rate = 0.36 if self.running else 0.48
+            self._gait = (self._gait + travelled * gait_rate) % 1.0
             self._stride += travelled
-            step_length = 0.46 if self.running else 0.58
+            step_length = 1.35 if self.running else 1.0
             if self._stride >= step_length:
                 self._stride %= step_length
                 self._step_side = 1 - self._step_side
@@ -201,15 +202,16 @@ class Player(Entity):
 
         # Body bob driven by the gait cycle (highest mid-stride).
         if self.anim_state in ("walk", "run", "crouch"):
-            bob_amount = 1.0 if self.anim_state == "crouch" else (2.0 if self.anim_state == "walk" else 4.0)
-            self._bob = abs(math.sin(self._gait * math.pi)) * bob_amount
+            bob_amount = (0.8 if self.anim_state == "crouch" else
+                          (1.8 if self.anim_state == "walk" else 3.4))
+            self._bob = abs(math.sin(self._gait * math.pi * 2.0)) * bob_amount
         else:
             self._bob = 0.0
 
         # Pick the gait frame.  Walk/run use the 4-frame cycle indexed by
         # the gait phase; idle gently breathes through the idle frames.
         if self.anim_state in ("walk", "run", "crouch"):
-            self.frame_index = int(self._gait * 4) % 4
+            self.frame_index = int(self._gait * 8) % 8
         elif self.anim_state == "idle":
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 1.5) % 4
