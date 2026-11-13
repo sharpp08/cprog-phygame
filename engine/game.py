@@ -481,8 +481,6 @@ class Game:
             if spawned:
                 self.progression.notify(
                     "Gunfire echoes through the forest. Something is coming.", 4.0)
-                if self.horror is not None:
-                    self.horror.begin_recovery(5.0)
         # Short, non-looping physiological cues; timers prevent repetition.
         self._update_survival_audio(dt, player)
         # dynamic combat/ambient music based on nearby threat
