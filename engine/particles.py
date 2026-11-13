@@ -164,8 +164,10 @@ class ParticleSystem:
         for p in self.particles:
             p.update(dt)
             if p.kind == "firefly":
-                p.x += math.sin(p.life * 1.3) * 0.15
-                p.y += math.cos(p.life * 1.1) * 0.15
+                # Integrate drift by dt; the previous per-frame offset made
+                # fireflies move faster at high frame rates.
+                p.x += (w * 0.18 + math.sin(p.life * 1.3) * 0.22) * dt
+                p.y += math.cos(p.life * 1.1) * 0.18 * dt
                 p.fade = 0.5 + 0.5 * abs(math.sin(p.life * 4.0))
             elif p.kind == "leaf":
                 # wind drift + flutter; land and die on the ground
