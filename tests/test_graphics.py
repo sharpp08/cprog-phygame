@@ -244,6 +244,13 @@ class TestRendererGraphicsIntegration(unittest.TestCase):
     def tearDown(self):
         pygame.quit()
 
+    def test_every_character_model_has_an_eight_frame_run_cycle(self):
+        self.assertEqual(len(self.renderer.assets.player_frames("run")), 8)
+        for ztype in config.ZOMBIE_TYPES:
+            with self.subTest(ztype=ztype):
+                frames = self.renderer.assets.frames[f"zombie_{ztype}"]["run"]
+                self.assertEqual(len(frames), 8)
+
     def test_renderer_owns_graphics_subsystems(self):
         r = self.renderer
         self.assertTrue(hasattr(r, "post"))
