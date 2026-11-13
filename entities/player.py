@@ -177,17 +177,21 @@ class Player(Entity):
 
         # Animation state machine: prioritise hurt > reload > shoot > move.
         if self.damage_timer > 0:
-            self.anim_state = "hit"
+            next_anim_state = "hit"
         elif self.weapon.reloading:
-            self.anim_state = "reload"
+            next_anim_state = "reload"
         elif self._shoot_flash > 0:
-            self.anim_state = "shoot"
+            next_anim_state = "shoot"
         elif self._move_amt > 0.7:
-            self.anim_state = "run"
+            next_anim_state = "run"
         elif self._move_amt > 0.15:
-            self.anim_state = "walk"
+            next_anim_state = "walk"
         else:
-            self.anim_state = "idle"
+            next_anim_state = "idle"
+
+        # Preserve the outgoing state/frame and crossfade into the new pose.
+        self._set_anim_state(next_anim_state)
+        self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.16)
 
         # Body bob driven by the gait cycle (highest mid-stride).
         import math
