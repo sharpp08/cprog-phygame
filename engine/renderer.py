@@ -335,7 +335,8 @@ class Renderer:
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
         type_scale = {"tank": 1.3, "fast": 0.92, "regular": 1.0,
-                      "crawler": 0.85, "exploder": 1.08}.get(z.ztype, 1.0)
+                      "crawler": 0.85, "exploder": 1.08,
+                      "screamer": 1.0, "armored": 1.22}.get(z.ztype, 1.0)
 
         def zombie_frame(state, index):
             choices = frames.get(state, frames["idle"])
