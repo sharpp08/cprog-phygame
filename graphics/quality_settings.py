@@ -35,7 +35,8 @@ def _base() -> Dict:
         "grain": 0.0,
         "chroma": 0.0,
         "distort": 0.0,
-        "ao": 0.0,             # contact-shadow approximation strength
+        "ao": 0.0,             # subtle screen-space contact shading
+        "detail": 0.0,          # native-resolution edge-aware sharpening
     }
 
 
@@ -47,15 +48,18 @@ def specs_for(quality: int) -> Dict:
         s.update(particles=0.7, fireflies=True, water_anim=True,
                  mist=True, sway=True,
                  post_fx=True, fx_res=6,
-                 bloom=0.35, grade=0.7, vignette=0.6, grain=0.25)
+                 bloom=0.35, grade=0.7, vignette=0.6, grain=0.25,
+                 detail=0.06)
     if q >= 2:  # HIGH
         s.update(particles=1.0, fx_res=4,
                  bloom=0.55, grade=0.85, vignette=0.8, grain=0.4,
-                 chroma=0.5, distort=0.5, ao=0.6)
+                 chroma=0.5, distort=0.5, ao=0.18,
+                 detail=0.12)
     if q >= 3:  # ULTRA
         s.update(particles=1.4, fx_res=3,
                  bloom=0.75, grade=1.0, vignette=1.0, grain=0.5,
-                 chroma=0.8, distort=0.8, ao=1.0)
+                 chroma=0.8, distort=0.8, ao=0.28,
+                 detail=0.18)
     return s
 
 
