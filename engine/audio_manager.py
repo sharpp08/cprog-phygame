@@ -116,6 +116,16 @@ class AudioManager:
         self.sfx["zombie_die"] = _f32_to_sound(
             np.sin(ph) * self._decay(n, 3.0) * 0.6)
 
+        # A harsh rising/descending call reserved for the screamer archetype.
+        n = int(r * 1.05)
+        t = np.arange(n) / r
+        sweep = 260.0 + 360.0 * np.sin(np.pi * t / 1.05)
+        phase = 2 * np.pi * np.cumsum(sweep) / r
+        scream = np.sin(phase) * self._decay(n, 1.1)
+        scream += self._lp(self._noise(n), 0.28) * self._decay(n, 2.0) * 0.22
+        self.sfx["zombie_scream"] = _f32_to_sound(
+            scream / max(1.0, np.max(np.abs(scream))) * 0.85)
+
         n = int(r * 0.4)
         t = np.arange(n) / r
         sig = (np.sin(2 * np.pi * 880 * t) +
