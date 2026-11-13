@@ -394,14 +394,19 @@ class Game:
         # movement
         mv = InputManager.move_vector()
         requested_run = InputManager.running() and (mv[0] != 0.0 or mv[1] != 0.0)
-        can_run = self.survival.update(dt, requested_run) if self.survival else True
-        player.apply_movement(mv, requested_run and can_run, dt, self.wm.grid)
+        crouching = bool(pygame.key.get_pressed()[pygame.K_LCTRL])
+        player.crouching = crouching
+        sprinting = requested_run and not crouching
+        can_run = self.survival.update(dt, sprinting) if self.survival else True
+        player.apply_movement(mv, sprinting and can_run, dt, self.wm.grid,
+                              speed_scale=0.52 if crouching else 1.0)
         player.update(dt)
         if player.footstep_sound:
             self.audio.play("footstep")
             if self.wm.controller:
                 self.wm.controller.emit_noise(
-                    player.x, player.y, 11.0 if player.running else 5.0,
+                    player.x, player.y,
+                    11.0 if player.running else (2.4 if crouching else 5.0),
                     1.1 if player.running else 0.45)
             player.footstep_sound = False
         # weapon switching 1/2/3
@@ -423,6 +428,9 @@ class Game:
         elif self.input.mouse_pressed and w.is_empty():
             if w.start_reload():
                 self.audio.play("reload")
+        # Weather masks hearing and visibility for this simulation step.
+        self.wm.controller.rain_amount = (
+            self.renderer.weather.rain_amount if self.renderer else 0.0)
         # zombies
         self.wm.controller.update(dt)
         # bullets
