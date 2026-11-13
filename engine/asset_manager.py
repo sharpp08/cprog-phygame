@@ -745,10 +745,11 @@ class AssetManager:
                        for k in range(3)],
         }
         frames["player"] = pl
-        for zt in ("regular", "fast", "tank", "crawler", "exploder"):
+        for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored"):
             # Asymmetric gait per type: fast stumbles, tank drags, crawler low, exploder lurches.
             gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6,
-                    "crawler": 0.7, "exploder": 1.0}.get(zt, 0.9)
+                    "crawler": 0.7, "exploder": 1.0,
+                    "screamer": 1.0, "armored": 0.62}.get(zt, 0.9)
             reach = 0.55 if zt != "crawler" else 0.35
             crouch = 0.4 if zt != "crawler" else 0.9
             z = {
