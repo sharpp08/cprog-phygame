@@ -6,6 +6,7 @@ Navigation`, audio and particles are injected so this module stays testable.
 """
 from __future__ import annotations
 
+import math
 import random
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
@@ -254,7 +255,7 @@ class ZombieController:
             z.search_timer = max(0.0, getattr(z, "search_timer", 0.0) - dt)
 
         # state selection
-        if d <= z.attack_range:
+        if d <= z.attack_range and can_see:
             z.state = "attack"
         elif can_see:
             z.state = "pursue"
@@ -271,7 +272,6 @@ class ZombieController:
             z.repath_timer -= dt
             if z.state == "pursue":
                 # Different approach lanes reduce enemy stacking.
-                import math
                 angle = math.atan2(z.y - p.y, z.x - p.x)
                 target = (p.x + math.cos(angle) * 0.75,
                           p.y + math.sin(angle) * 0.75)
@@ -342,7 +342,6 @@ class ZombieController:
 
     def _can_see_player(self, z, player, distance=None) -> bool:
         """Check range, stealth, weather and solid geometry before detection."""
-        import math
         distance = z.dist(player) if distance is None else distance
         flashlight = bool(getattr(player, "flashlight_on", True))
         crouching = bool(getattr(player, "crouching", False))
