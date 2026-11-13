@@ -789,6 +789,11 @@ class AssetManager:
                 for i in range(3):
                     pygame.draw.rect(s, shade(col, 0.3),
                                      (cx - 4 + i * 3, cy - 5, 2, 8))
+            elif ptype == "battery":
+                pygame.draw.rect(s, shade(col, -0.4), (cx - 8, cy - 10, 16, 20), border_radius=3)
+                pygame.draw.rect(s, col, (cx - 6, cy - 8, 12, 16), border_radius=2)
+                pygame.draw.rect(s, (45, 48, 38), (cx - 3, cy - 12, 6, 3))
+                pygame.draw.line(s, (235, 235, 180), (cx, cy - 5), (cx, cy + 5), 2)
             elif ptype == "medkit":
                 pygame.draw.rect(s, (240, 240, 235), (cx - 9, cy - 6, 18,
                                                         14),
