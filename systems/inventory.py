@@ -6,7 +6,7 @@ from entities.player import Player
 from entities.weapon import Weapon
 
 
-def apply_pickup(player: Player, pickup: Pickup, audio=None) -> None:
+def apply_pickup(player: Player, pickup: Pickup, audio=None, survival=None) -> None:
     ptype = pickup.ptype
     spec = pickup.spec
     if ptype.startswith("ammo"):
@@ -20,6 +20,8 @@ def apply_pickup(player: Player, pickup: Pickup, audio=None) -> None:
             target = Weapon(kind)
             player.add_weapon(target)
         target.add_reserve(pickup.value)
+    elif ptype == "battery" and survival is not None:
+        survival.add_battery_cells(pickup.value)
     elif ptype == "medkit":
         player.hp = min(player.max_hp, player.hp + pickup.value)
     elif ptype.startswith("weapon"):
