@@ -112,7 +112,7 @@ class ZombieController:
             best[1] + random.uniform(-0.5, 0.5)
         weights = [("regular", 0.43), ("fast", 0.20), ("tank", 0.09),
                    ("crawler", 0.09), ("exploder", 0.07),
-                   ("screamer", 0.06), ("armored", 0.06)]
+                   ("screamer", 0.05), ("armored", 0.06), ("stalker", 0.06)]
         r = random.random()
         acc = 0.0
         ztype = "regular"
@@ -259,7 +259,11 @@ class ZombieController:
             z.state = "attack"
         elif can_see:
             z.state = "pursue"
-        elif noise_target is not None or z.suspicion > 0.35:
+        elif noise_target is not None:
+            z.state = "investigating"
+        elif z.ztype == "stalker" and z.search_timer > 0:
+            z.state = "stalking"
+        elif z.suspicion > 0.35:
             z.state = "investigating"
         elif z.search_timer > 0 and getattr(z, "last_known", None):
             z.state = "searching"
@@ -268,7 +272,7 @@ class ZombieController:
         else:
             z.state = "idle"
 
-        if z.state in ("pursue", "investigating", "searching"):
+        if z.state in ("pursue", "investigating", "searching", "stalking"):
             z.repath_timer -= dt
             if z.state == "pursue":
                 # Different approach lanes reduce enemy stacking.
@@ -300,6 +304,8 @@ class ZombieController:
             spd_mult = 1.0
             if z.ztype == "crawler":
                 spd_mult = 0.85
+            elif z.state == "stalking":
+                spd_mult = 0.72
             z.apply_move(vx * spd_mult, vy * spd_mult, dt, self.grid)
         elif z.state == "attack":
             z.apply_move(0.0, 0.0, dt, self.grid)
