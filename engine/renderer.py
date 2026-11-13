@@ -606,6 +606,16 @@ class Renderer:
                               low_hp=(player is not None and
                                       player.hp < 30.0),
                               dt=dt, tension=tension, offset=off)
+        # Enforce flashlight-off darkness after rain and all cinematic
+        # post-processing. Earlier lighting was being lifted by later passes.
+        # The HUD is drawn by the caller after render_frame, so it stays clear.
+        if player is not None and not bool(
+                getattr(player, "flashlight_on", True)):
+            darkness = pygame.Surface((self.W, self.H))
+            darkness.fill((0, 0, 1))
+            darkness.set_alpha(252)
+            self.screen.blit(darkness, (0, 0))
+
         if self.show_debug:
             self._draw_debug()
 
