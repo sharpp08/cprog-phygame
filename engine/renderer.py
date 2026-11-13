@@ -356,6 +356,8 @@ class Renderer:
         base_y = cy - float(getattr(z, "bob", 0.0)) * cam.zoom
         sway_x = math.sin(getattr(z, "_sway_ph", 0.0)) * \
             getattr(z, "_sway", 0.0) * 1.2 * cam.zoom
+        if z.anim_state == "run":
+            sway_x += math.sin(getattr(z, "_gait", 0.0) * math.pi * 2.0) * 1.1 * cam.zoom
         if blend < 1.0 and z.prev_anim_state != z.anim_state:
             previous = zombie_frame(z.prev_anim_state,
                                     z.prev_frame_index).copy()
@@ -446,6 +448,8 @@ class Renderer:
         player_bob = float(getattr(p, "bob", 0.0)) * cam.zoom
         move_x, move_y = getattr(p, "_velocity", (0.0, 0.0))
         lean_x = max(-2.0, min(2.0, (move_x - move_y) * 0.012)) * cam.zoom
+        if p.anim_state == "run":
+            lean_x += math.sin(getattr(p, "_gait", 0.0) * math.pi * 2.0) * 1.0 * cam.zoom
         self.screen.blit(spr, (cx + lean_x - spr.get_width() / 2,
                                cy - player_bob - spr.get_height()
                                + 10 * cam.zoom))
