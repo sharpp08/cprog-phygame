@@ -58,6 +58,7 @@ class TestZombiePerception(unittest.TestCase):
         self.player.x, self.player.y = 30.0, 30.0
         zombie = Zombie(5.0, 5.0, "regular")
         zombie.spawning = False
+        zombie._repath_cd = 0.5
         controller.zombies = [zombie]
         controller.emit_noise(6.0, 5.0, 9.0, 2.0)
         controller._behaviour(zombie, 0.016, self.player)
