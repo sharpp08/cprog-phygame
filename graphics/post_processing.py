@@ -364,7 +364,33 @@ class PostPipeline:
                 np.clip(img, 0.0, 255.0, out=self._tmp)
                 px[...] = self._tmp
 
-        # 3) chromatic aberration: 1-2 px R/B split (kept restrained so
+        # 3) restrained native-resolution detail pass. Sharpening uses a
+        #    four-neighbour local average; it never scales or blurs the
+        #    source frame and is disabled on low quality.
+        detail = float(s.get("detail", 0.0))
+        ao = float(s.get("ao", 0.0))
+        if detail > 0.0 or ao > 0.0:
+            center = px.astype(np.int16)
+            local = (np.roll(center, 1, axis=0).astype(np.float32)
+                     + np.roll(center, -1, axis=0).astype(np.float32)
+                     + np.roll(center, 1, axis=1).astype(np.float32)
+                     + np.roll(center, -1, axis=1).astype(np.float32)) * 0.25
+            adjusted = center.astype(np.float32)
+            if detail > 0.0:
+                adjusted += (center - local) * detail
+            if ao > 0.0:
+                lum_c = (adjusted[..., 0] * 0.299
+                         + adjusted[..., 1] * 0.587
+                         + adjusted[..., 2] * 0.114)
+                lum_n = (local[..., 0] * 0.299
+                         + local[..., 1] * 0.587
+                         + local[..., 2] * 0.114)
+                cavity = np.clip((lum_n - lum_c) * 1.5, 0.0, 30.0) * ao
+                adjusted *= (1.0 - cavity[..., None] / 255.0)
+            np.clip(adjusted, 0.0, 255.0, out=self._tmp)
+            px[...] = self._tmp
+
+        # 4) chromatic aberration: 1-2 px R/B split (kept restrained so
         #    the image stays readable)
         off_r = int(math.ceil(min(2.0, self._ca_cur * chroma * 1.6)))
         if off_r and chroma > 0:
