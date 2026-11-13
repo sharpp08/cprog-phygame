@@ -384,19 +384,36 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
-        flist = self.assets.player_frames(p.anim_state)
-        spr = self._scale_sprite(flist[p.frame_index % len(flist)])
-        if p.facing < 0:
-            key = id(spr)
-            flipped = self._flip_cache.get(key)
-            if flipped is None:
-                flipped = pygame.transform.flip(spr, True, False)
-                self._flip_cache[key] = flipped
-            spr = flipped
+
+        def frame_for(state, frame_index):
+            frames = self.assets.player_frames(state)
+            frame = self._scale_sprite(frames[frame_index % len(frames)])
+            if p.facing < 0:
+                key = id(frame)
+                flipped = self._flip_cache.get(key)
+                if flipped is None:
+                    flipped = pygame.transform.flip(frame, True, False)
+                    self._flip_cache[key] = flipped
+                frame = flipped
+            return frame
+
+        blend = max(0.0, min(1.0, float(getattr(p, "anim_blend", 1.0))))
+        if blend < 1.0 and p.prev_anim_state != p.anim_state:
+            previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
+            previous.set_alpha(int(255 * (1.0 - blend)))
+            self.screen.blit(previous, (cx - previous.get_width() / 2,
+                                        cy - previous.get_height()
+                                        + 10 * cam.zoom))
+
+        spr = frame_for(p.anim_state, p.frame_index)
+        if blend < 1.0:
+            spr = spr.copy()
+            spr.set_alpha(int(255 * blend))
         # flicker while invulnerable
         if p.invuln > 0 and int(p.invuln * 20) % 2 == 0:
             spr = spr.copy()
-            spr.set_alpha(120)
+            spr.set_alpha(120 if blend >= 1.0 else
+                          int(120 * blend))
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + 10 * cam.zoom))
         if p.dmg_flash > 0:
