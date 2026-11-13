@@ -27,6 +27,7 @@ class Player(Entity):
         self.speed = config.PLAYER_WALK_SPEED
         self.moving = False
         self.running = False
+        self.crouching = False
         # Velocity is eased independently on each axis. Animation is driven by
         # measured post-collision displacement, never requested input, which
         # prevents feet cycling while pressed against geometry.
@@ -84,7 +85,7 @@ class Player(Entity):
         # Facing is eased in update() so aim changes do not snap the sprite.
 
     def apply_movement(self, mv: Tuple[float, float], running: bool,
-                       dt: float, grid) -> None:
+                       dt: float, grid, speed_scale: float = 1.0) -> None:
         """Accelerated movement; gait follows measured displacement.
 
         Velocity is eased toward the requested input so starting, stopping
@@ -95,7 +96,7 @@ class Player(Entity):
         dt = max(0.0, min(float(dt), 0.1))
         requested = abs(mv[0]) + abs(mv[1]) > 1e-6
         target_speed = (config.PLAYER_RUN_SPEED if running
-                        else config.PLAYER_WALK_SPEED)
+                        else config.PLAYER_WALK_SPEED) * max(0.2, min(1.0, speed_scale))
         if requested:
             mag = math.hypot(mv[0], mv[1]) or 1.0
             target_vx = mv[0] / mag * target_speed
