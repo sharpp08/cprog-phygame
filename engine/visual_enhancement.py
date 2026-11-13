@@ -29,6 +29,15 @@ class VisualEnhancement:
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog_full = pygame.Surface((self.width, self.height),
                                         pygame.SRCALPHA)
+        # Cheap selective blur: downsample the scene once, then reveal it only
+        # outside the player's immediate visibility bubble.
+        self._bw = max(1, self.width // 8)
+        self._bh = max(1, self.height // 8)
+        self._blur_small = pygame.Surface((self._bw, self._bh))
+        self._blur_full = pygame.Surface((self.width, self.height),
+                                         pygame.SRCALPHA)
+        self._blur_mask = pygame.Surface((self._bw, self._bh),
+                                         pygame.SRCALPHA)
         self._vignette = self._build_vignette()
         self._grain = self._build_grain()
         self._radials: dict[int, pygame.Surface] = {}
@@ -84,6 +93,35 @@ class VisualEnhancement:
         self._radials[radius] = radial
         return radial
 
+    def _apply_dark_edge_blur(self, screen: pygame.Surface, cam,
+                              player, quality: int) -> None:
+        """Softly defocus only distant, unlit scenery; keep the player area sharp."""
+        if player is None:
+            return
+        # An 1/8-resolution copy gives a restrained optical defocus at low cost.
+        pygame.transform.smoothscale(
+            screen, (self._bw, self._bh), self._blur_small)
+        pygame.transform.smoothscale(
+            self._blur_small, (self.width, self.height), self._blur_full)
+
+        sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
+        cx = int(sx * self._bw / self.width)
+        cy = int(sy * self._bh / self.height)
+        inner = max(5, int(78 * self._bw / self.width))
+        outer = max(inner + 4, int(190 * self._bw / self.width))
+        max_alpha = (38, 48, 56, 62)[max(0, min(3, int(quality)))]
+
+        self._blur_mask.fill((255, 255, 255, max_alpha))
+        # Nested circles create a gradual alpha ramp rather than a hard blur edge.
+        for step in range(12, -1, -1):
+            radius = inner + int((outer - inner) * step / 12)
+            alpha = int(max_alpha * (1.0 - step / 12.0))
+            pygame.draw.circle(self._blur_mask, (255, 255, 255, alpha),
+                               (cx, cy), radius)
+        self._blur_full.blit(
+            self._blur_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        screen.blit(self._blur_full, (0, 0))
+
     def apply_lighting(self, screen: pygame.Surface, cam, world,
                        player, quality: int,
                        battery: float = 100.0, fog_beam: bool = False,
@@ -105,6 +143,9 @@ class VisualEnhancement:
         quality_bias = (-2, 0, 2, 2)[max(0, min(3, int(quality)))]
         alpha = max(0, min(252, int(218 + darkness * 32 + quality_bias)))
         self._shade.fill((1, 2, 6, alpha))
+        # The distant, unseen world loses detail gradually instead of ending
+        # at a harsh black cutoff. The immediate player area stays crisp.
+        self._apply_dark_edge_blur(screen, cam, player, quality)
         zoom = max(0.4, float(cam.zoom))
         lights = []
         for i, (wx, wy, radius, intensity) in enumerate(
@@ -115,6 +156,13 @@ class VisualEnhancement:
             lights.append((sx / 4.0, sy / 4.0,
                            radius * 32.0 * zoom / 4.0,
                            max(0.0, min(1.0, float(intensity) * breathe))))
+        if player is not None:
+            # Weak local ambient visibility remains around the survivor even
+            # with the flashlight switched off; it never lights the wider map.
+            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
+            ambient_radius = 2.8 * 32.0 * zoom / 4.0
+            lights.append((psx / 4.0, psy / 4.0,
+                           ambient_radius, 0.34))
         if player is not None and getattr(player, "flashlight_on", True):
             # smooth on/off transition
             target = 1.0
