@@ -141,13 +141,14 @@ class ZombieController:
             self._groan_timer = random.uniform(2.0, 4.0)
             if self._audio:
                 audible = min(
-                    (z for z in self.zombies if z.alive and not z.spawning),
+                    (z for z in self.zombies
+                     if z.alive and not z.spawning and z.ztype != "stalker"),
                     key=lambda z: z.dist(p), default=None)
                 if audible is not None and hasattr(self._audio, "play_spatial"):
                     relative_x = (audible.x - p.x) - (audible.y - p.y)
                     self._audio.play_spatial(
                         "zombie_groan", relative_x, audible.dist(p), 24.0)
-                else:
+                elif audible is not None:
                     self._audio.play("zombie_groan")
         for z in self.zombies:
             # Still emerging: let the spawn cinematics run, no AI yet.
