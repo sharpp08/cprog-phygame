@@ -83,6 +83,7 @@ class Game:
         self._prev_hp = 0.0
         self._heartbeat_timer = 0.0
         self._breath_timer = 0.0
+        self._last_nearby_threats = 0
         self._last = pygame.time.get_ticks()
 
     # ------------------------------------------------------------------
@@ -144,6 +145,7 @@ class Game:
         self.renderer._prep_fog()
         self.hud = HUD(w, h)
         self._prev_hp = self.player.hp
+        self._last_nearby_threats = 0
         self.state = "playing"
         self.save_manager.delete()
         self.audio.play_music("ambient")
@@ -447,6 +449,15 @@ class Game:
             self.renderer.weather.rain_amount if self.renderer else 0.0)
         # zombies
         self.wm.controller.update(dt)
+        # Reward a clean escape with a short recovery window.
+        nearby_threats = sum(
+            1 for z in self.wm.controller.zombies
+            if z.alive and not getattr(z, "spawning", False)
+            and z.dist(player) < 9.0)
+        if (self.horror is not None and self._last_nearby_threats >= 2
+                and nearby_threats == 0):
+            self.horror.begin_recovery(14.0)
+        self._last_nearby_threats = nearby_threats
         # bullets
         killed = self.combat.update(dt, self.wm.controller.zombies,
                                     self.particles, self.audio)
