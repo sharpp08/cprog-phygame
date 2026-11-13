@@ -41,6 +41,8 @@ uniform float u_grain;
 uniform float u_flash_red;
 uniform float u_flash_white;
 uniform float u_bloom_strength;
+uniform float u_ao;
+uniform float u_detail;
 varying vec2 v_uv;
 
 float hash(vec2 p) {
@@ -85,7 +87,22 @@ void main() {
     } else {
         c = texture2D(t_scene, uv).rgb;
     }
-    // 3) cinematic grade + low-HP desaturation
+    // 3) native-resolution detail and subtle contact shading. The source
+    //    image remains untouched: only a small local contrast correction
+    //    is applied, never a downscaled blur of characters or the world.
+    vec2 texel = 1.0 / u_res;
+    vec3 n0 = texture2D(t_scene, uv + vec2(texel.x, 0.0)).rgb;
+    vec3 n1 = texture2D(t_scene, uv - vec2(texel.x, 0.0)).rgb;
+    vec3 n2 = texture2D(t_scene, uv + vec2(0.0, texel.y)).rgb;
+    vec3 n3 = texture2D(t_scene, uv - vec2(0.0, texel.y)).rgb;
+    vec3 local_avg = (n0 + n1 + n2 + n3) * 0.25;
+    c += (c - local_avg) * u_detail;
+    float center_luma = dot(c, vec3(0.299, 0.587, 0.114));
+    float neighbor_luma = dot(local_avg, vec3(0.299, 0.587, 0.114));
+    float cavity = clamp((neighbor_luma - center_luma) * 1.5, 0.0, 0.12);
+    c *= 1.0 - cavity * u_ao;
+
+    // 4) cinematic grade + low-HP desaturation
     c = mix(c, grade(c), u_grade);
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c = mix(c, vec3(lum), u_lowhp * 0.35);
