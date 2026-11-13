@@ -97,16 +97,14 @@ class VisualEnhancement:
         ``extra_lights`` are (sx, sy, world_radius, strength) tuples in
         screen space (used for close-enemy glow).
         """
-        # Strong, quality-independent nighttime darkness.  The darkness
-        # layer is cleared only by real light sources below, so the player
-        # must use the flashlight to explore instead of relying on ambient
-        # screen brightness.  Keep a small quality bias without weakening
-        # the horror lighting on Low settings.
+        # Near-total darkness is the baseline. Real dynamic lights below
+        # subtract from this darkness mask, revealing only illuminated areas.
+        # Quality presets must never make unlit terrain readable again.
         darkness = max(0.0, min(1.0, float(
-            getattr(config, "NIGHT_DARKNESS", 0.78))))
-        quality_bias = (-8, 0, 6, 6)[max(0, min(3, int(quality)))]
-        alpha = max(0, min(220, int(112 + darkness * 82 + quality_bias)))
-        self._shade.fill((3, 6, 14, alpha))
+            getattr(config, "NIGHT_DARKNESS", 0.98))))
+        quality_bias = (-2, 0, 2, 2)[max(0, min(3, int(quality)))]
+        alpha = max(0, min(252, int(218 + darkness * 32 + quality_bias)))
+        self._shade.fill((1, 2, 6, alpha))
         zoom = max(0.4, float(cam.zoom))
         lights = []
         for i, (wx, wy, radius, intensity) in enumerate(
@@ -149,7 +147,7 @@ class VisualEnhancement:
                 base_s = min(1.0, base_s + 0.15)
             lights.append((sx / 4.0, sy / 4.0,
                            base_r * max(0.0, lvl), base_s * max(0.0, lvl)))
-            if quality >= 1 and lvl > 0.03:
+            if lvl > 0.03:
                 aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
                 dx = (aim_x - aim_y) * config.SCALE_X
                 dy = (aim_x + aim_y) * config.SCALE_Y
@@ -162,8 +160,8 @@ class VisualEnhancement:
                 self._beam.fill((0, 0, 0, 0))
                 # Stronger center and softer edge reveal terrain without
                 # washing out the whole scene.
-                b0 = int(76 * lvl * (1.25 if fog_beam else 1.0))
-                b1 = int(38 * lvl * (1.25 if fog_beam else 1.0))
+                b0 = int(132 * lvl * (1.25 if fog_beam else 1.0))
+                b1 = int(72 * lvl * (1.25 if fog_beam else 1.0))
                 pygame.draw.polygon(
                     self._beam, (0, 0, 0, b0),
                     [(int(ox), int(oy)), (int(ex + px), int(ey + py)),
@@ -187,7 +185,7 @@ class VisualEnhancement:
             radial.set_alpha(int(255 * strength))
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
                              special_flags=pygame.BLEND_RGBA_SUB)
-        if player is not None and getattr(player, "flashlight_on", True) and quality >= 1:
+        if player is not None and getattr(player, "flashlight_on", True):
             self._shade.blit(self._beam, (0, 0),
                              special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),

@@ -518,11 +518,12 @@ class Renderer:
         # Keep a stable integration point for all quality presets and avoid
         # rebuilding full-resolution NumPy arrays on every frame.
         fog_beam = self.weather.rain_amount > 0.2
+        # Zombies receive no artificial glow: they stay hidden until the
+        # flashlight or a real environmental light source illuminates them.
         self.visual.apply_lighting(
             self.screen, self.cam, world, player, self.quality,
             battery=self._battery, fog_beam=fog_beam,
-            time_value=self.time,
-            extra_lights=self._enemy_lights(player, zombies))
+            time_value=self.time)
 
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,
