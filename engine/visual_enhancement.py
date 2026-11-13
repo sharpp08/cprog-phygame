@@ -160,9 +160,10 @@ class VisualEnhancement:
             # Weak local ambient visibility remains around the survivor even
             # with the flashlight switched off; it never lights the wider map.
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
-            ambient_radius = 2.8 * 32.0 * zoom / 4.0
+            # Slightly wider and brighter local reveal while keeping the forest dark.
+            ambient_radius = 3.5 * 32.0 * zoom / 4.0
             lights.append((psx / 4.0, psy / 4.0,
-                           ambient_radius, 0.34))
+                           ambient_radius, 0.42))
         if player is not None and getattr(player, "flashlight_on", True):
             # smooth on/off transition
             target = 1.0
