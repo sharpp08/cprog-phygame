@@ -47,6 +47,10 @@ class TestQualitySettings(unittest.TestCase):
         self.assertGreater(ultra["bloom"], 0.0)
         self.assertGreater(ultra["chroma"], 0.0)
         self.assertGreater(ultra["distort"], 0.0)
+        self.assertGreater(ultra["detail"], 0.0)
+        self.assertGreater(ultra["ao"], 0.0)
+        self.assertGreaterEqual(quality_settings.specs_for(1)["detail"],
+                                quality_settings.specs_for(0)["detail"])
         # out-of-range quality indexes never raise
         self.assertEqual(quality_settings.specs_for(9),
                          quality_settings.specs_for(3))
