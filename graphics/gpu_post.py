@@ -67,11 +67,18 @@ class GpuPostExecutor:
         if p_bloom is None or p_comp is None:
             raise RuntimeError("required GLSL programs missing")
 
-        # fullscreen triangle strip (same layout for every program)
+        # fullscreen triangle strip (shared vertex buffer)
         buf = ctx.buffer(np.array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0,
                                     1.0, 1.0], dtype="float32").tobytes())
-        self.vao = ctx.vertex_array(p_comp, [(buf, "2f", "a_pos")],
-                                     mode=moderngl.TRIANGLE_STRIP)
+        # Each program needs its own VAO: a VAO is bound to a single
+        # program at creation time, and calling vao.render() switches to
+        # that program.  Reusing one VAO for both passes would render
+        # final_composite into the bloom FBO, which samples the
+        # (uninitialised) t_glow texture -> feedback loop of garbage.
+        self.vao_bloom = ctx.vertex_array(p_bloom, [(buf, "2f", "a_pos")],
+                                          mode=moderngl.TRIANGLE_STRIP)
+        self.vao_comp = ctx.vertex_array(p_comp, [(buf, "2f", "a_pos")],
+                                         mode=moderngl.TRIANGLE_STRIP)
 
         res = quality_settings.fx_downscale(quality)
         self.gw = max(32, self.W // res)
@@ -81,6 +88,10 @@ class GpuPostExecutor:
         self.scene_tex = ctx.texture((self.W, self.H), 4)
         self.glow_tex = ctx.texture((self.gw, self.gh), 4)
         self.out_tex = ctx.texture((self.W, self.H), 4)
+        # Zero-fill the glow buffer so that when bloom strength is 0 the
+        # composite pass reads a clean (0,0,0,0) glow instead of garbage
+        # from an uninitialised texture.
+        self.glow_tex.write(b"\x00" * self.gw * self.gh * 4)
         self.fbo_glow = ctx.framebuffer(color_attachments=self.glow_tex)
         self.fbo_out = ctx.framebuffer(color_attachments=self.out_tex)
 
@@ -141,20 +152,28 @@ class GpuPostExecutor:
         # 1) upload the native-res scene (the base image is never softened)
         self.scene_tex.write(pygame.image.tobytes(scene, "RGBA"))
 
+        # ModernGL 5.x: texture uniforms are int (texture unit numbers).
+        # Bind textures to fixed units via .use(unit), then set uniforms
+        # to those unit numbers.
+        self.scene_tex.use(0)   # bind to unit 0
+        self.glow_tex.use(1)    # bind to unit 1
+        SCENE_UNIT = 0
+        GLOW_UNIT = 1
+
         # 2) bloom glow: the only downscaled buffer in the pipeline
         if bloom > 0:
-            self.p_bloom["t_scene"] = self.scene_tex
+            self.p_bloom["t_scene"] = SCENE_UNIT
             self.p_bloom["u_res_low"] = (float(self.gw), float(self.gh))
             self.p_bloom["u_threshold"] = (
                 190.0 - 70.0 * min(1.0, bloom * 1.2)) / 255.0
             self.fbo_glow.use()
-            self.ctx.viewport(0, 0, self.gw, self.gh)
-            self.vao.render()
+            self.ctx.viewport = (0, 0, self.gw, self.gh)
+            self.vao_bloom.render()
 
         # 3) fused native-resolution composite
         strength = min(1.0, bloom * 1.3) * 40.0 / 255.0
-        self.p_comp["t_scene"] = self.scene_tex
-        self.p_comp["t_glow"] = self.glow_tex
+        self.p_comp["t_scene"] = SCENE_UNIT
+        self.p_comp["t_glow"] = GLOW_UNIT
         self.p_comp["u_res"] = (float(self.W), float(self.H))
         self.p_comp["u_grade"] = grade
         self.p_comp["u_lowhp"] = min(1.0, state._desat_cur)
@@ -170,8 +189,8 @@ class GpuPostExecutor:
         self.p_comp["u_flash_white"] = state._flash_white
         self.p_comp["u_bloom_strength"] = strength
         self.fbo_out.use()
-        self.ctx.viewport(0, 0, self.W, self.H)
-        self.vao.render()
+        self.ctx.viewport = (0, 0, self.W, self.H)
+        self.vao_comp.render()
 
         # 4) single native-res readback -> pygame surface -> screen
         data = self.out_tex.read()

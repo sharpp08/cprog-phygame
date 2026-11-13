@@ -161,8 +161,6 @@ class PostPipeline:
         # reusable native-res buffers
         self._px = np.empty((self.H, self.W, 3), dtype=np.uint8)   # work
         self._gtmp = np.empty((self.H, self.W, 3), dtype=np.uint8)
-        self._i16 = np.empty((self.H, self.W, 3), dtype=np.int16)  # grain
-        self._i8 = np.empty((self.H, self.W, 3), dtype=np.int8)   # grain
         self._img = np.zeros((self.H, self.W, 3), dtype=np.float32)
         self._tmp = np.empty((self.H, self.W, 3), dtype=np.float32)
         # keep the GPU executor's buffers in sync
@@ -331,9 +329,13 @@ class PostPipeline:
             glow = pygame.surfarray.array3d(self._bloom_full) \
                    .transpose(1, 0, 2)
             s8 = int(round(40.0 * min(1.0, bloom * 1.3)))
-            np.multiply(glow, s8, out=self._gtmp, casting="unsafe")
-            self._gtmp //= 255
-            np.add(px, self._gtmp, out=px, casting="unsafe")
+            # int32 multiply-accumulate avoids uint8 overflow
+            p32 = px.astype(np.int32)
+            b32 = (glow.astype(np.int32) * s8) // 255
+            np.clip(b32, 0, 255, out=b32)
+            p32 += b32
+            np.clip(p32, 0, 255, out=p32)
+            px[...] = p32
 
         # 2) cinematic color grade (per-channel LUT, full resolution;
         #    the lookup runs on the untouched uint8 source)
@@ -342,10 +344,15 @@ class PostPipeline:
             a8 = 255 - g8
             for ch in range(3):
                 self._gtmp[..., ch] = self._lut[src[..., ch], ch]
-            np.multiply(px, a8, out=px, casting="unsafe")
-            np.multiply(self._gtmp, g8, out=self._gtmp, casting="unsafe")
-            np.add(px, self._gtmp, out=px, casting="unsafe")
-            px //= 255
+            # int32 to avoid overflow: 255 * 255 = 65025 > int16 max 32767
+            p32 = px.astype(np.int32)
+            l32 = self._gtmp.astype(np.int32)
+            p32 *= a8
+            l32 *= g8
+            p32 += l32
+            p32 //= 255
+            np.clip(p32, 0, 255, out=p32)
+            px[...] = p32
             # extra desaturation driven by the low-health heartbeat
             ds = self._desat_cur * 0.35
             if ds > 0.01:
@@ -390,11 +397,14 @@ class PostPipeline:
             vi += self._vignette_extra * 0.6 + self._vignette_pulse * 0.5
             vi8 = int(min(1.25, vi) * 255.0)
             if vi8:
-                np.multiply(self._vig_u8, vi8, out=self._v2d)
-                self._v2d //= 255
-                np.subtract(255, self._v2d, out=self._v2d)
-                np.multiply(px, self._v2d[..., None], out=px,
-                            casting="unsafe")
+                # int32 to avoid overflow: 255 * 255 = 65025 > int16 max
+                p32 = px.astype(np.int32)
+                v32 = (self._vig_u8.astype(np.int32) * vi8) // 255
+                np.subtract(255, v32, out=v32)
+                p32 *= v32[..., None]
+                p32 //= 255
+                np.clip(p32, 0, 255, out=p32)
+                px[...] = p32
 
         # 6) film grain: cached native-res tile, integer multiply-add
         if grain > 0:
@@ -402,30 +412,36 @@ class PostPipeline:
             a8 = int(min(255.0, ga * 0.5 / 127.5 * 255.0))
             if a8:
                 dev = self._grain_dev[self._grain_tile_i]
-                np.multiply(dev, a8, out=self._i16)
-                self._i16 //= 255
-                np.clip(self._i16, -128, 127, out=self._i8)
-                np.add(px, self._i8, out=px, casting="unsafe")
+                # int32 to avoid overflow: dev range is -128..127, *255
+                d32 = dev.astype(np.int32)
+                d32 *= a8
+                d32 //= 255
+                np.clip(d32, -128, 127, out=d32)
+                p32 = px.astype(np.int32)
+                p32 += d32
+                np.clip(p32, 0, 255, out=p32)
+                px[...] = p32
 
         # 7) damage flash / lightning flash
         if self._flash_red > 0.01:
             r8 = int(210.0 * self._flash_red)
             f8 = int(round((1.0 - 0.45 * self._flash_red) * 255.0))
-            np.add(px[..., 0], r8, out=px[..., 0], casting="unsafe")
-            np.multiply(px[..., 1], f8, out=self._v2d)
-            self._v2d //= 255
-            px[..., 1] = self._v2d
-            np.multiply(px[..., 2], f8, out=self._v2d)
-            self._v2d //= 255
-            px[..., 2] = self._v2d
+            p32 = px.astype(np.int32)
+            p32[..., 0] += r8
+            p32[..., 1] *= f8
+            p32[..., 1] //= 255
+            p32[..., 2] *= f8
+            p32[..., 2] //= 255
+            np.clip(p32, 0, 255, out=p32)
+            px[...] = p32
         if self._flash_white > 0.01:
             fw = self._flash_white
-            np.add(px[..., 0], int(0.75 * 160.0 * fw), out=px[..., 0],
-                   casting="unsafe")
-            np.add(px[..., 1], int(0.85 * 160.0 * fw), out=px[..., 1],
-                   casting="unsafe")
-            np.add(px[..., 2], int(160.0 * fw), out=px[..., 2],
-                   casting="unsafe")
+            p32 = px.astype(np.int32)
+            p32[..., 0] += int(0.75 * 160.0 * fw)
+            p32[..., 1] += int(0.85 * 160.0 * fw)
+            p32[..., 2] += int(160.0 * fw)
+            np.clip(p32, 0, 255, out=p32)
+            px[...] = p32
 
         # 8) present the NATIVE-RESOLUTION composition
         pygame.surfarray.blit_array(self._out, px.transpose(1, 0, 2))
