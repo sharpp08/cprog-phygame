@@ -37,7 +37,8 @@ class ZombieForDirector:
     def __init__(self, x=30.0, y=24.0):
         self.x, self.y = x, y
     def dist(self, player):
-        return ((self.x - player.x) ** 2 + (self.y - player.y) ** 2) ** 0.5
+        px, py = (player.x, player.y) if hasattr(player, "x") else player
+        return ((self.x - px) ** 2 + (self.y - py) ** 2) ** 0.5
 
 
 class GridForHorde:
