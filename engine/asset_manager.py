@@ -550,30 +550,50 @@ class AssetManager:
         # Gait phase drives the limb swing.  For a 4-frame cycle the phase
         # is the cycle position (0, 0.25, 0.5, 0.75) and leg alternates.
         amp = 0.5 + 0.5 * abs(gait)
-        swing = math.sin(phase * math.pi * 2.0) * amp
-        legA_f = swing * 9.0      # front foot offset (px)
-        legB_f = -swing * 9.0     # back foot (opposite phase)
-        # Body bob: highest mid-stride, lowest at foot contact.
-        bob = (abs(swing) if pose in ("walk", "run") else 0.0)
-        bob_px = bob * (3.0 if pose == "walk" else 5.0)
+        cycle = phase * math.pi * 2.0
+        swing = math.sin(cycle) * amp
+        stride = 12.0 if pose == "run" else 8.5
+        legA_f = swing * stride
+        legB_f = -swing * stride
+        # Opposite foot lift creates a clear airborne recovery phase instead
+        # of two legs sliding along the ground.
+        lift = 7.0 if pose == "run" else 3.0
+        lift_a = max(0.0, math.cos(cycle)) * lift
+        lift_b = max(0.0, -math.cos(cycle)) * lift
+        bob = abs(math.sin(cycle * 2.0)) if pose in ("walk", "run") else 0.0
+        bob_px = bob * (2.4 if pose == "walk" else 4.2)
         hip_y = gy - 18 * sc - bob_px * 0.5
         shoulder_y = gy - 34 * sc - bob_px
         head_cy = gy - 40 * sc - bob_px
         lean = (6 * reach if pose in ("walk", "run", "idle") else 0.0)
-        # Run leans forward more; zombie types hunch.
-        lean += 4.0 if pose == "run" else 0.0
+        # A forward pitch and compressed torso make sprinting read distinctly.
+        lean += 7.0 if pose == "run" else (2.5 if pose == "walk" else 0.0)
 
         hx, hy = cx - lean * 0.4, hip_y
-        # Foot positions: gait offset + pose base
-        fA_x = cx - (7 if pose == "walk" else 9) * sc + (legA_f if pose in ("walk", "run") else 0)
-        fB_x = cx + (7 if pose == "walk" else 9) * sc + (legB_f if pose in ("walk", "run") else 0)
-        fA = (fA_x, gy)
-        fB = (fB_x, gy - 2)
-        # Arms swing opposite to the same-side leg.
-        armA = -swing * 8.0 * (0.8 if pose == "walk" else 1.0)
-        armB = swing * 8.0 * (0.8 if pose == "walk" else 1.0)
-        pygame.draw.line(s, shade(bot, -0.15), (hx - 2, hy), fA, int(5 * sc))
-        pygame.draw.line(s, shade(bot, -0.35), (hx + 2, hy), fB, int(5 * sc))
+        fA_x = cx - 7 * sc + (legA_f if pose in ("walk", "run") else 0.0)
+        fB_x = cx + 7 * sc + (legB_f if pose in ("walk", "run") else 0.0)
+        fA = (fA_x, gy - lift_a)
+        fB = (fB_x, gy - lift_b)
+        knee_a = (cx - 4 * sc + legA_f * 0.52,
+                  hip_y + 9 * sc - lift_a * 0.38)
+        knee_b = (cx + 4 * sc + legB_f * 0.52,
+                  hip_y + 9 * sc - lift_b * 0.38)
+        # Draw articulated upper/lower legs and visible planted/raised boots.
+        pygame.draw.line(s, shade(bot, -0.25), (hx - 2, hy), knee_a,
+                         max(3, int(5 * sc)))
+        pygame.draw.line(s, shade(bot, -0.12), knee_a, fA,
+                         max(3, int(4 * sc)))
+        pygame.draw.line(s, shade(bot, -0.35), (hx + 2, hy), knee_b,
+                         max(3, int(5 * sc)))
+        pygame.draw.line(s, shade(bot, -0.18), knee_b, fB,
+                         max(3, int(4 * sc)))
+        boot = (35, 32, 29) if kind == "player" else (42, 38, 31)
+        pygame.draw.line(s, boot, (fA[0] - 2, fA[1]), (fA[0] + 4, fA[1]), 3)
+        pygame.draw.line(s, boot, (fB[0] - 2, fB[1]), (fB[0] + 4, fB[1]), 3)
+        # Arms counter-swing against the legs. The free arm pumps while the
+        # weapon arm remains braced, and infected reach forward as they run.
+        armA = -swing * (11.0 if pose == "run" else 7.0)
+        armB = swing * (11.0 if pose == "run" else 7.0)
         ty = shoulder_y + (4 if crouch else 0)
         pygame.draw.polygon(s, shade(top, -0.25),
                             [(hx - 8 * sc, ty + 2), (hx + 8 * sc, ty + 2),
@@ -596,7 +616,18 @@ class AssetManager:
         pygame.draw.circle(s, e_col, (int(hx + 3), int(head_cy)), 1)
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
-        ax, ay = hx + 5 * sc + lean * 0.3, arm_y + armA
+        # Left arm is independently articulated so the run cycle has a
+        # convincing counter-pump instead of a static one-armed silhouette.
+        left_shoulder = (hx - 5 * sc, arm_y)
+        left_elbow = (hx - 7 * sc + armB * 0.55,
+                      arm_y + 5 * sc + armB * 0.18)
+        left_hand = (hx - 8 * sc + armB,
+                     arm_y + 10 * sc + armB * 0.32)
+        arm_col = shade(top, -0.18)
+        pygame.draw.line(s, arm_col, left_shoulder, left_elbow,
+                         max(3, int(4 * sc)))
+        pygame.draw.line(s, shade(skin, -0.15), left_elbow, left_hand,
+                         max(2, int(3 * sc)))
         guncol = p["gun"]
         if pose == "shoot":
             pygame.draw.line(s, shade(top, -0.1),
@@ -739,14 +770,15 @@ class AssetManager:
         pl = {
             "idle": [self._humanoid("player", "idle", phase=k / 4.0)
                      for k in range(4)],
-            "walk": [self._humanoid("player", "walk", phase=k / 4.0)
-                     for k in range(4)],
+            "walk": [self._humanoid("player", "walk", phase=k / 8.0,
+                                     gait=0.95)
+                     for k in range(8)],
             "crouch": [self._humanoid("player", "walk", crouch=0.8,
-                                      phase=k / 4.0, gait=0.55)
-                       for k in range(4)],
-            "run": [self._humanoid("player", "run", phase=k / 4.0,
-                                   gait=1.4)
-                    for k in range(4)],
+                                      phase=k / 8.0, gait=0.55)
+                       for k in range(8)],
+            "run": [self._humanoid("player", "run", phase=k / 8.0,
+                                   gait=1.55)
+                    for k in range(8)],
             "shoot": [self._humanoid("player", "shoot", flash=True)],
             "reload": [self._humanoid("player", "reload", phase=k / 4.0)
                        for k in range(4)],
@@ -769,8 +801,17 @@ class AssetManager:
                                          phase=k / 4.0)
                          for k in range(4)],
                 "walk": [self._humanoid(zt, "walk", reach=reach, crouch=crouch,
-                                        phase=k / 4.0, gait=gait)
-                         for k in range(4)],
+                                        phase=k / 8.0, gait=gait)
+                         for k in range(8)],
+                "run": [self._humanoid(
+                    zt, "run", reach=min(1.0, reach + 0.12),
+                    crouch=(0.92 if zt == "crawler" else crouch),
+                    phase=k / 8.0,
+                    gait={"regular": 1.0, "fast": 1.55, "tank": 0.68,
+                          "crawler": 0.48, "exploder": 0.95,
+                          "screamer": 1.08, "armored": 0.72,
+                          "stalker": 1.15}.get(zt, 1.0))
+                    for k in range(8)],
                 "attack": [self._humanoid(zt, "attack", reach=1.0, crouch=min(0.5, crouch),
                                           phase=k / 4.0)
                            for k in range(4)],
