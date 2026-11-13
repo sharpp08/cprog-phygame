@@ -162,6 +162,11 @@ ZOMBIE_TYPES = {
         "range": 1.1, "color": (85, 105, 125), "score": 38,
         "radius": 0.55, "detect": 10.5, "label": "Armored Zombie",
     },
+    "stalker": {
+        "hp": 52, "speed": 2.0, "damage": 13, "attack_cd": 0.85,
+        "range": 0.95, "color": (72, 88, 72), "score": 34,
+        "radius": 0.38, "detect": 13.0, "label": "Stalker",
+    },
 }
 ZOMBIE_START_COUNT = 12
 ZOMBIE_MAX_ACTIVE = 42
