@@ -515,6 +515,9 @@ class AssetManager:
         "armored": dict(skin=(115, 135, 150), top=(68, 88, 110),
                     bot=(48, 58, 72), gun=(48, 55, 66),
                     hair=(60, 72, 84), size=1.22),
+        "stalker": dict(skin=(92, 112, 86), top=(54, 68, 52),
+                    bot=(42, 48, 40), gun=(45, 48, 40),
+                    hair=(52, 62, 46), size=0.96),
     }
 
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
@@ -754,11 +757,11 @@ class AssetManager:
                        for k in range(3)],
         }
         frames["player"] = pl
-        for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored"):
+        for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Asymmetric gait per type: fast stumbles, tank drags, crawler low, exploder lurches.
             gait = {"regular": 0.9, "fast": 1.1, "tank": 0.6,
                     "crawler": 0.7, "exploder": 1.0,
-                    "screamer": 1.0, "armored": 0.62}.get(zt, 0.9)
+                    "screamer": 1.0, "armored": 0.62, "stalker": 1.05}.get(zt, 0.9)
             reach = 0.55 if zt != "crawler" else 0.35
             crouch = 0.4 if zt != "crawler" else 0.9
             z = {
