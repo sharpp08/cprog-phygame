@@ -145,7 +145,12 @@ class VisualEnhancement:
         darkness = max(0.0, min(1.0, float(
             getattr(config, "NIGHT_DARKNESS", 0.98))))
         quality_bias = (-2, 0, 2, 2)[max(0, min(3, int(quality)))]
-        alpha = max(0, min(252, int(224 + darkness * 32 + quality_bias)))
+        flashlight_enabled = bool(
+            getattr(player, "flashlight_on", True)) if player is not None else True
+        # With the flashlight off, start from a fully opaque darkness mask;
+        # actual world lights can still carve out small visible areas.
+        alpha = (255 if not flashlight_enabled else
+                 max(0, min(252, int(224 + darkness * 32 + quality_bias))))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
@@ -169,7 +174,7 @@ class VisualEnhancement:
             if flashlight_on:
                 ambient_tiles, ambient_strength = 13.0, 0.48
             else:
-                ambient_tiles, ambient_strength = 11.5, 0.01
+                ambient_tiles, ambient_strength = 11.5, 0.0
             ambient_radius = ambient_tiles * 32.0 * zoom / 4.0
             lights.append((psx / 4.0, psy / 4.0,
                            ambient_radius, ambient_strength))
