@@ -13,6 +13,18 @@ class TestZombieArchetypes(unittest.TestCase):
         self.assertLess(screamer.damage, regular.damage)
         self.assertEqual(config.ZOMBIE_TYPES["screamer"]["label"], "Screamer")
 
+    def test_chase_speed_accelerates_gradually(self):
+        class OpenGrid:
+            def move_circle(self, pos, delta, radius):
+                return pos[0] + delta[0], pos[1] + delta[1]
+        zombie = Zombie(2.0, 2.0, "regular")
+        zombie.spawning = False
+        zombie.state = "pursue"
+        initial = zombie._speed_current
+        zombie.apply_move(1.0, 0.0, 0.1, OpenGrid())
+        self.assertGreater(zombie._speed_current, initial)
+        self.assertLess(zombie._speed_current, zombie.speed)
+
     def test_stalker_has_a_distinct_stealth_profile(self):
         stalker = Zombie(10.0, 10.0, "stalker")
         regular = Zombie(10.0, 10.0, "regular")
