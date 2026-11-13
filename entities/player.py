@@ -126,8 +126,8 @@ class Player(Entity):
         self._move_amt += (target_amt - self._move_amt) * blend
 
         if travelled > 1e-6:
-            # One gait cycle per ~1.18 world tiles; a collision-shortened
-            # step shortens the cycle by the same amount.
+            # Gait phase follows actual displacement, with a longer sprint
+            # stride and shorter walking stride to prevent foot sliding.
             gait_rate = 0.36 if self.running else 0.48
             self._gait = (self._gait + travelled * gait_rate) % 1.0
             self._stride += travelled
