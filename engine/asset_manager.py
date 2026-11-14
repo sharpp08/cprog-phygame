@@ -615,42 +615,45 @@ class AssetManager:
 
         # Archetypes use different biomechanics and silhouettes.  Values are
         # visual pose parameters, not animation playback multipliers.
+        # Reduced bob and stride for more natural, grounded walking.
         profiles = {
-            "player":   (5.0, 10.8, 6.4, 9.5, 0.8, 2.4, 0.00),
-            "regular":  (5.0, 10.5, 5.5, 8.5, 1.8, 2.0, 0.18),
-            "fast":     (8.0, 8.8, 7.2, 11.0, 0.8, 2.5, 0.08),
-            "tank":     (2.5, 12.0, 3.2, 5.5, 2.8, 1.2, 0.12),
-            "exploder": (5.5, 9.8, 5.0, 9.0, 4.2, 2.2, 0.30),
-            "screamer": (6.0, 9.5, 6.0, 10.0, 2.6, 2.4, 0.20),
-            "armored":  (2.8, 11.0, 3.2, 5.5, 1.2, 1.2, 0.05),
-            "stalker":  (8.0, 9.0, 5.2, 7.0, 0.9, 1.7, 0.06),
+            "player":   (5.0, 9.5, 5.5, 8.5, 0.8, 1.4, 0.00),
+            "regular":  (5.0, 9.5, 5.0, 7.5, 1.8, 1.4, 0.18),
+            "fast":     (8.0, 8.0, 6.5, 10.0, 0.8, 1.6, 0.08),
+            "tank":     (2.5, 11.0, 3.0, 5.5, 2.8, 0.9, 0.12),
+            "exploder": (5.5, 9.0, 4.5, 8.0, 4.2, 1.4, 0.30),
+            "screamer": (6.0, 8.5, 5.5, 9.0, 2.6, 1.4, 0.20),
+            "armored":  (2.8, 10.0, 3.0, 5.5, 1.2, 0.9, 0.05),
+            "stalker":  (8.0, 8.5, 4.8, 6.5, 0.9, 1.1, 0.06),
         }
         lean_base, stride_base, lift_base, arm_base, sway_base, bob_base, asym = (
             profiles.get(kind, profiles["regular"]))
         moving = pose in ("walk", "run")
         running = pose == "run"
         amp = 0.5 + 0.5 * min(1.5, abs(gait))
-        stride = stride_base * (1.0 if running else 0.70) * amp
-        lift = lift_base * (1.0 if running else 0.48)
+        stride = stride_base * (1.0 if running else 0.65) * amp
+        lift = lift_base * (1.0 if running else 0.42)
         # Opposite legs exchange support and recovery.  At phase 0 and 0.5
         # both feet pass through ground contact; each half-cycle then lifts
         # only one foot, avoiding the old simultaneous floating appearance.
         swing = math.cos(cycle)
         leg_a = -swing * stride
         leg_b = swing * stride
-        lift_a = max(0.0, math.sin(cycle)) * lift
-        lift_b = max(0.0, -math.sin(cycle)) * lift
+        # Feet lift only during their swing phase (half cycle), not
+        # simultaneously.  Use a sharper lift curve to keep stance grounded.
+        lift_a = max(0.0, math.sin(cycle)) ** 1.2 * lift
+        lift_b = max(0.0, -math.sin(cycle)) ** 1.2 * lift
         # Two restrained COM rises per cycle, one for each recovery phase.
         bob_wave = abs(math.sin(cycle)) if moving else 0.0
         if moving:
-            bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
-            body_sway = math.sin(cycle + math.pi * 0.5) * sway_base
+            bob_px = bob_wave * bob_base * (1.0 if running else 0.42)
+            body_sway = math.sin(cycle + math.pi * 0.5) * sway_base * 0.8
         else:
             # Preserve subtle breathing, attack wind-up and reload hand motion
             # in their cached four-pose cycles without making idle feet drift.
-            bob_px = (abs(math.sin(cycle)) * 0.75
+            bob_px = (abs(math.sin(cycle)) * 0.5
                       if pose in ("idle", "attack", "reload") else 0.0)
-            sway_scale = 0.18 if pose == "idle" else 0.35
+            sway_scale = 0.15 if pose == "idle" else 0.30
             body_sway = (math.sin(cycle + math.pi * 0.5) *
                          sway_base * sway_scale
                          if pose in ("idle", "attack") else 0.0)
@@ -724,7 +727,9 @@ class AssetManager:
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
         if moving:
-            arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
+            # Subtle arm counter-swing: left arm with right leg, right arm
+            # with left leg.  Keep amplitude moderate to avoid robotic look.
+            arm_swing = math.sin(cycle) * arm_base * (0.85 if running else 0.45)
         elif pose == "attack":
             arm_swing = math.sin(cycle) * arm_base * 1.15
         elif pose == "reload":
