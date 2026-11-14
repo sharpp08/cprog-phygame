@@ -668,14 +668,19 @@ class AssetManager:
         lean = (6.0 * reach if pose in ("walk", "run", "idle") else 0.0)
         lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
         if kind == "exploder" and moving:
-            lean += math.sin(cycle * 0.5) * 1.8
+        lean += math.sin(cycle * 0.5) * 1.8
         hx = cx - lean * 0.32 + body_sway
         leaning = lean > 3.0  # Track if character is forward-leaning
+        # Visible forward lean: shift shoulders ahead of hips proportionally
+        lean_offset = lean * 0.2 * (1.0 if running else 0.5)
+        shoulder_x_shift = lean_offset
         # Apply torso twist for upper-body follow-through during running.
         # Twist shifts shoulders opposite to hip rotation.
         if moving:
-            hx += torso_twist * 0.5
-            shoulder_y -= torso_compress * 0.3
+        hx += torso_twist * 0.5
+        shoulder_y -= torso_compress * 0.3
+        # Shift entire upper body forward for visible lean
+        hx += lean_offset * 0.3
         # Idle body sway (only for non-crawler zombies): subtle lateral shift
         # so idle poses don't look frozen. This is baked into the cached
         # frame so the renderer's ground anchor stays fixed.
