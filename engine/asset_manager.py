@@ -524,12 +524,12 @@ class AssetManager:
                   reach: float = 0.0, crouch: float = 0.0,
                   flash: bool = False, phase: float = 0.0,
                   fall: int = 0, gait: float = 1.0):
-        """Procedural humanoid frame.
+        """Build one articulated character pose from a continuous gait phase.
 
-        ``pose`` drives the base stance; ``phase`` (0..1) animates a
-        4-frame gait cycle so legs/arms actually swing; ``fall`` orients a
-        death pose (0 forward, 1 sideways, 2 backward); ``gait`` stretches
-        the swing for asymmetric zombie shambles.
+        Run and walk frames share the same phase convention so state changes
+        never restart the stride.  The archetype profile changes posture,
+        stride, foot lift and arm motion rather than merely changing playback
+        speed.  All generated surfaces are cached by _make_character().
         """
         p = self._PALETTE[kind]
         sc = p["size"]
@@ -547,141 +547,216 @@ class AssetManager:
             self._emerge_pose(s, kind, sc, gy, reach, crouch, phase)
             return s
 
-        # Gait phase drives the limb swing.  For a 4-frame cycle the phase
-        # is the cycle position (0, 0.25, 0.5, 0.75) and leg alternates.
-        amp = 0.5 + 0.5 * abs(gait)
+        # The crawler has a genuinely quadrupedal silhouette.  Its limbs
+        # alternate as front/rear pairs and its torso stays close to the soil.
         cycle = phase * math.pi * 2.0
-        swing = math.sin(cycle) * amp
-        stride = 12.0 if pose == "run" else 8.5
-        legA_f = swing * stride
-        legB_f = -swing * stride
-        # Opposite foot lift creates a clear airborne recovery phase instead
-        # of two legs sliding along the ground.
-        lift = 7.0 if pose == "run" else 3.0
-        lift_a = max(0.0, math.cos(cycle)) * lift
-        lift_b = max(0.0, -math.cos(cycle)) * lift
-        bob = abs(math.sin(cycle * 2.0)) if pose in ("walk", "run") else 0.0
-        bob_px = bob * (2.4 if pose == "walk" else 4.2)
-        hip_y = gy - 18 * sc - bob_px * 0.5
-        shoulder_y = gy - 34 * sc - bob_px
-        head_cy = gy - 40 * sc - bob_px
-        lean = (6 * reach if pose in ("walk", "run", "idle") else 0.0)
-        # A forward pitch and compressed torso make sprinting read distinctly.
-        lean += 7.0 if pose == "run" else (2.5 if pose == "walk" else 0.0)
+        if kind == "crawler" and pose in ("walk", "run"):
+            crawl_speed = 1.0 if pose == "run" else 0.72
+            wave = math.sin(cycle)
+            counter = math.sin(cycle + math.pi)
+            body_y = gy - 13 * sc
+            pygame.draw.polygon(
+                s, shade(top, -0.28),
+                [(cx - 12 * sc, body_y - 4), (cx + 8 * sc, body_y - 5),
+                 (cx + 12 * sc, body_y + 2), (cx - 9 * sc, body_y + 4)])
+            pygame.draw.polygon(
+                s, top,
+                [(cx - 10 * sc, body_y - 5), (cx + 7 * sc, body_y - 6),
+                 (cx + 9 * sc, body_y), (cx - 8 * sc, body_y + 2)])
+            # Hind limbs push while the forelimbs reach and catch the ground.
+            for side, phase_wave in ((-1, wave), (1, counter)):
+                hip = (cx - 5 * sc, body_y + 1)
+                knee = (cx - 11 * sc, body_y + 7 + phase_wave * 2.0)
+                foot = (cx - 16 * sc + phase_wave * 4.0 * crawl_speed,
+                        gy - max(0.0, phase_wave) * 2.0)
+                pygame.draw.line(s, shade(bot, -0.3), hip, knee,
+                                 max(3, int(5 * sc)))
+                pygame.draw.line(s, bot, knee, foot,
+                                 max(3, int(4 * sc)))
+                shoulder = (cx + 4 * sc, body_y - 1)
+                elbow = (cx + 10 * sc, body_y + 5 - phase_wave * 2.0)
+                hand = (cx + 15 * sc - phase_wave * 4.0 * crawl_speed,
+                        gy - max(0.0, -phase_wave) * 2.0)
+                pygame.draw.line(s, shade(top, -0.3), shoulder, elbow,
+                                 max(3, int(4 * sc)))
+                pygame.draw.line(s, skin, elbow, hand,
+                                 max(2, int(3 * sc)))
+                pygame.draw.circle(s, shade(skin, -0.12),
+                                   (int(hand[0]), int(hand[1])), max(2, int(2 * sc)))
+            head_x = cx + 11 * sc
+            head_y = body_y - 8 * sc
+            pygame.draw.ellipse(s, shade(skin, -0.28),
+                                (head_x - 5 * sc, head_y - 1, 11 * sc, 9 * sc))
+            pygame.draw.ellipse(s, skin,
+                                (head_x - 4 * sc, head_y, 9 * sc, 7 * sc))
+            pygame.draw.circle(s, (230, 55, 42),
+                               (int(head_x + 2 * sc), int(head_y + 3)), 1)
+            pygame.draw.line(s, (91, 43, 38),
+                             (cx - 6 * sc, body_y - 1),
+                             (cx + 4 * sc, body_y + 2), 2)
+            return s
 
-        hx, hy = cx - lean * 0.4, hip_y
-        fA_x = cx - 7 * sc + (legA_f if pose in ("walk", "run") else 0.0)
-        fB_x = cx + 7 * sc + (legB_f if pose in ("walk", "run") else 0.0)
-        fA = (fA_x, gy - lift_a)
-        fB = (fB_x, gy - lift_b)
-        knee_a = (cx - 4 * sc + legA_f * 0.52,
-                  hip_y + 9 * sc - lift_a * 0.38)
-        knee_b = (cx + 4 * sc + legB_f * 0.52,
-                  hip_y + 9 * sc - lift_b * 0.38)
-        # Draw articulated upper/lower legs and visible planted/raised boots.
-        pygame.draw.line(s, shade(bot, -0.25), (hx - 2, hy), knee_a,
-                         max(3, int(5 * sc)))
-        pygame.draw.line(s, shade(bot, -0.12), knee_a, fA,
+        # Archetypes use different biomechanics and silhouettes.  Values are
+        # visual pose parameters, not animation playback multipliers.
+        profiles = {
+            "player":   (5.0, 10.8, 6.4, 9.5, 0.8, 2.4, 0.00),
+            "regular":  (5.0, 10.5, 5.5, 8.5, 1.8, 2.0, 0.18),
+            "fast":     (8.0, 8.8, 7.2, 11.0, 0.8, 2.5, 0.08),
+            "tank":     (2.5, 12.0, 3.2, 5.5, 2.8, 1.2, 0.12),
+            "exploder": (5.5, 9.8, 5.0, 9.0, 4.2, 2.2, 0.30),
+            "screamer": (6.0, 9.5, 6.0, 10.0, 2.6, 2.4, 0.20),
+            "armored":  (2.8, 11.0, 3.2, 5.5, 1.2, 1.2, 0.05),
+            "stalker":  (8.0, 9.0, 5.2, 7.0, 0.9, 1.7, 0.06),
+        }
+        lean_base, stride_base, lift_base, arm_base, sway_base, bob_base, asym = (
+            profiles.get(kind, profiles["regular"]))
+        moving = pose in ("walk", "run")
+        running = pose == "run"
+        amp = max(0.65, min(1.35, abs(gait)))
+        stride = stride_base * (1.0 if running else 0.70) * amp
+        lift = lift_base * (1.0 if running else 0.48)
+        # Opposite legs exchange support and recovery.  At phase 0 and 0.5
+        # both feet pass through ground contact; each half-cycle then lifts
+        # only one foot, avoiding the old simultaneous floating appearance.
+        swing = math.cos(cycle)
+        leg_a = -swing * stride
+        leg_b = swing * stride
+        lift_a = max(0.0, math.sin(cycle)) * lift
+        lift_b = max(0.0, -math.sin(cycle)) * lift
+        bob_wave = abs(math.sin(cycle * 2.0)) if moving else 0.0
+        bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
+        body_sway = math.sin(cycle + math.pi * 0.5) * sway_base if moving else 0.0
+        # The head moves less than the torso, keeping the gaze readable.
+        hip_y = gy - 18 * sc - bob_px * 0.48
+        shoulder_y = gy - 34 * sc - bob_px
+        head_cy = gy - 40 * sc - bob_px * 0.58
+        lean = (6.0 * reach if pose in ("walk", "run", "idle") else 0.0)
+        lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
+        if kind == "exploder" and moving:
+            lean += math.sin(cycle * 0.5) * 1.8
+        hx = cx - lean * 0.32 + body_sway
+        hy = hip_y
+
+        # Articulated hips, knees and ankles.  The knee bends more during
+        # recovery, while the planted leg extends behind the body's centre.
+        foot_a_x = cx - 6 * sc + leg_a
+        foot_b_x = cx + 6 * sc + leg_b
+        foot_a = (foot_a_x, gy - lift_a)
+        foot_b = (foot_b_x, gy - lift_b)
+        knee_a = (cx - 4 * sc + leg_a * 0.50 + asym * leg_b,
+                  hip_y + 9 * sc - lift_a * 0.48)
+        knee_b = (cx + 4 * sc + leg_b * 0.50 - asym * leg_a,
+                  hip_y + 9 * sc - lift_b * 0.48)
+        leg_width = max(3, int((6 if kind in ("tank", "armored") else 5) * sc))
+        pygame.draw.line(s, shade(bot, -0.28), (hx - 2, hy), knee_a, leg_width)
+        pygame.draw.line(s, shade(bot, -0.12), knee_a, foot_a,
                          max(3, int(4 * sc)))
-        pygame.draw.line(s, shade(bot, -0.35), (hx + 2, hy), knee_b,
-                         max(3, int(5 * sc)))
-        pygame.draw.line(s, shade(bot, -0.18), knee_b, fB,
+        pygame.draw.line(s, shade(bot, -0.36), (hx + 2, hy), knee_b, leg_width)
+        pygame.draw.line(s, shade(bot, -0.18), knee_b, foot_b,
                          max(3, int(4 * sc)))
         boot = (35, 32, 29) if kind == "player" else (42, 38, 31)
-        pygame.draw.line(s, boot, (fA[0] - 2, fA[1]), (fA[0] + 4, fA[1]), 3)
-        pygame.draw.line(s, boot, (fB[0] - 2, fB[1]), (fB[0] + 4, fB[1]), 3)
-        # Arms counter-swing against the legs. The free arm pumps while the
-        # weapon arm remains braced, and infected reach forward as they run.
-        armA = -swing * (11.0 if pose == "run" else 7.0)
-        armB = swing * (11.0 if pose == "run" else 7.0)
-        ty = shoulder_y + (4 if crouch else 0)
-        pygame.draw.polygon(s, shade(top, -0.25),
-                            [(hx - 8 * sc, ty + 2), (hx + 8 * sc, ty + 2),
-                             (hx + 6 * sc, hip_y), (hx - 6 * sc, hip_y)])
+        # Boots point along the stride, with a small toe angle on recovery.
+        pygame.draw.line(s, boot, (foot_a[0] - 3, foot_a[1]),
+                         (foot_a[0] + 4, foot_a[1] - min(2, lift_a * 0.12)), 3)
+        pygame.draw.line(s, boot, (foot_b[0] - 3, foot_b[1]),
+                         (foot_b[0] + 4, foot_b[1] - min(2, lift_b * 0.12)), 3)
+
+        # Torso compression and shoulder counter-rotation add weight to impact.
+        torso_top = shoulder_y + (4 if crouch else 0)
+        torso_bottom = hip_y
+        torso = [(hx - 8 * sc, torso_top + 2), (hx + 8 * sc, torso_top + 2),
+                 (hx + 6 * sc, torso_bottom), (hx - 6 * sc, torso_bottom)]
+        pygame.draw.polygon(s, shade(top, -0.28), torso)
         pygame.draw.polygon(s, top,
-                            [(hx - 7 * sc, ty + 1), (hx + 7 * sc, ty + 1),
-                             (hx + 5 * sc, hip_y - 2),
-                             (hx - 5 * sc, hip_y - 2)])
+                            [(hx - 7 * sc, torso_top + 1),
+                             (hx + 7 * sc, torso_top + 1),
+                             (hx + 5 * sc, torso_bottom - 2),
+                             (hx - 5 * sc, torso_bottom - 2)])
         pygame.draw.line(s, shade(bot, -0.2),
                          (hx - 6 * sc, hip_y - 3),
                          (hx + 6 * sc, hip_y - 3), 3)
+
+        # Head stays relatively stable while the chest pitches forward.
         pygame.draw.ellipse(s, shade(skin, -0.2),
                             (hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
         pygame.draw.ellipse(s, skin,
                             (hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
         pygame.draw.ellipse(s, p["hair"],
                             (hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
-        e_col = (240, 90, 60) if pose == "hit" else (30, 24, 20)
-        pygame.draw.circle(s, e_col, (int(hx - 2), int(head_cy)), 1)
-        pygame.draw.circle(s, e_col, (int(hx + 3), int(head_cy)), 1)
+        eye = (240, 90, 60) if pose == "hit" else (30, 24, 20)
+        pygame.draw.circle(s, eye, (int(hx - 2), int(head_cy)), 1)
+        pygame.draw.circle(s, eye, (int(hx + 3), int(head_cy)), 1)
+
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
-        # Left arm is independently articulated so the run cycle has a
-        # convincing counter-pump instead of a static one-armed silhouette.
+        arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
         left_shoulder = (hx - 5 * sc, arm_y)
-        left_elbow = (hx - 7 * sc + armB * 0.55,
-                      arm_y + 5 * sc + armB * 0.18)
-        left_hand = (hx - 8 * sc + armB,
-                     arm_y + 10 * sc + armB * 0.32)
+        left_elbow = (hx - 7 * sc + arm_swing * 0.52,
+                      arm_y + 5 * sc - arm_swing * 0.18)
+        left_hand = (hx - 8 * sc + arm_swing,
+                     arm_y + 10 * sc - arm_swing * 0.34)
         arm_col = shade(top, -0.18)
         pygame.draw.line(s, arm_col, left_shoulder, left_elbow,
                          max(3, int(4 * sc)))
         pygame.draw.line(s, shade(skin, -0.15), left_elbow, left_hand,
                          max(2, int(3 * sc)))
-        guncol = p["gun"]
-        if pose == "shoot":
-            pygame.draw.line(s, shade(top, -0.1),
-                             (hx + 3 * sc, arm_y),
-                             (hx + 4 * sc + reach_px, arm_y - 4), int(4 * sc))
-            pygame.draw.line(s, shade(top, -0.3),
-                             (hx + 3 * sc, arm_y + 2),
-                             (hx + 4 * sc + reach_px, arm_y - 2), int(4 * sc))
-            gx, gyw = hx + 4 * sc + reach_px, arm_y - 4
-            pygame.draw.rect(s, guncol, (gx, gyw - 2, 12 * sc, 5),
+        pygame.draw.circle(s, skin, (int(left_hand[0]), int(left_hand[1])),
+                           max(2, int(2 * sc)))
+
+        right_shoulder = (hx + 5 * sc, arm_y)
+        if kind == "player":
+            # Keep the weapon arm anchored to the torso; only the support arm
+            # counter-swings, preventing the gun from wobbling independently.
+            right_elbow = (hx + 8 * sc, arm_y + 4 * sc)
+            right_hand = (hx + 9 * sc + reach_px * 0.55,
+                          arm_y + 4 * sc - 2)
+            pygame.draw.line(s, arm_col, right_shoulder, right_elbow,
+                             max(3, int(4 * sc)))
+            pygame.draw.line(s, shade(skin, -0.15), right_elbow, right_hand,
+                             max(2, int(3 * sc)))
+            gun_x = right_hand[0] - 1
+            gun_y = right_hand[1] - 3
+            pygame.draw.rect(s, p["gun"], (gun_x, gun_y, 11 * sc, 5),
                              border_radius=2)
-            pygame.draw.rect(s, shade(guncol, 0.4), (gx + 2, gyw - 3, 5, 2))
-            if flash:
+            pygame.draw.rect(s, shade(p["gun"], 0.38),
+                             (gun_x + 2, gun_y - 1, 5, 2))
+            if pose == "shoot" and flash:
                 pygame.draw.polygon(s, (255, 230, 150, 220),
-                                    [(gx + 12 * sc, gyw - 4),
-                                     (gx + 22 * sc, gyw),
-                                     (gx + 12 * sc, gyw + 4)])
-        elif pose == "reload":
-            pygame.draw.line(s, shade(top, -0.1),
-                             (hx + 3 * sc, arm_y),
-                             (hx + 6 * sc, arm_y + 6), int(4 * sc))
-            gx, gyw = hx + 4 * sc, arm_y + 4
-            pygame.draw.rect(s, guncol, (gx, gyw, 8 * sc, 5), border_radius=2)
+                                    [(gun_x + 11 * sc, gun_y - 3),
+                                     (gun_x + 21 * sc, gun_y + 2),
+                                     (gun_x + 11 * sc, gun_y + 5)])
         else:
-            arms_ahead = reach > 0.2
-            gx = hx + 6 * sc + reach_px
-            gyw = arm_y + (2 if arms_ahead else 4) + armA
-            pygame.draw.line(s, shade(top, -0.1),
-                             (hx + 4 * sc, arm_y), (gx, gyw), int(4 * sc))
-            pygame.draw.line(s, shade(top, -0.3),
-                             (hx + 4 * sc, arm_y + 2), (gx, gyw + 2),
-                             int(4 * sc))
-            pygame.draw.rect(s, guncol, (gx, gyw - 2, 9 * sc, 4),
-                             border_radius=2)
-        # Fine silhouette details make the player and enemy classes easier
-        # to read at the game's normal zoom.
+            # Zombies claw and reach rather than inexplicably carrying guns.
+            claw_reach = 8.0 + reach_px * 0.45
+            right_elbow = (hx + 8 * sc + arm_swing * 0.25,
+                           arm_y + 5 * sc + arm_swing * 0.12)
+            right_hand = (hx + 10 * sc + claw_reach - arm_swing * 0.35,
+                          arm_y + 8 * sc - arm_swing * 0.25)
+            pygame.draw.line(s, arm_col, right_shoulder, right_elbow,
+                             max(3, int(4 * sc)))
+            pygame.draw.line(s, shade(skin, -0.15), right_elbow, right_hand,
+                             max(2, int(3 * sc)))
+            for finger in range(3):
+                fx = right_hand[0] + finger * 2
+                pygame.draw.line(s, skin, right_hand,
+                                 (fx + 2, right_hand[1] + 3), 1)
+
+        # Keep the player's clothing readable and give enemy silhouettes
+        # small archetype-specific details without changing their proportions.
         if kind == "player":
             pygame.draw.line(s, shade(top, -0.35),
-                             (hx - 5 * sc, ty + 5),
+                             (hx - 5 * sc, torso_top + 5),
                              (hx - 1 * sc, hip_y - 2), 2)
             pygame.draw.line(s, shade(top, 0.30),
-                             (hx + 4 * sc, ty + 6),
+                             (hx + 4 * sc, torso_top + 6),
                              (hx + 2 * sc, hip_y - 5), 1)
-            pygame.draw.line(s, (42, 39, 38),
-                             (hx - 6 * sc, hip_y - 5),
-                             (hx + 6 * sc, hip_y - 5), 2)
             pygame.draw.rect(s, (104, 83, 57),
                              (hx - 8 * sc, shoulder_y + 5, 5 * sc,
                               9 * sc), border_radius=2)
         else:
-            # Torn cloth, dark wounds and dried-blood accents.
             pygame.draw.polygon(s, shade(top, -0.38), [
-                (hx - 7 * sc, ty + 8), (hx - 2 * sc, ty + 11),
-                (hx - 4 * sc, ty + 16), (hx - 8 * sc, ty + 14)])
+                (hx - 7 * sc, torso_top + 8), (hx - 2 * sc, torso_top + 11),
+                (hx - 4 * sc, torso_top + 16), (hx - 8 * sc, torso_top + 14)])
             pygame.draw.line(s, (91, 43, 38),
                              (hx + 3 * sc, shoulder_y + 12),
                              (hx + 1 * sc, hip_y - 4), 2)
@@ -689,12 +764,19 @@ class AssetManager:
                                (int(hx - 4 * sc), int(shoulder_y + 13)), 2)
             if kind == "tank":
                 pygame.draw.line(s, (50, 61, 43),
-                                 (hx - 8 * sc, ty + 5),
-                                 (hx + 7 * sc, ty + 15), 3)
+                                 (hx - 8 * sc, torso_top + 5),
+                                 (hx + 7 * sc, torso_top + 15), 3)
             elif kind == "fast":
                 pygame.draw.line(s, (124, 48, 38),
                                  (hx + 2 * sc, head_cy + 2),
                                  (hx + 6 * sc, head_cy + 5), 2)
+            elif kind == "armored":
+                pygame.draw.line(s, (160, 175, 185),
+                                 (hx - 7 * sc, torso_top + 4),
+                                 (hx + 7 * sc, torso_top + 4), 3)
+            elif kind == "exploder" and moving:
+                pygame.draw.circle(s, (155, 95, 40),
+                                   (int(hx + 5 * sc), int(hip_y - 8)), 3)
         return s
 
     def _dead_pose(self, s, kind, sc, gy, fall):
