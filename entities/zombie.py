@@ -63,10 +63,12 @@ class Zombie(Entity):
         # Cycles per world tile: short-stride runners cycle faster while
         # heavy infected cover more ground per step. Small variation keeps
         # individual zombies from moving in synchronized lockstep.
+        # Gait rates are calibrated so speed/gait_rate gives 1.2-2.6 tiles
+        # per full cycle (0.6-1.3 per footfall), matching natural strides.
         gait_rates = {
-            "regular": 0.57, "fast": 0.545, "tank": 0.595,
-            "crawler": 0.923, "exploder": 0.628, "screamer": 0.607,
-            "armored": 0.634, "stalker": 0.620,
+            "regular": 0.57, "fast": 0.82, "tank": 0.595,
+            "crawler": 0.923, "exploder": 0.95, "screamer": 0.607,
+            "armored": 0.634, "stalker": 0.90,
         }
         self._gait_rate = gait_rates.get(ztype, 0.68) * random.uniform(0.95, 1.05)
         self._sway = random.uniform(0.5, 1.0)   # body sway amplitude

@@ -559,7 +559,12 @@ class AssetManager:
                            0.72 if pose == "walk" else 0.65)
             wave = math.sin(cycle) * motion_scale
             counter = math.sin(cycle + math.pi) * motion_scale
-            body_y = gy - 13 * sc
+            # Asymmetric secondary lurch: breaks mirror symmetry so each of
+            # the 8 cached poses is visually unique. The secondary term adds
+            # a slight forward/backward body weight shift that peaks mid-
+            # stride (phase 0.25, 0.75) rather than at contact (0, 0.5).
+            lurch = math.sin(cycle - 0.6) * 1.8 * motion_scale
+            body_y = gy - 13 * sc + lurch
             pygame.draw.polygon(
                 s, shade(top, -0.28),
                 [(cx - 12 * sc, body_y - 4), (cx + 8 * sc, body_y - 5),
@@ -569,7 +574,8 @@ class AssetManager:
                 [(cx - 10 * sc, body_y - 5), (cx + 7 * sc, body_y - 6),
                  (cx + 9 * sc, body_y), (cx - 8 * sc, body_y + 2)])
             # Hind limbs push while the forelimbs reach and catch the ground.
-            for side, phase_wave in ((-1, wave), (1, counter)):
+            for side, phase_wave in ((-1, wave + lurch * 0.3),
+                                     (1, counter + lurch * 0.3)):
                 hip = (cx - 5 * sc, body_y + 1)
                 knee = (cx - 11 * sc,
                         body_y + 7 + phase_wave * 2.0 + side * 2.0)
@@ -652,6 +658,12 @@ class AssetManager:
         if kind == "exploder" and moving:
             lean += math.sin(cycle * 0.5) * 1.8
         hx = cx - lean * 0.32 + body_sway
+        # Idle body sway (only for non-crawler zombies): subtle lateral shift
+        # so idle poses don't look frozen. This is baked into the cached
+        # frame so the renderer's ground anchor stays fixed.
+        if pose == "idle" and kind != "crawler" and kind != "player":
+            idle_sway = math.sin(cycle + 1.3) * 1.4
+            hx += idle_sway
         hy = hip_y
 
         # Articulated hips, knees and ankles.  The knee bends more during

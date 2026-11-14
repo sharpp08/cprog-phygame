@@ -357,21 +357,18 @@ class Renderer:
         # are authored inside cached pose frames; translating the whole sprite
         # here made planted feet visibly skate across the terrain.
         base_y = cy
-        sway_x = (math.sin(getattr(z, "_sway_ph", 0.0)) *
-                  getattr(z, "_sway", 0.0) * 1.2 * cam.zoom
-                  if not z.moving else 0.0)
         if blend < 1.0 and z.prev_anim_state != z.anim_state:
             previous = zombie_frame(z.prev_anim_state,
                                     z.prev_frame_index).copy()
             previous.set_alpha(int(255 * (1.0 - blend)))
-            self.screen.blit(previous, (cx + sway_x - previous.get_width() / 2,
-                                        base_y - previous.get_height()
-                                        + 10 * cam.zoom))
+            self.screen.blit(previous, (cx - previous.get_width() / 2,
+                                         base_y - previous.get_height()
+                                         + 10 * cam.zoom))
         spr = zombie_frame(z.anim_state, z.frame_index)
         if blend < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * blend))
-        self.screen.blit(spr, (cx + sway_x - spr.get_width() / 2,
+        self.screen.blit(spr, (cx - spr.get_width() / 2,
                                base_y - spr.get_height() + 10 * cam.zoom))
         if z.hit_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),

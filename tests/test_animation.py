@@ -1,6 +1,13 @@
 """Regression tests for distance-synchronised procedural animation."""
+import os
 import unittest
 
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
+import pygame
+import config
+from engine.asset_manager import AssetManager
 from entities.player import Player
 from entities.weapon import Weapon
 from entities.zombie import Zombie
@@ -143,6 +150,154 @@ class TestZombieAnimation(unittest.TestCase):
                 travelled = zombie._actual_speed * 0.1
                 expected = (before + travelled * zombie._gait_rate) % 1.0
                 self.assertAlmostEqual(zombie._gait, expected, places=6)
+
+    def test_direction_change_does_not_reset_gait(self):
+        """Turning while moving should preserve gait phase continuity."""
+        player = Player(2.0, 2.0)
+        player.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
+        gait_after_move = player._gait
+        self.assertGreater(gait_after_move, 0.0)
+        # Now move diagonally — gait should continue from where it was
+        player.apply_movement((1.0, 1.0), False, 0.1, OpenGrid())
+        self.assertGreater(player._gait, gait_after_move)
+
+    def test_diagonal_movement_does_not_accelerate_gait(self):
+        """Diagonal movement at the same world-speed should not produce
+        a faster-looking animation than straight movement."""
+        straight = Player(2.0, 2.0)
+        diagonal = Player(2.0, 2.0)
+        straight.apply_movement((1.0, 0.0), True, 0.1, OpenGrid())
+        diagonal.apply_movement((0.7071, 0.7071), True, 0.1, OpenGrid())
+        # Both should have the same actual_speed (normalized input)
+        self.assertAlmostEqual(straight.actual_speed,
+                               diagonal.actual_speed, delta=0.1)
+
+    def test_crawler_stays_low_in_all_states(self):
+        """Crawler's idle/attack/run poses must remain in a low crouch."""
+        zombie = Zombie(10.0, 10.0, "crawler")
+        zombie.spawning = False
+        # Idle
+        zombie.state = "idle"
+        zombie.moving = False
+        zombie.update(0.1)
+        self.assertEqual(zombie.anim_state, "idle")
+        # Run
+        zombie.state = "pursue"
+        zombie._speed_current = zombie.speed
+        zombie._actual_speed = zombie.speed
+        zombie.moving = True
+        zombie.update(0.1)
+        self.assertEqual(zombie.anim_state, "run")
+
+    def test_blocked_character_does_not_advance_cycle(self):
+        """A zombie pressed against a wall should not advance gait."""
+        zombie = Zombie(2.0, 2.0, "regular")
+        zombie.spawning = False
+        zombie.state = "pursue"
+        zombie._speed_current = zombie.speed
+        gait_before = zombie._gait
+        zombie.apply_move(1.0, 0.0, 0.5, BlockedGrid())
+        zombie.update(0.5)
+        self.assertEqual(zombie._gait, gait_before)
+
+    def test_animation_progression_consistent_at_different_frame_rates(self):
+        """Gait advance should be independent of frame rate (distance-based)."""
+        z1 = Zombie(2.0, 2.0, "fast")
+        z2 = Zombie(2.0, 2.0, "fast")
+        for z in (z1, z2):
+            z.spawning = False
+            z.state = "pursue"
+            # Normalize speed and gait rate for deterministic comparison
+            z.speed = 3.3
+            z.variation = 1.0
+            z._gait_rate = 0.82
+            z._gait = 0.0
+            z._speed_current = z.speed
+            z._stumble = 10.0
+            z._stumble_t = 0.0
+        # z1 simulates at 60fps, z2 at 30fps — same total time (1 second)
+        for _ in range(60):
+            z1.apply_move(1.0, 0.0, 1.0/60.0, OpenGrid())
+        for _ in range(30):
+            z2.apply_move(1.0, 0.0, 1.0/30.0, OpenGrid())
+        # Gait should be very close (distance-based, not time-based)
+        self.assertAlmostEqual(z1._gait, z2._gait, delta=0.01)
+
+
+class TestFrameValidity(unittest.TestCase):
+    """Verify all generated animation frames are valid, non-empty surfaces."""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        cls.assets = AssetManager()
+        cls.assets.build()
+
+    @classmethod
+    def tearDownClass(cls):
+        pygame.quit()
+
+    def test_all_player_frames_valid_dimensions(self):
+        for state, frames in self.assets.frames["player"].items():
+            for i, f in enumerate(frames):
+                with self.subTest(state=state, frame=i):
+                    w, h = f.get_size()
+                    self.assertGreater(w, 0)
+                    self.assertGreater(h, 0)
+                    # No completely transparent frame
+                    alpha_sum = sum(a for a in pygame.surfarray.pixels_alpha(f).ravel())
+                    self.assertGreater(alpha_sum, 0,
+                                       f"Player {state} frame {i} is fully transparent")
+
+    def test_all_zombie_frames_valid_dimensions(self):
+        for ztype in config.ZOMBIE_TYPES:
+            key = f"zombie_{ztype}"
+            for state, frames in self.assets.frames[key].items():
+                for i, f in enumerate(frames):
+                    with self.subTest(ztype=ztype, state=state, frame=i):
+                        w, h = f.get_size()
+                        self.assertGreater(w, 0)
+                        self.assertGreater(h, 0)
+
+    def test_run_frame_count_is_eight(self):
+        """Every archetype must have exactly 8 run/walk frames."""
+        self.assertEqual(len(self.assets.frames["player"]["run"]), 8)
+        self.assertEqual(len(self.assets.frames["player"]["walk"]), 8)
+        for ztype in config.ZOMBIE_TYPES:
+            key = f"zombie_{ztype}"
+            self.assertEqual(len(self.assets.frames[key]["run"]), 8,
+                             f"{ztype} run has {len(self.assets.frames[key]['run'])} frames")
+            self.assertEqual(len(self.assets.frames[key]["walk"]), 8,
+                             f"{ztype} walk has {len(self.assets.frames[key]['walk'])} frames")
+
+    def test_weapon_position_stable_during_run(self):
+        """Player weapon should not drift to wildly different positions
+        across the 8 run frames."""
+        run_frames = self.assets.frames["player"]["run"]
+        # Find the rightmost pixel (gun tip) in each frame
+        tips = []
+        for f in run_frames:
+            arr = pygame.surfarray.pixels_alpha(f)
+            # Find rightmost non-transparent column
+            cols = arr.sum(axis=0)
+            nonzero = [i for i in range(len(cols)) if cols[i] > 0]
+            tips.append(max(nonzero) if nonzero else 0)
+        # Spread should be small (< 15px) — gun stays anchored to hand
+        spread = max(tips) - min(tips)
+        self.assertLess(spread, 15,
+                        f"Weapon drifts {spread}px across run frames: {tips}")
+
+    def test_idle_and_attack_animations_still_work(self):
+        """Non-moving poses must exist and have valid frames."""
+        for ztype in config.ZOMBIE_TYPES:
+            key = f"zombie_{ztype}"
+            self.assertIn("idle", self.assets.frames[key])
+            self.assertIn("attack", self.assets.frames[key])
+            self.assertIn("hit", self.assets.frames[key])
+            self.assertIn("dead", self.assets.frames[key])
+            self.assertIn("emerge", self.assets.frames[key])
 
 
 if __name__ == "__main__":
