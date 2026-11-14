@@ -65,7 +65,7 @@ class Zombie(Entity):
         # individual zombies from moving in synchronized lockstep.
         gait_rates = {
             "regular": 0.57, "fast": 0.545, "tank": 0.595,
-            "crawler": 0.706, "exploder": 0.628, "screamer": 0.607,
+            "crawler": 0.923, "exploder": 0.628, "screamer": 0.607,
             "armored": 0.634, "stalker": 0.620,
         }
         self._gait_rate = gait_rates.get(ztype, 0.68) * random.uniform(0.95, 1.05)
