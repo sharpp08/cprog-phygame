@@ -626,8 +626,18 @@ class AssetManager:
         lift_a = max(0.0, math.sin(cycle)) * lift
         lift_b = max(0.0, -math.sin(cycle)) * lift
         bob_wave = abs(math.sin(cycle * 2.0)) if moving else 0.0
-        bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
-        body_sway = math.sin(cycle + math.pi * 0.5) * sway_base if moving else 0.0
+        if moving:
+            bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
+            body_sway = math.sin(cycle + math.pi * 0.5) * sway_base
+        else:
+            # Preserve subtle breathing, attack wind-up and reload hand motion
+            # in their cached four-pose cycles without making idle feet drift.
+            bob_px = (abs(math.sin(cycle)) * 0.75
+                      if pose in ("idle", "attack", "reload") else 0.0)
+            sway_scale = 0.18 if pose == "idle" else 0.35
+            body_sway = (math.sin(cycle + math.pi * 0.5) *
+                         sway_base * sway_scale
+                         if pose in ("idle", "attack") else 0.0)
         # The head moves less than the torso, keeping the gaze readable.
         hip_y = gy - 18 * sc - bob_px * 0.48
         shoulder_y = gy - 34 * sc - bob_px
@@ -691,8 +701,16 @@ class AssetManager:
 
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
-        arm_swing = (math.sin(cycle) * arm_base *
-                     (1.0 if running else 0.58)) if moving else 0.0
+        if moving:
+            arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
+        elif pose == "attack":
+            arm_swing = math.sin(cycle) * arm_base * 1.15
+        elif pose == "reload":
+            arm_swing = math.sin(cycle) * 1.2
+        elif pose == "idle":
+            arm_swing = math.sin(cycle) * 0.8
+        else:
+            arm_swing = 0.0
         left_shoulder = (hx - 5 * sc, arm_y)
         left_elbow = (hx - 7 * sc + arm_swing * 0.52,
                       arm_y + 5 * sc - arm_swing * 0.18)
@@ -700,7 +718,8 @@ class AssetManager:
                      arm_y + 10 * sc - arm_swing * 0.34)
         if kind == "player" and pose == "reload":
             left_elbow = (hx - 1 * sc, arm_y + 4 * sc)
-            left_hand = (hx + 5 * sc, arm_y + 8 * sc)
+            left_hand = (hx + 5 * sc + math.sin(cycle) * 1.2,
+                         arm_y + 8 * sc + math.cos(cycle))
         arm_col = shade(top, -0.18)
         pygame.draw.line(s, arm_col, left_shoulder, left_elbow,
                          max(3, int(4 * sc)))
@@ -715,7 +734,8 @@ class AssetManager:
             # counter-swings, preventing the gun from wobbling independently.
             if pose == "reload":
                 right_elbow = (hx + 7 * sc, arm_y + 6 * sc)
-                right_hand = (hx + 10 * sc, arm_y + 10 * sc)
+                right_hand = (hx + 10 * sc,
+                              arm_y + 10 * sc + math.cos(cycle) * 1.5)
             else:
                 right_elbow = (hx + 8 * sc, arm_y + 4 * sc)
                 right_hand = (hx + 9 * sc + reach_px * 0.55,
