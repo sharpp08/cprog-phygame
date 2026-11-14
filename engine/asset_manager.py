@@ -568,7 +568,7 @@ class AssetManager:
                 hip = (cx - 5 * sc, body_y + 1)
                 knee = (cx - 11 * sc,
                         body_y + 7 + phase_wave * 2.0 + side * 2.0)
-                foot = (cx - 16 * sc + phase_wave * 8.5 * crawl_speed,
+                foot = (cx - 16 * sc + phase_wave * 6.5 * crawl_speed,
                         gy - max(0.0, phase_wave) * 2.0 + side * 2.0)
                 pygame.draw.line(s, shade(bot, -0.3), hip, knee,
                                  max(3, int(5 * sc)))
@@ -577,7 +577,7 @@ class AssetManager:
                 shoulder = (cx + 4 * sc, body_y - 1)
                 elbow = (cx + 10 * sc,
                          body_y + 5 - phase_wave * 2.0 + side * 2.0)
-                hand = (cx + 15 * sc - phase_wave * 8.5 * crawl_speed,
+                hand = (cx + 15 * sc - phase_wave * 6.5 * crawl_speed,
                         gy - max(0.0, -phase_wave) * 2.0 + side * 2.0)
                 pygame.draw.line(s, shade(top, -0.3), shoulder, elbow,
                                  max(3, int(4 * sc)))
