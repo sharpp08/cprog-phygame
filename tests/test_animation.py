@@ -32,6 +32,19 @@ class TestPlayerAnimation(unittest.TestCase):
         self.assertGreater(player._gait, 0.0)
         self.assertGreater(player.actual_speed, 0.0)
 
+    def test_walk_and_run_gait_rates_match_their_stride_lengths(self):
+        walking = Player(2.0, 2.0)
+        walking.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
+        self.assertAlmostEqual(walking._gait,
+                               walking.actual_speed * 0.1 * 0.81,
+                               places=6)
+        running = Player(2.0, 2.0)
+        running.apply_movement((1.0, 0.0), True, 0.1, OpenGrid())
+        self.assertTrue(running.running)
+        self.assertAlmostEqual(running._gait,
+                               running.actual_speed * 0.1 * 0.44,
+                               places=6)
+
     def test_state_change_starts_blend(self):
         player = Player(2.0, 2.0)
         player.apply_movement((1.0, 0.0), True, 0.2, OpenGrid())
@@ -114,6 +127,22 @@ class TestZombieAnimation(unittest.TestCase):
         tank = Zombie(2.0, 2.0, "tank")
         self.assertNotEqual(runner._gait_rate, tank._gait_rate)
         self.assertGreater(runner._gait_stretch, tank._gait_stretch)
+
+    def test_zombie_run_gait_follows_actual_travel_and_archetype_stride(self):
+        for ztype in ("regular", "fast", "tank", "crawler", "exploder",
+                      "screamer", "armored", "stalker"):
+            with self.subTest(ztype=ztype):
+                zombie = Zombie(2.0, 2.0, ztype)
+                zombie.spawning = False
+                zombie.state = "pursue"
+                zombie._speed_current = zombie.speed
+                zombie._stumble = 10.0
+                zombie._stumble_t = 0.0
+                before = zombie._gait
+                zombie.apply_move(1.0, 0.0, 0.1, OpenGrid())
+                travelled = zombie._actual_speed * 0.1
+                expected = (before + travelled * zombie._gait_rate) % 1.0
+                self.assertAlmostEqual(zombie._gait, expected, places=6)
 
 
 if __name__ == "__main__":
