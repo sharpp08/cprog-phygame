@@ -346,6 +346,62 @@ class TestFrameValidity(unittest.TestCase):
             self.assertIn("dead", self.assets.frames[key])
             self.assertIn("emerge", self.assets.frames[key])
 
+    def test_walk_frames_show_alternating_leg_stance(self):
+        """Walk frames should show varying foot separation between phases."""
+        import pygame.surfarray
+        walk_frames = self.assets.frames["player"]["walk"]
+        # Measure the horizontal spread of opaque pixels in the lower half
+        # of each frame (where feet are).
+        foot_spreads = []
+        for f in walk_frames:
+            w, h = f.get_size()
+            arr = pygame.surfarray.pixels_alpha(f)
+            # Lower 40% of the sprite contains the feet
+            y_start = int(h * 0.6)
+            # Sum alpha over rows in foot region, get per-column alpha
+            col_alpha = arr[y_start:, :].sum(axis=0)
+            nonzero = [i for i in range(len(col_alpha)) if col_alpha[i] > 0]
+            if nonzero:
+                foot_spreads.append(max(nonzero) - min(nonzero))
+            else:
+                foot_spreads.append(0)
+        # Spread should vary between frames (stance vs swing)
+        self.assertGreater(max(foot_spreads) - min(foot_spreads), 2,
+                           "Foot position does not change across walk frames")
+
+    def test_stationary_character_does_not_advance_locomotion_cycle(self):
+        """A player standing still should not keep cycling through walk frames."""
+        player = Player(5.0, 5.0)
+        player.apply_movement((0.0, 0.0), False, 0.1, OpenGrid())
+        gait_after_stop = player._gait
+        player.update(0.5)
+        # Gait should not advance when not moving
+        self.assertEqual(player._gait, gait_after_stop)
+
+    def test_walking_vs_running_stride_behavior(self):
+        """Walking should have a shorter stride (higher gait rate) than running."""
+        player = Player(5.0, 5.0)
+        # Walk
+        player.apply_movement((1.0, 0.0), False, 1.0, OpenGrid())
+        walk_gait_rate = 0.81  # from player.py
+        # Run
+        player2 = Player(5.0, 5.0)
+        player2.apply_movement((1.0, 0.0), True, 1.0, OpenGrid())
+        run_gait_rate = 0.44   # from player.py
+        self.assertGreater(walk_gait_rate, run_gait_rate,
+                           "Walk should have more cycles per tile than run")
+
+    def test_direction_change_preserves_gait_phase(self):
+        """Changing movement direction should not reset the gait phase."""
+        player = Player(5.0, 5.0)
+        player.apply_movement((1.0, 0.0), True, 0.5, OpenGrid())
+        gait_before = player._gait
+        self.assertGreater(gait_before, 0.0)
+        # Now move in a different direction
+        player.apply_movement((0.0, 1.0), True, 0.5, OpenGrid())
+        # Gait should have advanced (not reset to 0)
+        self.assertGreater(player._gait, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

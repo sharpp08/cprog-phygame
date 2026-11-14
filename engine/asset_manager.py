@@ -615,15 +615,18 @@ class AssetManager:
 
         # Archetypes use different biomechanics and silhouettes.  Values are
         # visual pose parameters, not animation playback multipliers.
+        # Tuple: (lean_base, stride_base, lift_base, arm_base, sway_base,
+        #          bob_base, asymmetry)
+        # stride_base is the total peak-to-peak foot travel in one full cycle.
         profiles = {
-            "player":   (5.0, 10.8, 6.4, 9.5, 0.8, 2.4, 0.00),
-            "regular":  (5.0, 10.5, 5.5, 8.5, 1.8, 2.0, 0.18),
-            "fast":     (8.0, 8.8, 7.2, 11.0, 0.8, 2.5, 0.08),
-            "tank":     (2.5, 12.0, 3.2, 5.5, 2.8, 1.2, 0.12),
-            "exploder": (5.5, 9.8, 5.0, 9.0, 4.2, 2.2, 0.30),
-            "screamer": (6.0, 9.5, 6.0, 10.0, 2.6, 2.4, 0.20),
-            "armored":  (2.8, 11.0, 3.2, 5.5, 1.2, 1.2, 0.05),
-            "stalker":  (8.0, 9.0, 5.2, 7.0, 0.9, 1.7, 0.06),
+            "player":   (5.0, 10.8, 6.4, 9.5, 0.8, 1.2, 0.00),
+            "regular":  (5.0, 10.5, 5.5, 8.5, 1.8, 1.4, 0.22),
+            "fast":     (8.0, 8.8, 7.2, 11.0, 0.8, 1.6, 0.08),
+            "tank":     (2.5, 12.0, 3.2, 5.5, 2.8, 0.8, 0.12),
+            "exploder": (5.5, 9.8, 5.0, 9.0, 4.2, 1.4, 0.30),
+            "screamer": (6.0, 9.5, 6.0, 10.0, 2.6, 1.4, 0.20),
+            "armored":  (2.8, 11.0, 3.2, 5.5, 1.2, 0.8, 0.05),
+            "stalker":  (8.0, 9.0, 5.2, 7.0, 0.9, 1.0, 0.06),
         }
         lean_base, stride_base, lift_base, arm_base, sway_base, bob_base, asym = (
             profiles.get(kind, profiles["regular"]))
@@ -631,30 +634,84 @@ class AssetManager:
         running = pose == "run"
         amp = 0.5 + 0.5 * min(1.5, abs(gait))
         stride = stride_base * (1.0 if running else 0.70) * amp
-        lift = lift_base * (1.0 if running else 0.48)
-        # Opposite legs exchange support and recovery.  At phase 0 and 0.5
-        # both feet pass through ground contact; each half-cycle then lifts
-        # only one foot, avoiding the old simultaneous floating appearance.
-        swing = math.cos(cycle)
-        leg_a = -swing * stride
-        leg_b = swing * stride
-        lift_a = max(0.0, math.sin(cycle)) * lift
-        lift_b = max(0.0, -math.sin(cycle)) * lift
-        # Two restrained COM rises per cycle, one for each recovery phase.
-        bob_wave = abs(math.sin(cycle)) if moving else 0.0
+        lift = lift_base * (1.0 if running else 0.45)
+
+        # --- Proper stance/swing gait model ---
+        # Phase 0.0: left heel contact, right toe-off (double support ending)
+        # Phase 0.25: right heel contact, left in mid-swing
+        # Phase 0.5: left toe-off, right mid-stance
+        # Phase 0.75: right in recovery (highest knee flexion)
+        #
+        # The stance foot stays planted (X fixed relative to the forward-
+        # advancing body), while the swing foot arcs ahead.  The body's hip
+        # centre shifts forward by stride/2 over one full cycle, which is
+        # exactly what makes the feet appear to plant and push off rather
+        # than skate.
+        #
+        # For a cached 8-frame cycle the phase is k/8.  We compute the
+        # stance/swing offset so that:
+        #   - At phase 0.0 and 0.5 the feet are at maximum separation (double
+        #     support / passing).
+        #   - The "planted" foot X is held constant while the swing foot moves.
+
+        # Stance offset: how far the body has advanced past the last foot
+        # plant.  At phase 0 the left foot just planted, so the body is at
+        # the left-plant position.  At phase 0.5 the right foot just planted,
+        # so the body has advanced by half a stride.
+        # Use a smooth interpolation (raised cosine) rather than linear to
+        # avoid visible jitter between the 8 discrete frames.
+        # Left stance: phase 0.0 to 0.5; right stance: 0.5 to 1.0
+        if phase < 0.5:
+            # Left foot planted, right foot swinging
+            t = phase * 2.0  # 0..1 within left stance
+            # Body advances from left-plant to right-plant position
+            body_adv = (1.0 - math.cos(math.pi * t)) * 0.5 * stride
+            # Left foot: planted at fixed X (the "behind" position)
+            foot_a_x = cx - 6 * sc  # fixed relative to sprite centre
+            foot_a_lift = 0.0       # planted: on the ground
+            # Right foot: swinging from behind to ahead
+            swing_t = t  # 0=toe-off, 1=heel-strike
+            foot_b_x = cx + 6 * sc - stride * (1.0 - swing_t)
+            # Right foot lift: parabolic arc, peaks mid-swing
+            foot_b_lift = lift * math.sin(math.pi * swing_t)
+            # Knee flexion: most bent at mid-swing, straight at contact
+            knee_flex_b = foot_b_lift * 0.6 + (1.0 - abs(2.0 * swing_t - 1.0)) * lift * 0.3
+            knee_flex_a = 0.0  # planted leg is straight
+        else:
+            # Right foot planted, left foot swinging
+            t = (phase - 0.5) * 2.0  # 0..1 within right stance
+            body_adv = (1.0 - math.cos(math.pi * t)) * 0.5 * stride
+            foot_b_x = cx + 6 * sc  # fixed (planted)
+            foot_b_lift = 0.0
+            swing_t = t
+            foot_a_x = cx - 6 * sc + stride * (1.0 - swing_t)
+            foot_a_lift = lift * math.sin(math.pi * swing_t)
+            knee_flex_a = foot_a_lift * 0.6 + (1.0 - abs(2.0 * swing_t - 1.0)) * lift * 0.3
+            knee_flex_b = 0.0
+
+        # The body's hip X shifts forward with the gait to sell the advance.
+        # This is the critical fix: the sprite is drawn with feet at fixed
+        # positions, but the hip/torso shifts so the planted foot stays
+        # under the body while the swing foot reaches ahead.
+        hip_x_offset = body_adv
+
+        # Two restrained COM rises per cycle (peaks at mid-stance, not
+        # mid-swing), matching real biomechanics.
         if moving:
-            bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
+            # COM is lowest at double support (phase 0, 0.5) and highest
+            # at mid-stance (phase 0.25, 0.75).
+            com_phase = abs(math.sin(cycle))  # peaks at 0.25, 0.75
+            bob_px = com_phase * bob_base * (1.0 if running else 0.55)
             body_sway = math.sin(cycle + math.pi * 0.5) * sway_base
         else:
-            # Preserve subtle breathing, attack wind-up and reload hand motion
-            # in their cached four-pose cycles without making idle feet drift.
-            bob_px = (abs(math.sin(cycle)) * 0.75
+            bob_px = (abs(math.sin(cycle)) * 0.6
                       if pose in ("idle", "attack", "reload") else 0.0)
-            sway_scale = 0.18 if pose == "idle" else 0.35
+            sway_scale = 0.15 if pose == "idle" else 0.30
             body_sway = (math.sin(cycle + math.pi * 0.5) *
                          sway_base * sway_scale
                          if pose in ("idle", "attack") else 0.0)
         # The head moves less than the torso, keeping the gaze readable.
+        # Hip X shifts forward with the gait (body advances over planted foot).
         hip_y = gy - 18 * sc - bob_px * 0.48 + crouch_px * 0.55
         shoulder_y = gy - 34 * sc - bob_px + crouch_px
         head_cy = gy - 40 * sc - bob_px * 0.58 + crouch_px
@@ -662,7 +719,7 @@ class AssetManager:
         lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
         if kind == "exploder" and moving:
             lean += math.sin(cycle * 0.5) * 1.8
-        hx = cx - lean * 0.32 + body_sway
+        hx = cx + hip_x_offset - lean * 0.32 + body_sway
         # Idle body sway (only for non-crawler zombies): subtle lateral shift
         # so idle poses don't look frozen. This is baked into the cached
         # frame so the renderer's ground anchor stays fixed.
@@ -671,17 +728,19 @@ class AssetManager:
             hx += idle_sway
         hy = hip_y
 
-        # Articulated hips, knees and ankles.  The knee bends more during
-        # recovery, while the planted leg extends behind the body's centre.
-        foot_a_x = cx - 6 * sc + leg_a
-        foot_b_x = cx + 6 * sc + leg_b
-        foot_a = (foot_a_x, gy - lift_a)
-        foot_b = (foot_b_x, gy - lift_b)
-        knee_a = (cx - 4 * sc + leg_a * 0.50 + asym * leg_b,
-                  hip_y + 9 * sc - lift_a * 0.48)
-        knee_b = (cx + 4 * sc + leg_b * 0.50 - asym * leg_a,
-                  hip_y + 9 * sc - lift_b * 0.48)
+        # Articulated hips, knees and ankles using the stance/swing model.
+        # The planted foot stays grounded; the swing foot arcs forward with
+        # knee flexion.  Both feet are drawn relative to the sprite centre
+        # (cx), while the body (hx) shifts forward via hip_x_offset.
+        foot_a = (foot_a_x, gy - foot_a_lift)
+        foot_b = (foot_b_x, gy - foot_b_lift)
+        # Knee: the swing leg bends more; the stance leg stays nearly straight.
+        knee_a = (cx - 4 * sc + (foot_a_x - (cx - 6 * sc)) * 0.4 + asym * (foot_b_x - (cx + 6 * sc)),
+                  hip_y + 8 * sc - knee_flex_a * 0.45)
+        knee_b = (cx + 4 * sc + (foot_b_x - (cx + 6 * sc)) * 0.4 - asym * (foot_a_x - (cx - 6 * sc)),
+                  hip_y + 8 * sc - knee_flex_b * 0.45)
         leg_width = max(3, int((6 if kind in ("tank", "armored") else 5) * sc))
+        # Back leg (darker) then front leg (lighter) for depth.
         pygame.draw.line(s, shade(bot, -0.28), (hx - 2, hy), knee_a, leg_width)
         pygame.draw.line(s, shade(bot, -0.12), knee_a, foot_a,
                          max(3, int(4 * sc)))
@@ -689,11 +748,14 @@ class AssetManager:
         pygame.draw.line(s, shade(bot, -0.18), knee_b, foot_b,
                          max(3, int(4 * sc)))
         boot = (35, 32, 29) if kind == "player" else (42, 38, 31)
-        # Boots point along the stride, with a small toe angle on recovery.
+        # Boots: toe points forward (toward movement direction).  The toe
+        # angle tilts slightly during swing for a more natural look.
+        toe_angle_a = min(3, foot_a_lift * 0.15)
+        toe_angle_b = min(3, foot_b_lift * 0.15)
         pygame.draw.line(s, boot, (foot_a[0] - 3, foot_a[1]),
-                         (foot_a[0] + 4, foot_a[1] - min(2, lift_a * 0.12)), 3)
+                         (foot_a[0] + 4, foot_a[1] - toe_angle_a), 3)
         pygame.draw.line(s, boot, (foot_b[0] - 3, foot_b[1]),
-                         (foot_b[0] + 4, foot_b[1] - min(2, lift_b * 0.12)), 3)
+                         (foot_b[0] + 4, foot_b[1] - toe_angle_b), 3)
 
         # Torso compression and shoulder counter-rotation add weight to impact.
         torso_top = shoulder_y + (4 if crouch else 0)
@@ -724,7 +786,12 @@ class AssetManager:
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
         if moving:
-            arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
+            # Arms counter-swing: left arm with right leg, right arm with left.
+            # Use the same phase that drives the legs so they stay in sync.
+            # During left-stance (phase 0-0.5): right leg swinging forward,
+            # so left arm swings forward (positive) and right arm backward.
+            arm_phase = math.sin(cycle)  # peaks when right leg is mid-swing
+            arm_swing = arm_phase * arm_base * (1.0 if running else 0.52)
         elif pose == "attack":
             arm_swing = math.sin(cycle) * arm_base * 1.15
         elif pose == "reload":
