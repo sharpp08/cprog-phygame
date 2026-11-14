@@ -47,7 +47,7 @@ class Player(Entity):
         self.anim_blend = 1.0
         self.anim_timer = 0.0
         self.frame_index = 0
-        # Gait phase drives the 4-frame walk/run cycle (0..1, wraps).
+        # Gait phase drives the cached eight-frame walk/run cycle (0..1).
         self._gait = 0.0
         # Footstep cadence: which foot hits next + stride accumulator.
         self._foot = 0.0
@@ -55,7 +55,6 @@ class Player(Entity):
         self._step_side = 0
         self.footstep_sound = False
         self._last_footstep_state = 0
-        self._bob = 0.0
 
     # ------------------------------------------------------------------
     @property
@@ -95,6 +94,8 @@ class Player(Entity):
         """
         dt = max(0.0, min(float(dt), 0.1))
         requested = abs(mv[0]) + abs(mv[1]) > 1e-6
+        # This flag is an edge event, not persistent animation state.
+        self.footstep_sound = False
         target_speed = (config.PLAYER_RUN_SPEED if running
                         else config.PLAYER_WALK_SPEED) * max(0.2, min(1.0, speed_scale))
         if requested:
@@ -116,7 +117,9 @@ class Player(Entity):
         old_x, old_y = self.x, self.y
         self.x, self.y = grid.move_circle(
             (old_x, old_y), (vx * dt, vy * dt), self.radius)
-        travelled = math.hypot(self.x - old_x, self.y - old_y)
+        actual_dx = self.x - old_x
+        actual_dy = self.y - old_y
+        travelled = math.hypot(actual_dx, actual_dy)
         self.actual_speed = travelled / dt if dt > 0.0 else 0.0
         self._cur_speed = self.actual_speed
         self.moving = self.actual_speed > 0.05
@@ -124,6 +127,14 @@ class Player(Entity):
                         self.actual_speed > config.PLAYER_WALK_SPEED * 1.05)
         target_amt = min(1.0, self.actual_speed / config.PLAYER_RUN_SPEED)
         self._move_amt += (target_amt - self._move_amt) * blend
+
+        # Aim has priority for a shooter. If there is no meaningful aim vector,
+        # face the collision-resolved travel direction rather than requested
+        # input, so wall sliding and diagonal turns cannot flip the sprite wrong.
+        if travelled > 1e-6 and math.hypot(*self.aim) < 0.04:
+            screen_dx = actual_dx - actual_dy
+            if abs(screen_dx) > 1e-5:
+                self._facing_target = -1.0 if screen_dx < 0.0 else 1.0
 
         if travelled > 1e-6:
             # Gait phase follows actual displacement, with a longer sprint
@@ -141,9 +152,9 @@ class Player(Entity):
                 self.footstep_sound = True
                 self._last_footstep_state = 1
         elif not requested:
-            # Decelerate: keep a short glide, then settle to idle.
+            # Decelerate: keep the gait phase for a seamless next step, but
+            # clear cadence debt once the character has physically settled.
             self._stride = 0.0
-            self.footstep_sound = False
             self._last_footstep_state = 0
 
     # ------------------------------------------------------------------
@@ -172,7 +183,9 @@ class Player(Entity):
     def update(self, dt: float) -> None:
         if self.dead:
             self.alive = False
-            self.anim_state = "dead"
+            self._set_anim_state("dead")
+            self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.20)
+            self.frame_index = 0
             return
         self.invuln = max(0.0, self.invuln - dt)
         self.damage_timer = max(0.0, self.damage_timer - dt)
@@ -180,7 +193,7 @@ class Player(Entity):
         self._shoot_flash = max(0.0, self._shoot_flash - dt)
         self.weapon.update(dt)
         # Smoothly rotate the sprite toward aim; this is frame-rate independent.
-        facing_blend = 1.0 - math.exp(-18.0 * max(0.0, dt))
+        facing_blend = 1.0 - math.exp(-config.PLAYER_TURN_SMOOTH * max(0.0, dt))
         self.facing += (self._facing_target - self.facing) * facing_blend
 
         # Animation state machine: prioritise hurt > reload > shoot > move.
@@ -192,9 +205,9 @@ class Player(Entity):
             next_anim_state = "shoot"
         elif self.crouching:
             next_anim_state = "crouch"
-        elif self._move_amt > 0.7:
+        elif self.running:
             next_anim_state = "run"
-        elif self._move_amt > 0.15:
+        elif self.moving:
             next_anim_state = "walk"
         else:
             next_anim_state = "idle"
@@ -203,15 +216,7 @@ class Player(Entity):
         self._set_anim_state(next_anim_state)
         self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.16)
 
-        # Body bob driven by the gait cycle (highest mid-stride).
-        if self.anim_state in ("walk", "run", "crouch"):
-            bob_amount = (0.8 if self.anim_state == "crouch" else
-                          (1.8 if self.anim_state == "walk" else 3.4))
-            self._bob = abs(math.sin(self._gait * math.pi * 2.0)) * bob_amount
-        else:
-            self._bob = 0.0
-
-        # Pick the gait frame.  Walk/run use the 4-frame cycle indexed by
+        # Pick the gait frame. Walk/run/crouch share one continuous cycle;
         # the gait phase; idle gently breathes through the idle frames.
         if self.anim_state in ("walk", "run", "crouch"):
             self.frame_index = int(self._gait * 8) % 8
@@ -223,11 +228,6 @@ class Player(Entity):
             self.frame_index = int(self.anim_timer * 3.0) % 4
         else:
             self.frame_index = 0
-
-    @property
-    def bob(self) -> float:
-        """Vertical body offset (px) for the renderer to lift the sprite."""
-        return getattr(self, "_bob", 0.0)
 
     def to_dict(self) -> dict:
         return {

@@ -334,15 +334,12 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
         self._shadow(z.x, z.y, 34, 80)
-        type_scale = {"tank": 1.3, "fast": 0.92, "regular": 1.0,
-                      "crawler": 0.85, "exploder": 1.08,
-                      "screamer": 1.0, "armored": 1.22,
-                      "stalker": 0.96}.get(z.ztype, 1.0)
-
         def zombie_frame(state, index):
             choices = frames.get(state, frames["idle"])
-            frame = self._scale_sprite(
-                choices[index % len(choices)], self.cam.zoom * type_scale)
+            # Archetype proportions are already authored into the cached pose.
+            # Scaling by type again here doubled size differences and distorted
+            # stride/ground-contact relationships.
+            frame = self._scale_sprite(choices[index % len(choices)])
             if z.facing < 0:
                 cache_key = id(frame)
                 flipped = self._flip_cache.get(cache_key)

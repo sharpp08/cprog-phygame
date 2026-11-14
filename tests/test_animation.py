@@ -23,6 +23,12 @@ class BlockedGrid:
         return pos
 
 
+class HalfBlockedGrid:
+    """Resolve only half the requested x displacement, like wall sliding."""
+    def move_circle(self, pos, delta, radius):
+        return pos[0] + delta[0] * 0.5, pos[1]
+
+
 class TestPlayerAnimation(unittest.TestCase):
     def test_blocked_player_does_not_foot_slide(self):
         player = Player(2.0, 2.0)
@@ -35,8 +41,9 @@ class TestPlayerAnimation(unittest.TestCase):
 
     def test_gait_uses_actual_distance(self):
         player = Player(2.0, 2.0)
-        player.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
-        self.assertGreater(player._gait, 0.0)
+        player.apply_movement((1.0, 0.0), False, 0.1, HalfBlockedGrid())
+        travelled = player.actual_speed * 0.1
+        self.assertAlmostEqual(player._gait, travelled * 0.81, places=6)
         self.assertGreater(player.actual_speed, 0.0)
 
     def test_walk_and_run_gait_rates_match_their_stride_lengths(self):
@@ -77,7 +84,8 @@ class TestPlayerAnimation(unittest.TestCase):
 
     def test_sprint_uses_eight_phase_run_cycle(self):
         player = Player(2.0, 2.0)
-        player._move_amt = 0.9
+        player.moving = True
+        player.running = True
         player._gait = 0.625
         player.update(1.0 / 60.0)
         self.assertEqual(player.anim_state, "run")
@@ -93,6 +101,25 @@ class TestPlayerAnimation(unittest.TestCase):
         for _ in range(60):
             player.update(1.0 / 60.0)
         self.assertLess(player.facing, -0.9)
+
+    def test_blocking_transitions_to_idle_without_resetting_gait(self):
+        player = Player(2.0, 2.0)
+        player.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
+        player.update(0.1)
+        gait = player._gait
+        self.assertEqual(player.anim_state, "walk")
+        player.apply_movement((1.0, 0.0), False, 0.1, BlockedGrid())
+        player.update(0.1)
+        self.assertEqual(player.anim_state, "idle")
+        self.assertEqual(player._gait, gait)
+        self.assertLess(player.anim_blend, 1.0)
+
+    def test_death_uses_transition_blend(self):
+        player = Player(2.0, 2.0)
+        player.hp = 0.0
+        player.update(1.0 / 60.0)
+        self.assertEqual(player.anim_state, "dead")
+        self.assertLess(player.anim_blend, 1.0)
 
     def test_reload_progress_is_monotonic(self):
         weapon = Weapon("pistol")
@@ -247,7 +274,7 @@ class TestFrameValidity(unittest.TestCase):
                     self.assertGreater(w, 0)
                     self.assertGreater(h, 0)
                     # No completely transparent frame
-                    alpha_sum = sum(a for a in pygame.surfarray.pixels_alpha(f).ravel())
+                    alpha_sum = int(pygame.surfarray.pixels_alpha(f).sum(dtype="uint64"))
                     self.assertGreater(alpha_sum, 0,
                                        f"Player {state} frame {i} is fully transparent")
 
@@ -271,6 +298,26 @@ class TestFrameValidity(unittest.TestCase):
                              f"{ztype} run has {len(self.assets.frames[key]['run'])} frames")
             self.assertEqual(len(self.assets.frames[key]["walk"]), 8,
                              f"{ztype} walk has {len(self.assets.frames[key]['walk'])} frames")
+
+    def test_locomotion_frames_keep_a_consistent_ground_anchor(self):
+        groups = [self.assets.frames["player"]]
+        groups.extend(self.assets.frames[f"zombie_{ztype}"]
+                      for ztype in config.ZOMBIE_TYPES)
+        for group in groups:
+            for state in ("walk", "run"):
+                bottoms = [frame.get_bounding_rect().bottom
+                           for frame in group[state]]
+                self.assertEqual(len(set(bottoms)), 1, bottoms)
+                self.assertGreaterEqual(bottoms[0], 59)
+
+    def test_crawler_torso_remains_ground_level_in_every_locomotion_frame(self):
+        crawler = self.assets.frames["zombie_crawler"]
+        regular = self.assets.frames["zombie_regular"]
+        for state in ("idle", "walk", "run", "attack"):
+            for index, frame in enumerate(crawler[state]):
+                regular_frame = regular[state][index % len(regular[state])]
+                self.assertGreater(frame.get_bounding_rect().top,
+                                   regular_frame.get_bounding_rect().top)
 
     def test_weapon_position_stable_during_run(self):
         """Player weapon should not drift to wildly different positions

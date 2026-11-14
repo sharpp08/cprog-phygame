@@ -537,7 +537,11 @@ class AssetManager:
         s = pygame.Surface((W, H), pygame.SRCALPHA)
         cx = W / 2
         skin, top, bot = p["skin"], p["top"], p["bot"]
-        gy = 60 - crouch * 6
+        # Every pose shares one ground contact plane. Crouching lowers the body,
+        # never the feet; changing this anchor made crawlers and crouched actors
+        # float several pixels above the isometric terrain.
+        gy = 60.0
+        crouch_px = max(0.0, crouch) * 6.0
         pygame.draw.ellipse(s, (0, 0, 0, 80),
                             (cx - 12 * sc, gy - 4, 24 * sc, 9))
         if pose == "dead":
@@ -636,7 +640,8 @@ class AssetManager:
         leg_b = swing * stride
         lift_a = max(0.0, math.sin(cycle)) * lift
         lift_b = max(0.0, -math.sin(cycle)) * lift
-        bob_wave = abs(math.sin(cycle * 2.0)) if moving else 0.0
+        # Two restrained COM rises per cycle, one for each recovery phase.
+        bob_wave = abs(math.sin(cycle)) if moving else 0.0
         if moving:
             bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
             body_sway = math.sin(cycle + math.pi * 0.5) * sway_base
@@ -650,9 +655,9 @@ class AssetManager:
                          sway_base * sway_scale
                          if pose in ("idle", "attack") else 0.0)
         # The head moves less than the torso, keeping the gaze readable.
-        hip_y = gy - 18 * sc - bob_px * 0.48
-        shoulder_y = gy - 34 * sc - bob_px
-        head_cy = gy - 40 * sc - bob_px * 0.58
+        hip_y = gy - 18 * sc - bob_px * 0.48 + crouch_px * 0.55
+        shoulder_y = gy - 34 * sc - bob_px + crouch_px
+        head_cy = gy - 40 * sc - bob_px * 0.58 + crouch_px
         lean = (6.0 * reach if pose in ("walk", "run", "idle") else 0.0)
         lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
         if kind == "exploder" and moving:

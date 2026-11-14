@@ -13,6 +13,13 @@ from entities.entity_base import Entity
 
 
 class Zombie(Entity):
+    RUN_THRESHOLDS = {
+        "regular": 0.66, "fast": 0.42, "tank": 0.78,
+        "crawler": 0.55, "exploder": 0.62, "screamer": 0.62,
+        "armored": 0.80, "stalker": 0.88,
+    }
+    CHASE_STATES = ("pursue", "investigating", "searching")
+
     def __init__(self, x: float, y: float, ztype: str = "regular") -> None:
         spec = config.ZOMBIE_TYPES[ztype]
         super().__init__(x, y, radius=spec["radius"], z=0.0)
@@ -84,9 +91,6 @@ class Zombie(Entity):
         self._hit_knock = 0.0         # brief backward recoil
         self._hit_knock_dir = 1.0
 
-        # Per-frame procedural bob for the renderer.
-        self._bob = 0.0
-
         # Zombie-specific gait feel by type.
         self._gait_stretch = {"regular": 0.9, "fast": 1.15,
                               "tank": 0.6, "crawler": 0.55,
@@ -116,10 +120,6 @@ class Zombie(Entity):
     def active(self) -> bool:
         """A zombie participates in AI / combat once it has emerged."""
         return self.alive and not self.spawning
-
-    @property
-    def bob(self) -> float:
-        return getattr(self, "_bob", 0.0)
 
     # ------------------------------------------------------------------
     def begin_emergence(self, style: str = "ground", duration: float = 1.4):
@@ -161,7 +161,8 @@ class Zombie(Entity):
         target_factor = (0.68 if self.state in ("idle", "wandering", "stalking")
                          else 1.0)
         target_speed = self.speed * target_factor
-        self._speed_current += (target_speed - self._speed_current) * min(1.0, dt * 1.8)
+        speed_blend = 1.0 - math.exp(-1.8 * dt)
+        self._speed_current += (target_speed - self._speed_current) * speed_blend
         speed = self._speed_current
         if self._stumble_t > 0:
             speed *= 0.35
@@ -185,26 +186,31 @@ class Zombie(Entity):
         old_x, old_y = self.x, self.y
         self.x, self.y = grid.move_circle((old_x, old_y), (dx, dy),
                                           self.radius)
-        travelled = math.hypot(self.x - old_x, self.y - old_y)
+        actual_dx = self.x - old_x
+        actual_dy = self.y - old_y
+        travelled = math.hypot(actual_dx, actual_dy)
         self._actual_speed = travelled / dt if dt > 0.0 else 0.0
         self.moving = self._actual_speed > 0.05
         if self.moving:
             # Feet cycle in proportion to distance actually walked, so a
             # zombie jammed against geometry never foot-slides.
-            chase_state = self.state in ("pursue", "investigating", "searching")
-            run_threshold = {
-                "regular": 0.66, "fast": 0.42, "tank": 0.78,
-                "crawler": 0.55, "exploder": 0.62, "screamer": 0.62,
-                "armored": 0.80, "stalker": 0.88,
-            }.get(self.ztype, 0.66)
-            speed_ratio = self._actual_speed / max(0.1, self.speed)
             # Run stride profiles are calibrated to foot travel; walking uses
             # a 30% shorter step and therefore advances its cycle faster.
-            cycle_rate = self._gait_rate if chase_state and speed_ratio >= run_threshold else self._gait_rate / 0.70
+            cycle_rate = (self._gait_rate if self._uses_run_cycle()
+                          else self._gait_rate / 0.70)
             self._gait = (self._gait + travelled * cycle_rate) % 1.0
-            # Smoothly turn toward the intended travel direction.
-            target = -1.0 if (vx - vy) < 0 else 1.0
-            self.facing += (target - self.facing) * min(1.0, dt * 10.0)
+            # Turn toward collision-resolved screen travel, not requested AI
+            # steering, so sliding along an obstacle cannot face the wrong way.
+            screen_dx = actual_dx - actual_dy
+            if abs(screen_dx) > 1e-5:
+                target = -1.0 if screen_dx < 0.0 else 1.0
+                turn_blend = 1.0 - math.exp(-10.0 * dt)
+                self.facing += (target - self.facing) * turn_blend
+
+    def _uses_run_cycle(self) -> bool:
+        speed_ratio = self._actual_speed / max(0.1, self.speed)
+        return (self.state in self.CHASE_STATES and
+                speed_ratio >= self.RUN_THRESHOLDS.get(self.ztype, 0.66))
 
     def _set_anim_state(self, state: str) -> None:
         """Blend into a new animation state without a hard frame cut."""
@@ -237,7 +243,8 @@ class Zombie(Entity):
             self.alive = False
             self.spawning = False
             self.state = "dead"
-            self.anim_state = "dead"
+            # update() performs the state change so the last live pose can
+            # crossfade into the authored death frame instead of hard-cutting.
             self.death_stagger = 0.55   # brief wobble before the fall
             self._corpse_t = 0.9       # corpse lingers, then fades out
 
@@ -247,7 +254,6 @@ class Zombie(Entity):
         dt = max(0.0, min(float(dt), 0.1))
         self._attack_timer = max(0.0, self._attack_timer - dt)
         self.hit_flash = max(0.0, self.hit_flash - dt)
-        self._hit_knock = max(0.0, self._hit_knock - dt)
 
         # Cinematic spawn first: the body rises, then control passes to AI.
         if self.spawning:
@@ -284,15 +290,7 @@ class Zombie(Entity):
             # Every infected archetype has a distinct run cycle. Heavy types
             # need a higher speed ratio before their lumbering sprint engages;
             # the crawler uses its low, fast crawl cycle instead.
-            chase_state = self.state in ("pursue", "investigating", "searching")
-            run_threshold = {
-                "regular": 0.66, "fast": 0.42, "tank": 0.78,
-                "crawler": 0.55, "exploder": 0.62, "screamer": 0.62,
-                "armored": 0.80, "stalker": 0.88,
-            }.get(self.ztype, 0.66)
-            speed_ratio = self._actual_speed / max(0.1, self.speed)
-            state = ("run" if chase_state and speed_ratio >= run_threshold
-                     else "walk")
+            state = "run" if self._uses_run_cycle() else "walk"
         else:
             state = "idle"
         self._set_anim_state(state)
@@ -309,19 +307,6 @@ class Zombie(Entity):
             self.frame_index = int(self.anim_timer * 1.2) % 4
         else:
             self.frame_index = 0
-
-        # Body bob + lateral sway for a shambling, off-balance feel.  The
-        # walk bob scales with real speed so faster zombies pump more.
-        if state in ("walk", "run"):
-            amp = (1.6 if state == "walk" else 3.1) + 1.2 * min(
-                1.0, self._actual_speed / max(0.1, self.speed))
-            if self.ztype == "crawler":
-                amp *= 0.55
-            self._bob = abs(math.sin(self._gait * math.pi * 2.0)) * amp
-        elif state == "attack":
-            self._bob = math.sin(self._action_phase * math.pi) * 2.0
-        else:
-            self._bob = math.sin(self._sway_ph) * 0.8
 
     def to_dict(self) -> dict:
         return {"x": self.x, "y": self.y, "ztype": self.ztype,
