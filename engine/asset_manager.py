@@ -689,12 +689,16 @@ class AssetManager:
 
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
-        arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
+        arm_swing = (math.sin(cycle) * arm_base *
+                     (1.0 if running else 0.58)) if moving else 0.0
         left_shoulder = (hx - 5 * sc, arm_y)
         left_elbow = (hx - 7 * sc + arm_swing * 0.52,
                       arm_y + 5 * sc - arm_swing * 0.18)
         left_hand = (hx - 8 * sc + arm_swing,
                      arm_y + 10 * sc - arm_swing * 0.34)
+        if kind == "player" and pose == "reload":
+            left_elbow = (hx - 1 * sc, arm_y + 4 * sc)
+            left_hand = (hx + 5 * sc, arm_y + 8 * sc)
         arm_col = shade(top, -0.18)
         pygame.draw.line(s, arm_col, left_shoulder, left_elbow,
                          max(3, int(4 * sc)))
@@ -707,9 +711,13 @@ class AssetManager:
         if kind == "player":
             # Keep the weapon arm anchored to the torso; only the support arm
             # counter-swings, preventing the gun from wobbling independently.
-            right_elbow = (hx + 8 * sc, arm_y + 4 * sc)
-            right_hand = (hx + 9 * sc + reach_px * 0.55,
-                          arm_y + 4 * sc - 2)
+            if pose == "reload":
+                right_elbow = (hx + 7 * sc, arm_y + 6 * sc)
+                right_hand = (hx + 10 * sc, arm_y + 10 * sc)
+            else:
+                right_elbow = (hx + 8 * sc, arm_y + 4 * sc)
+                right_hand = (hx + 9 * sc + reach_px * 0.55,
+                              arm_y + 4 * sc - 2)
             pygame.draw.line(s, arm_col, right_shoulder, right_elbow,
                              max(3, int(4 * sc)))
             pygame.draw.line(s, shade(skin, -0.15), right_elbow, right_hand,
