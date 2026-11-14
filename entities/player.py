@@ -128,10 +128,13 @@ class Player(Entity):
         if travelled > 1e-6:
             # Gait phase follows actual displacement, with a longer sprint
             # stride and shorter walking stride to prevent foot sliding.
-            gait_rate = 0.36 if self.running else 0.48
+            # Match the backward sweep of the planted foot to the distance
+            # travelled during half a gait cycle.  Running has a longer stride
+            # (lower cycles per tile); walking uses shorter, quicker steps.
+            gait_rate = 0.44 if self.running else 0.81
             self._gait = (self._gait + travelled * gait_rate) % 1.0
             self._stride += travelled
-            step_length = 1.35 if self.running else 1.0
+            step_length = 1.14 if self.running else 0.62
             if self._stride >= step_length:
                 self._stride %= step_length
                 self._step_side = 1 - self._step_side
