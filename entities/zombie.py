@@ -60,7 +60,15 @@ class Zombie(Entity):
         # Procedural gait: each zombie has its own phase + asymmetric limb
         # stretch so the shambling never looks mechanical.
         self._gait = random.uniform(0.0, 1.0)
-        self._gait_rate = random.uniform(0.85, 1.15)
+        # Cycles per world tile: short-stride runners cycle faster while
+        # heavy infected cover more ground per step. Small variation keeps
+        # individual zombies from moving in synchronized lockstep.
+        gait_rates = {
+            "regular": 0.68, "fast": 0.96, "tank": 0.42,
+            "crawler": 0.62, "exploder": 0.62, "screamer": 0.78,
+            "armored": 0.44, "stalker": 0.88,
+        }
+        self._gait_rate = gait_rates.get(ztype, 0.68) * random.uniform(0.95, 1.05)
         self._sway = random.uniform(0.5, 1.0)   # body sway amplitude
         self._sway_ph = random.uniform(0.0, math.pi * 2)
         self._stumble = 0.0                  # seconds until next stumble
@@ -181,8 +189,7 @@ class Zombie(Entity):
         if self.moving:
             # Feet cycle in proportion to distance actually walked, so a
             # zombie jammed against geometry never foot-slides.
-            self._gait = (self._gait + travelled * 0.8 *
-                          self._gait_rate) % 1.0
+            self._gait = (self._gait + travelled * self._gait_rate) % 1.0
             # Smoothly turn toward the intended travel direction.
             target = -1.0 if (vx - vy) < 0 else 1.0
             self.facing += (target - self.facing) * min(1.0, dt * 10.0)
