@@ -566,17 +566,19 @@ class AssetManager:
             # Hind limbs push while the forelimbs reach and catch the ground.
             for side, phase_wave in ((-1, wave), (1, counter)):
                 hip = (cx - 5 * sc, body_y + 1)
-                knee = (cx - 11 * sc, body_y + 7 + phase_wave * 2.0)
-                foot = (cx - 16 * sc + phase_wave * 4.0 * crawl_speed,
-                        gy - max(0.0, phase_wave) * 2.0)
+                knee = (cx - 11 * sc,
+                        body_y + 7 + phase_wave * 2.0 + side * 2.0)
+                foot = (cx - 16 * sc + phase_wave * 8.5 * crawl_speed,
+                        gy - max(0.0, phase_wave) * 2.0 + side * 2.0)
                 pygame.draw.line(s, shade(bot, -0.3), hip, knee,
                                  max(3, int(5 * sc)))
                 pygame.draw.line(s, bot, knee, foot,
                                  max(3, int(4 * sc)))
                 shoulder = (cx + 4 * sc, body_y - 1)
-                elbow = (cx + 10 * sc, body_y + 5 - phase_wave * 2.0)
-                hand = (cx + 15 * sc - phase_wave * 4.0 * crawl_speed,
-                        gy - max(0.0, -phase_wave) * 2.0)
+                elbow = (cx + 10 * sc,
+                         body_y + 5 - phase_wave * 2.0 + side * 2.0)
+                hand = (cx + 15 * sc - phase_wave * 8.5 * crawl_speed,
+                        gy - max(0.0, -phase_wave) * 2.0 + side * 2.0)
                 pygame.draw.line(s, shade(top, -0.3), shoulder, elbow,
                                  max(3, int(4 * sc)))
                 pygame.draw.line(s, skin, elbow, hand,
@@ -612,7 +614,7 @@ class AssetManager:
             profiles.get(kind, profiles["regular"]))
         moving = pose in ("walk", "run")
         running = pose == "run"
-        amp = max(0.65, min(1.35, abs(gait)))
+        amp = 0.5 + 0.5 * min(1.5, abs(gait))
         stride = stride_base * (1.0 if running else 0.70) * amp
         lift = lift_base * (1.0 if running else 0.48)
         # Opposite legs exchange support and recovery.  At phase 0 and 0.5
