@@ -670,6 +670,14 @@ class AssetManager:
             knee_flex_a = foot_a_lift * 0.6 + (1.0 - abs(2.0 * t - 1.0)) * lift * 0.3
             compression = math.sin(math.pi * t) * (1.0 if running else 0.5)
 
+        # Ensure all foot position variables are defined for later use
+        if phase < 0.5:
+            stance_foot_b_x = cx + 6 * sc + stride  # Off-screen placeholder
+            swing_foot_a_x = cx - 6 * sc - stride   # Off-screen placeholder
+        else:
+            stance_foot_a_x = cx - 6 * sc           # Already defined
+            swing_foot_b_x = cx + 6 * sc            # Already defined
+
         # Airborne phase detection (phases around 0.375 and 0.875)
         airborne_phase = max(0.0, 1.0 - abs((phase % 0.5) - 0.25) / 0.15)
         airborne_boost = airborne_phase * lift * 0.5
