@@ -550,10 +550,15 @@ class AssetManager:
         # The crawler has a genuinely quadrupedal silhouette.  Its limbs
         # alternate as front/rear pairs and its torso stays close to the soil.
         cycle = phase * math.pi * 2.0
-        if kind == "crawler" and pose in ("walk", "run"):
-            crawl_speed = 1.0 if pose == "run" else 0.72
-            wave = math.sin(cycle)
-            counter = math.sin(cycle + math.pi)
+        if kind == "crawler":
+            motion_scale = (1.0 if pose == "run" else
+                            0.72 if pose == "walk" else
+                            0.65 if pose == "attack" else
+                            0.12 if pose == "idle" else 0.30)
+            crawl_speed = (1.0 if pose == "run" else
+                           0.72 if pose == "walk" else 0.65)
+            wave = math.sin(cycle) * motion_scale
+            counter = math.sin(cycle + math.pi) * motion_scale
             body_y = gy - 13 * sc
             pygame.draw.polygon(
                 s, shade(top, -0.28),
