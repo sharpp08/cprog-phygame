@@ -668,14 +668,24 @@ class AssetManager:
         lean = (6.0 * reach if pose in ("walk", "run", "idle") else 0.0)
         lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
         if kind == "exploder" and moving:
-            lean += math.sin(cycle * 0.5) * 1.8
+             lean += math.sin(cycle * 0.5) * 1.8
         hx = cx - lean * 0.32 + body_sway
         leaning = lean > 3.0  # Track if character is forward-leaning
         # Apply torso twist for upper-body follow-through during running.
         # Twist shifts shoulders opposite to hip rotation.
         if moving:
-            hx += torso_twist * 0.5
-            shoulder_y -= torso_compress * 0.3
+             torso_twist = math.sin(cycle) * 1.8 * (0.7 if running else 0.35)
+             torso_compress = abs(math.sin(cycle)) * 1.2 * (1.0 if running else 0.4)
+             hx += torso_twist * 0.5
+             shoulder_y -= torso_compress * 0.3
+             # Visible forward lean: shift shoulders ahead of hips proportionally
+             lean_offset = lean * 0.25 * (1.0 if running else 0.5)
+             shoulder_x_offset = lean_offset
+        else:
+             torso_twist = 0.0
+             torso_compress = 0.0
+             lean_offset = 0.0
+             shoulder_x_offset = 0.0
         # Idle body sway (only for non-crawler zombies): subtle lateral shift
         # so idle poses don't look frozen. This is baked into the cached
         # frame so the renderer's ground anchor stays fixed.
@@ -711,60 +721,64 @@ class AssetManager:
         # Torso compression and shoulder counter-rotation add weight to impact.
         torso_top = shoulder_y + (4 if crouch else 0)
         torso_bottom = hip_y
-        torso = [(hx - 8 * sc, torso_top + 2), (hx + 8 * sc, torso_top + 2),
+        # Forward lean skews torso: shoulders shift ahead of hips
+        lean_skew = lean * 0.15  # How much the top shifts relative to bottom
+        torso = [(hx - 8 * sc - lean_skew, torso_top + 2),
+                 (hx + 8 * sc + lean_skew, torso_top + 2),
                  (hx + 6 * sc, torso_bottom), (hx - 6 * sc, torso_bottom)]
         pygame.draw.polygon(s, shade(top, -0.28), torso)
         pygame.draw.polygon(s, top,
-                            [(hx - 7 * sc, torso_top + 1),
-                             (hx + 7 * sc, torso_top + 1),
+                            [(hx - 7 * sc - lean_skew * 0.5, torso_top + 1),
+                             (hx + 7 * sc + lean_skew * 0.5, torso_top + 1),
                              (hx + 5 * sc, torso_bottom - 2),
                              (hx - 5 * sc, torso_bottom - 2)])
         pygame.draw.line(s, shade(bot, -0.2),
                          (hx - 6 * sc, hip_y - 3),
                          (hx + 6 * sc, hip_y - 3), 3)
 
-        # Head stays relatively stable while the chest pitches forward.
-        # During running, head stabilizes gaze by resisting forward lean.
-        head_stabilize = 0.0
-        if moving:
-            head_stabilize = torso_twist * 0.3 + (lean * 0.12 if leaning else 0.0)
-        head_hx = hx + head_stabilize
-        pygame.draw.ellipse(s, shade(skin, -0.2),
-                            (head_hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
-        pygame.draw.ellipse(s, skin,
-                            (head_hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
-        pygame.draw.ellipse(s, p["hair"],
-                            (head_hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
-        eye = (240, 90, 60) if pose == "hit" else (30, 24, 20)
-        pygame.draw.circle(s, eye, (int(head_hx - 2), int(head_cy)), 1)
-        pygame.draw.circle(s, eye, (int(head_hx + 3), int(head_cy)), 1)
+         # Head stays relatively stable while the chest pitches forward.
+         # During running, head stabilizes gaze by resisting forward lean.
+         head_stabilize = 0.0
+         if moving:
+             # Counter-rotate head against body lean to keep gaze forward
+             head_stabilize = -lean * 0.15 + torso_twist * 0.3
+         head_hx = hx + head_stabilize
+         pygame.draw.ellipse(s, shade(skin, -0.2),
+         (head_hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
+         pygame.draw.ellipse(s, skin,
+         (head_hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
+         pygame.draw.ellipse(s, p["hair"],
+         (head_hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
+         eye = (240, 90, 60) if pose == "hit" else (30, 24, 20)
+         pygame.draw.circle(s, eye, (int(head_hx - 2), int(head_cy)), 1)
+         pygame.draw.circle(s, eye, (int(head_hx + 3), int(head_cy)), 1)
 
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
         # Initialize torso offsets for all poses
         torso_twist = 0.0
         torso_compress = 0.0
-        left_shoulder_offset = 0.0
-        right_shoulder_offset = 0.0
+        lean_offset = 0.0
+        shoulder_x_offset = 0.0
         if moving:
             # Subtle arm counter-swing: left arm with right leg, right arm
             # with left leg.  Keep amplitude moderate to avoid robotic look.
-            arm_swing = math.sin(cycle) * arm_base * (0.85 if running else 0.45)
+            arm_swing = math.sin(cycle) * arm_base * (0.9 if running else 0.5)
             # Shoulders follow torso twist for coordinated upper-body movement
-            left_shoulder_offset = torso_twist * 0.6
-            right_shoulder_offset = -torso_twist * 0.6
+            left_shoulder_offset = torso_twist * 0.6 + shoulder_x_offset * 0.5
+            right_shoulder_offset = -torso_twist * 0.6 + shoulder_x_offset * 0.5
         elif pose == "attack":
             arm_swing = math.sin(cycle) * arm_base * 1.15
-            left_shoulder_offset = torso_twist * 0.4
-            right_shoulder_offset = -torso_twist * 0.4
+            left_shoulder_offset = torso_twist * 0.4 + shoulder_x_offset * 0.3
+            right_shoulder_offset = -torso_twist * 0.4 + shoulder_x_offset * 0.3
         elif pose == "reload":
             arm_swing = math.sin(cycle) * 1.2
-            left_shoulder_offset = 0
-            right_shoulder_offset = 0
+            left_shoulder_offset = shoulder_x_offset * 0.3
+            right_shoulder_offset = shoulder_x_offset * 0.3
         elif pose == "idle":
             arm_swing = math.sin(cycle) * 0.8
-            left_shoulder_offset = torso_twist * 0.3
-            right_shoulder_offset = -torso_twist * 0.3
+            left_shoulder_offset = torso_twist * 0.3 + shoulder_x_offset * 0.2
+            right_shoulder_offset = -torso_twist * 0.3 + shoulder_x_offset * 0.2
         else:
             arm_swing = 0.0
             left_shoulder_offset = 0
