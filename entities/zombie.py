@@ -64,9 +64,9 @@ class Zombie(Entity):
         # heavy infected cover more ground per step. Small variation keeps
         # individual zombies from moving in synchronized lockstep.
         gait_rates = {
-            "regular": 0.68, "fast": 0.96, "tank": 0.42,
-            "crawler": 0.62, "exploder": 0.62, "screamer": 0.78,
-            "armored": 0.44, "stalker": 0.88,
+            "regular": 0.57, "fast": 0.545, "tank": 0.595,
+            "crawler": 0.706, "exploder": 0.628, "screamer": 0.607,
+            "armored": 0.634, "stalker": 0.620,
         }
         self._gait_rate = gait_rates.get(ztype, 0.68) * random.uniform(0.95, 1.05)
         self._sway = random.uniform(0.5, 1.0)   # body sway amplitude
@@ -189,7 +189,17 @@ class Zombie(Entity):
         if self.moving:
             # Feet cycle in proportion to distance actually walked, so a
             # zombie jammed against geometry never foot-slides.
-            self._gait = (self._gait + travelled * self._gait_rate) % 1.0
+            chase_state = self.state in ("pursue", "investigating", "searching")
+            run_threshold = {
+                "regular": 0.66, "fast": 0.42, "tank": 0.78,
+                "crawler": 0.55, "exploder": 0.62, "screamer": 0.62,
+                "armored": 0.80, "stalker": 0.88,
+            }.get(self.ztype, 0.66)
+            speed_ratio = self._actual_speed / max(0.1, self.speed)
+            # Run stride profiles are calibrated to foot travel; walking uses
+            # a 30% shorter step and therefore advances its cycle faster.
+            cycle_rate = self._gait_rate if chase_state and speed_ratio >= run_threshold else self._gait_rate / 0.70
+            self._gait = (self._gait + travelled * cycle_rate) % 1.0
             # Smoothly turn toward the intended travel direction.
             target = -1.0 if (vx - vy) < 0 else 1.0
             self.facing += (target - self.facing) * min(1.0, dt * 10.0)
