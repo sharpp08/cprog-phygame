@@ -353,11 +353,13 @@ class Renderer:
             return frame
 
         blend = max(0.0, min(1.0, float(getattr(z, "anim_blend", 1.0))))
-        base_y = cy - float(getattr(z, "bob", 0.0)) * cam.zoom
-        sway_x = math.sin(getattr(z, "_sway_ph", 0.0)) * \
-            getattr(z, "_sway", 0.0) * 1.2 * cam.zoom
-        if z.anim_state == "run":
-            sway_x += math.sin(getattr(z, "_gait", 0.0) * math.pi * 2.0) * 1.1 * cam.zoom
+        # Keep the ground anchor fixed while moving. Bob and lateral sway
+        # are authored inside cached pose frames; translating the whole sprite
+        # here made planted feet visibly skate across the terrain.
+        base_y = cy
+        sway_x = (math.sin(getattr(z, "_sway_ph", 0.0)) *
+                  getattr(z, "_sway", 0.0) * 1.2 * cam.zoom
+                  if not z.moving else 0.0)
         if blend < 1.0 and z.prev_anim_state != z.anim_state:
             previous = zombie_frame(z.prev_anim_state,
                                     z.prev_frame_index).copy()
@@ -445,13 +447,11 @@ class Renderer:
             spr = spr.copy()
             spr.set_alpha(120 if blend >= 1.0 else
                           int(120 * blend))
-        player_bob = float(getattr(p, "bob", 0.0)) * cam.zoom
-        move_x, move_y = getattr(p, "_velocity", (0.0, 0.0))
-        lean_x = max(-2.0, min(2.0, (move_x - move_y) * 0.012)) * cam.zoom
-        if p.anim_state == "run":
-            lean_x += math.sin(getattr(p, "_gait", 0.0) * math.pi * 2.0) * 1.0 * cam.zoom
-        self.screen.blit(spr, (cx + lean_x - spr.get_width() / 2,
-                               cy - player_bob - spr.get_height()
+        # Torso bob and lean are authored inside the cached pose. Never
+        # offset the complete sprite during a stride: the feet stay pinned
+        # to the isometric ground anchor instead of sliding or floating.
+        self.screen.blit(spr, (cx - spr.get_width() / 2,
+                               cy - spr.get_height()
                                + 10 * cam.zoom))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
