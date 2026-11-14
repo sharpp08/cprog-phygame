@@ -251,6 +251,22 @@ class TestRendererGraphicsIntegration(unittest.TestCase):
                 frames = self.renderer.assets.frames[f"zombie_{ztype}"]["run"]
                 self.assertEqual(len(frames), 8)
 
+    def test_run_cycles_use_distinct_cached_poses(self):
+        player_frames = self.renderer.assets.player_frames("run")
+        self.assertEqual(len({pygame.image.tostring(f, "RGBA")
+                              for f in player_frames}), 8)
+        for ztype in config.ZOMBIE_TYPES:
+            with self.subTest(ztype=ztype):
+                frames = self.renderer.assets.frames[f"zombie_{ztype}"]["run"]
+                self.assertEqual(len({pygame.image.tostring(f, "RGBA")
+                                      for f in frames}), 8)
+
+    def test_crawler_run_pose_stays_lower_than_upright_zombies(self):
+        frames = self.renderer.assets.frames
+        crawler = frames["zombie_crawler"]["run"][0].get_bounding_rect()
+        regular = frames["zombie_regular"]["run"][0].get_bounding_rect()
+        self.assertGreater(crawler.top, regular.top)
+
     def test_renderer_owns_graphics_subsystems(self):
         r = self.renderer
         self.assertTrue(hasattr(r, "post"))
