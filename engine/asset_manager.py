@@ -645,6 +645,13 @@ class AssetManager:
         if moving:
             bob_px = bob_wave * bob_base * (1.0 if running else 0.48)
             body_sway = math.sin(cycle + math.pi * 0.5) * sway_base
+            # Torso counter-rotation: shoulders rotate opposite to hip due to
+            # arm/leg counter-swing, giving the upper body natural follow-through.
+            torso_twist = math.sin(cycle) * 1.8 * (0.7 if running else 0.35)
+            # Torso compression during stance: squash slightly when foot
+            # impacts ground, restore during swing for grounded feel.
+            stance_phase = abs(math.sin(cycle))
+            torso_compress = stance_phase * 1.2 * (1.0 if running else 0.4)
         else:
             # Preserve subtle breathing, attack wind-up and reload hand motion
             # in their cached four-pose cycles without making idle feet drift.
@@ -663,6 +670,12 @@ class AssetManager:
         if kind == "exploder" and moving:
             lean += math.sin(cycle * 0.5) * 1.8
         hx = cx - lean * 0.32 + body_sway
+        leaning = lean > 3.0  # Track if character is forward-leaning
+        # Apply torso twist for upper-body follow-through during running.
+        # Twist shifts shoulders opposite to hip rotation.
+        if moving:
+            hx += torso_twist * 0.5
+            shoulder_y -= torso_compress * 0.3
         # Idle body sway (only for non-crawler zombies): subtle lateral shift
         # so idle poses don't look frozen. This is baked into the cached
         # frame so the renderer's ground anchor stays fixed.
@@ -711,32 +724,55 @@ class AssetManager:
                          (hx + 6 * sc, hip_y - 3), 3)
 
         # Head stays relatively stable while the chest pitches forward.
+        # During running, head stabilizes gaze by resisting forward lean.
+        head_stabilize = 0.0
+        if moving:
+            head_stabilize = torso_twist * 0.3 + (lean * 0.12 if leaning else 0.0)
+        head_hx = hx + head_stabilize
         pygame.draw.ellipse(s, shade(skin, -0.2),
-                            (hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
+                            (head_hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
         pygame.draw.ellipse(s, skin,
-                            (hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
+                            (head_hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
         pygame.draw.ellipse(s, p["hair"],
-                            (hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
+                            (head_hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
         eye = (240, 90, 60) if pose == "hit" else (30, 24, 20)
-        pygame.draw.circle(s, eye, (int(hx - 2), int(head_cy)), 1)
-        pygame.draw.circle(s, eye, (int(hx + 3), int(head_cy)), 1)
+        pygame.draw.circle(s, eye, (int(head_hx - 2), int(head_cy)), 1)
+        pygame.draw.circle(s, eye, (int(head_hx + 3), int(head_cy)), 1)
 
         arm_y = shoulder_y + 6
         reach_px = 16 * reach * sc
+        # Initialize torso offsets for all poses
+        torso_twist = 0.0
+        torso_compress = 0.0
+        left_shoulder_offset = 0.0
+        right_shoulder_offset = 0.0
         if moving:
-            arm_swing = math.sin(cycle) * arm_base * (1.0 if running else 0.58)
+            # Subtle arm counter-swing: left arm with right leg, right arm
+            # with left leg.  Keep amplitude moderate to avoid robotic look.
+            arm_swing = math.sin(cycle) * arm_base * (0.85 if running else 0.45)
+            # Shoulders follow torso twist for coordinated upper-body movement
+            left_shoulder_offset = torso_twist * 0.6
+            right_shoulder_offset = -torso_twist * 0.6
         elif pose == "attack":
             arm_swing = math.sin(cycle) * arm_base * 1.15
+            left_shoulder_offset = torso_twist * 0.4
+            right_shoulder_offset = -torso_twist * 0.4
         elif pose == "reload":
             arm_swing = math.sin(cycle) * 1.2
+            left_shoulder_offset = 0
+            right_shoulder_offset = 0
         elif pose == "idle":
             arm_swing = math.sin(cycle) * 0.8
+            left_shoulder_offset = torso_twist * 0.3
+            right_shoulder_offset = -torso_twist * 0.3
         else:
             arm_swing = 0.0
-        left_shoulder = (hx - 5 * sc, arm_y)
-        left_elbow = (hx - 7 * sc + arm_swing * 0.52,
+            left_shoulder_offset = 0
+            right_shoulder_offset = 0
+        left_shoulder = (hx + left_shoulder_offset - 5 * sc, arm_y)
+        left_elbow = (hx + left_shoulder_offset - 7 * sc + arm_swing * 0.52,
                       arm_y + 5 * sc - arm_swing * 0.18)
-        left_hand = (hx - 8 * sc + arm_swing,
+        left_hand = (hx + left_shoulder_offset - 8 * sc + arm_swing,
                      arm_y + 10 * sc - arm_swing * 0.34)
         if kind == "player" and pose == "reload":
             left_elbow = (hx - 1 * sc, arm_y + 4 * sc)
@@ -750,17 +786,17 @@ class AssetManager:
         pygame.draw.circle(s, skin, (int(left_hand[0]), int(left_hand[1])),
                            max(2, int(2 * sc)))
 
-        right_shoulder = (hx + 5 * sc, arm_y)
+        right_shoulder = (hx + right_shoulder_offset + 5 * sc, arm_y)
         if kind == "player":
             # Keep the weapon arm anchored to the torso; only the support arm
             # counter-swings, preventing the gun from wobbling independently.
             if pose == "reload":
-                right_elbow = (hx + 7 * sc, arm_y + 6 * sc)
-                right_hand = (hx + 10 * sc,
+                right_elbow = (hx + right_shoulder_offset + 7 * sc, arm_y + 6 * sc)
+                right_hand = (hx + right_shoulder_offset + 10 * sc,
                               arm_y + 10 * sc + math.cos(cycle) * 1.5)
             else:
-                right_elbow = (hx + 8 * sc, arm_y + 4 * sc)
-                right_hand = (hx + 9 * sc + reach_px * 0.55,
+                right_elbow = (hx + right_shoulder_offset + 8 * sc, arm_y + 4 * sc)
+                right_hand = (hx + right_shoulder_offset + 9 * sc + reach_px * 0.55,
                               arm_y + 4 * sc - 2)
             pygame.draw.line(s, arm_col, right_shoulder, right_elbow,
                              max(3, int(4 * sc)))
@@ -780,9 +816,9 @@ class AssetManager:
         else:
             # Zombies claw and reach rather than inexplicably carrying guns.
             claw_reach = 8.0 + reach_px * 0.45
-            right_elbow = (hx + 8 * sc + arm_swing * 0.25,
+            right_elbow = (hx + right_shoulder_offset + 8 * sc + arm_swing * 0.25,
                            arm_y + 5 * sc + arm_swing * 0.12)
-            right_hand = (hx + 10 * sc + claw_reach - arm_swing * 0.35,
+            right_hand = (hx + right_shoulder_offset + 10 * sc + claw_reach - arm_swing * 0.35,
                           arm_y + 8 * sc - arm_swing * 0.25)
             pygame.draw.line(s, arm_col, right_shoulder, right_elbow,
                              max(3, int(4 * sc)))
@@ -796,14 +832,18 @@ class AssetManager:
         # Keep the player's clothing readable and give enemy silhouettes
         # small archetype-specific details without changing their proportions.
         if kind == "player":
+            # Clothing lines sway with torso rotation during movement
+            clothing_swing = math.sin(cycle) * 1.5 if moving else 0.0
             pygame.draw.line(s, shade(top, -0.35),
-                             (hx - 5 * sc, torso_top + 5),
-                             (hx - 1 * sc, hip_y - 2), 2)
+                             (hx - 5 * sc + clothing_swing, torso_top + 5),
+                             (hx - 1 * sc - clothing_swing * 0.5, hip_y - 2), 2)
             pygame.draw.line(s, shade(top, 0.30),
-                             (hx + 4 * sc, torso_top + 6),
-                             (hx + 2 * sc, hip_y - 5), 1)
+                             (hx + 4 * sc - clothing_swing * 0.7, torso_top + 6),
+                             (hx + 2 * sc + clothing_swing * 0.4, hip_y - 5), 1)
+            # Backpack oscillates subtly with run cycle
+            pack_bob = math.sin(cycle) * 0.8 if running else 0.0
             pygame.draw.rect(s, (104, 83, 57),
-                             (hx - 8 * sc, shoulder_y + 5, 5 * sc,
+                             (hx - 8 * sc, shoulder_y + 5 + pack_bob, 5 * sc,
                               9 * sc), border_radius=2)
         else:
             pygame.draw.polygon(s, shade(top, -0.38), [
