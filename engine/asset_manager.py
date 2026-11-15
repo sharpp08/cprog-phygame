@@ -984,242 +984,51 @@ class AssetManager:
 
     def _make_character(self) -> None:
         frames = self.frames
-        # Eight-pose player gait cycles use articulated knees, lifted feet,
-        # counter-swinging arms and a forward sprint pitch.
+        # Load the supplied player sheet directly from Movements. Do not use
+        # the legacy embedded run sheet or procedural player artwork.
+        sprite_path = (Path(__file__).resolve().parent.parent / "Movements" /
+                       "3cbc9861-b78d-4dbc-9833-5e278e23a6e0.png")
+        sheet = pygame.image.load(str(sprite_path)).convert_alpha()
+        if sheet.get_width() % 4 or sheet.get_height() % 2:
+            raise ValueError(f"Player sprite sheet must be a 4x2 grid: {sprite_path}")
+        cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
+        authored_frames = []
+        target_w, target_h = 44, 66
+        for frame_index in range(8):
+            col, row = frame_index % 4, frame_index // 4
+            frame = sheet.subsurface(
+                (col * cell_w, row * cell_h, cell_w, cell_h)).copy()
+            bounds = frame.get_bounding_rect()
+            if bounds.width == 0 or bounds.height == 0:
+                raise ValueError(f"Empty player frame {frame_index}: {sprite_path}")
+            frame = frame.subsurface(bounds).copy()
+            # Fit without distorting the character; preserve transparency and
+            # align the feet to the same ground anchor as the renderer.
+            scale = min(target_w / frame.get_width(),
+                        target_h / frame.get_height())
+            size = (max(1, round(frame.get_width() * scale)),
+                    max(1, round(frame.get_height() * scale)))
+            frame = pygame.transform.scale(frame, size)
+            canvas = pygame.Surface((target_w, target_h), pygame.SRCALPHA)
+            canvas.blit(frame, ((target_w - size[0]) // 2,
+                                target_h - size[1]))
+            authored_frames.append(canvas)
+
+        # The supplied sheet is the single source of truth for every player
+        # state. States without dedicated authored poses reuse its frames;
+        # no procedural or legacy embedded player model can reappear.
         pl = {
-            "idle": [self._humanoid("player", "idle", phase=k / 4.0)
-                     for k in range(4)],
-            "walk": [self._humanoid("player", "walk", phase=k / 8.0,
-                                     gait=0.95)
-                     for k in range(8)],
-            "crouch": [self._humanoid("player", "walk", crouch=0.8,
-                                      phase=k / 8.0, gait=0.55)
-                       for k in range(8)],
-            "run": [self._humanoid("player", "run", phase=k / 8.0,
-                                   gait=1.55)
-                    for k in range(8)],
-            "shoot": [self._humanoid("player", "shoot", flash=True)],
-            "reload": [self._humanoid("player", "reload", phase=k / 4.0)
-                       for k in range(4)],
-            "hit": [self._humanoid("player", "hit", reach=0.2, crouch=0.3)],
-            "dead": [self._humanoid("player", "dead", fall=k % 3)
-                     for k in range(3)],
-            "emerge": [self._humanoid("player", "emerge", phase=k / 3.0)
-                       for k in range(3)],
+            "idle": [authored_frames[0]],
+            "walk": authored_frames,
+            "crouch": authored_frames,
+            "run": authored_frames,
+            "shoot": [authored_frames[0]],
+            "reload": [authored_frames[0]],
+            "aim": [authored_frames[0]],
+            "hit": [authored_frames[0]],
+            "dead": [authored_frames[-1]],
+            "emerge": [authored_frames[0]],
         }
-        # Prefer the authored eight-frame player sprite sheet when present.
-        # The same 8 frames serve idle, walk, and run states with different
-        # playback speeds. Other states (shoot, crouch, reload, hit, dead,
-        # emerge) and all enemy archetypes remain procedural.
-        sprite_path = Path(__file__).resolve().parent.parent / "assets" / "sprites" / "player_run_sheet.png"
-        if sprite_path.exists():
-            try:
-                sheet = pygame.image.load(str(sprite_path)).convert_alpha()
-                cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
-                target_w, target_h = pl["run"][0].get_size()
-                # Extract 8 frames in row-major order (top row 0-3, bottom 4-7)
-                cell_frames = []
-                for fi in range(8):
-                    col, row = fi % 4, fi // 4
-                    cell = sheet.subsurface(col * cell_w, row * cell_h,
-                                            cell_w, cell_h).copy()
-                    cell_frames.append(cell)
-                # Compute consistent anchoring across all 8 frames
-                lowest_ys = []
-                for cell in cell_frames:
-                    min_y = cell_h - 1
-                    for y in range(cell_h - 1, -1, -1):
-                        for x in range(cell_w):
-                            if cell.get_at((x, y))[3] > 16:
-                                min_y = y
-                                break
-                        if min_y < cell_h - 1:
-                            break
-                    lowest_ys.append(min_y)
-                cx_offsets = []
-                for cell in cell_frames:
-                    sum_x, count = 0, 0
-                    for y in range(0, cell_h, 4):
-                        for x in range(0, cell_w, 4):
-                            if cell.get_at((x, y))[3] > 16:
-                                sum_x += x
-                                count += 1
-                    cx_offsets.append(sum_x / count if count else cell_w // 2)
-                median_cx = sorted(cx_offsets)[4]
-                max_pad_l = int(max(abs(median_cx - cx) for cx in cx_offsets))
-                uniform_w = cell_w + max_pad_l * 2
-                uniform_h = cell_h + max_pad_l + 2
-                # Build frames with feet anchored to the canvas bottom.
-                # For each frame, find the lowest opaque pixel (the foot)
-                # and crop/pad so all frames have the same bottom row.
-                # The renderer blits with `anchor_y - frame.get_height()`,
-                # so the canvas bottom = ground position.  If the feet are
-                # not at the canvas bottom, the character floats.
-                authored = []
-                for cell, cy_off, cx_off in zip(cell_frames, lowest_ys, cx_offsets):
-                    pad_l = max_pad_l + int(median_cx - cx_off)
-                    pad_top = max_pad_l
-                    canvas = pygame.Surface((uniform_w, uniform_h), pygame.SRCALPHA)
-                    canvas.fill((0, 0, 0, 0))
-                    canvas.blit(cell, (pad_l, pad_top))
-                    # Downscale to target size
-                    canvas = pygame.transform.smoothscale(canvas, (target_w, target_h))
-                    # Now crop the bottom: find the lowest opaque row and
-                    # trim everything below it (plus 1px margin).
-                    # This ensures the feet are at the very bottom of the
-                    # returned surface.
-                    min_y = target_h - 1
-                    for y in range(target_h - 1, -1, -1):
-                        for x in range(target_w):
-                            if canvas.get_at((x, y))[3] > 8:
-                                min_y = y
-                                break
-                        if min_y < target_h - 1:
-                            break
-                    # Crop: keep rows 0..min_y (inclusive)
-                    if min_y < target_h - 1:
-                        cropped = pygame.Surface((target_w, min_y + 1), pygame.SRCALPHA)
-                        cropped.fill((0, 0, 0, 0))
-                        cropped.blit(canvas, (0, 0))
-                        canvas = cropped
-                    authored.append(canvas)
-                # Now pad all frames to the same height so bounding rects
-                # are consistent.  Use the max height among the 8 frames,
-                # but ensure the result is at least 59px tall (the ground
-                # anchor test requires bottom >= 59).
-                max_h = max(f.get_height() for f in authored)
-                min_h = 59
-                target_h_final = max(max_h, min_h)
-                padded = []
-                for f in authored:
-                    h = f.get_height()
-                    if h < target_h_final:
-                        new_s = pygame.Surface((target_w, target_h_final), pygame.SRCALPHA)
-                        new_s.fill((0, 0, 0, 0))
-                        # Blit at the bottom so feet stay anchored to ground
-                        new_s.blit(f, (0, target_h_final - h))
-                        padded.append(new_s)
-                    else:
-                        padded.append(f)
-                if len(padded) == 8:
-                    pl["run"] = padded
-                    pl["walk"] = padded
-                    # Action states reuse the run frames so the character
-                    # model stays consistent during every gameplay action.
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
-                    pl["hit"] = [padded[4]]
-                    pl["crouch"] = [padded[k % 8] for k in range(8)]
-                    # Load the dedicated idle sheet if available; it provides
-                    # a subtle breathing cycle distinct from the run frames.
-                    idle_path = (Path(__file__).resolve().parent.parent
-                                 / "assets" / "sprites" / "player_idle_sheet.png")
-                    if idle_path.exists():
-                        try:
-                            idle_sheet = pygame.image.load(str(idle_path)).convert_alpha()
-                            icw, ich = idle_sheet.get_width() // 4, idle_sheet.get_height() // 2
-                            idle_cells = []
-                            for fi in range(8):
-                                col, row = fi % 4, fi // 4
-                                cell = idle_sheet.subsurface(col * icw, row * ich,
-                                                             icw, ich).copy()
-                                idle_cells.append(cell)
-                            # Same anchoring pipeline as the run sheet
-                            idle_lowest = []
-                            for cell in idle_cells:
-                                min_y = ich - 1
-                                for y in range(ich - 1, -1, -1):
-                                    for x in range(icw):
-                                        if cell.get_at((x, y))[3] > 16:
-                                            min_y = y
-                                            break
-                                    if min_y < ich - 1:
-                                        break
-                                idle_lowest.append(min_y)
-                            idle_cx = []
-                            for cell in idle_cells:
-                                sx, cnt = 0, 0
-                                for y in range(0, ich, 4):
-                                    for x in range(0, icw, 4):
-                                        if cell.get_at((x, y))[3] > 16:
-                                            sx += x
-                                            cnt += 1
-                                idle_cx.append(sx / cnt if cnt else icw // 2)
-                            median = sorted(idle_cx)[4]
-                            max_pad = int(max(abs(median - c) for c in idle_cx))
-                            uw = icw + max_pad * 2
-                            uh = ich + max_pad + 2
-                            idle_authored = []
-                            for cell, cy, cx in zip(idle_cells, idle_lowest, idle_cx):
-                                pad_l = max_pad + int(median - cx)
-                                canvas = pygame.Surface((uw, uh), pygame.SRCALPHA)
-                                canvas.fill((0, 0, 0, 0))
-                                canvas.blit(cell, (pad_l, max_pad))
-                                canvas = pygame.transform.smoothscale(
-                                    canvas, (target_w, target_h))
-                                # Crop bottom transparent padding
-                                min_y2 = target_h - 1
-                                for y in range(target_h - 1, -1, -1):
-                                    for x in range(target_w):
-                                        if canvas.get_at((x, y))[3] > 8:
-                                            min_y2 = y
-                                            break
-                                    if min_y2 < target_h - 1:
-                                        break
-                                if min_y2 < target_h - 1:
-                                    cropped = pygame.Surface(
-                                        (target_w, min_y2 + 1), pygame.SRCALPHA)
-                                    cropped.fill((0, 0, 0, 0))
-                                    cropped.blit(canvas, (0, 0))
-                                    canvas = cropped
-                                idle_authored.append(canvas)
-                            # Pad to uniform height matching the run frames
-                            idle_h = target_h_final
-                            idle_padded = []
-                            for f in idle_authored:
-                                if f.get_height() < idle_h:
-                                    ns = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
-                                    ns.fill((0, 0, 0, 0))
-                                    ns.blit(f, (0, idle_h - f.get_height()))
-                                    idle_padded.append(ns)
-                                else:
-                                    # Crop to target height if taller
-                                    if f.get_height() > idle_h:
-                                        ns = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
-                                        ns.fill((0, 0, 0, 0))
-                                        ns.blit(f, (0, 0))
-                                        idle_padded.append(ns)
-                                    else:
-                                        idle_padded.append(f)
-                            if len(idle_padded) == 8:
-                                pl["idle"] = idle_padded
-                                print(f"[AssetManager] Loaded authored idle sheet "
-                                      f"({idle_sheet.get_width()}x"
-                                      f"{idle_sheet.get_height()}, 8 frames)")
-                        except (OSError, ValueError, pygame.error) as exc:
-                            print(f"[AssetManager] WARNING: idle sheet "
-                                  f"failed ({exc}); using run frame 0 for idle")
-                            idle_frame = padded[0]
-                            breathe = idle_frame.copy()
-                            pl["idle"] = [idle_frame, breathe]
-                    else:
-                        # Fallback: use run frame 0 with breathing variant
-                        idle_frame = padded[0]
-                        breathe = idle_frame.copy()
-                        if idle_frame.get_height() > 2:
-                            pygame.draw.rect(breathe, (0, 0, 0, 0),
-                                             (0, 0, target_w, 1))
-                        pl["idle"] = [idle_frame, breathe]
-                    print(f"[AssetManager] Loaded authored player sheets "
-                          f"({sheet.get_width()}x{sheet.get_height()}, "
-                          f"8 frames -> all states, "
-                          f"foot-anchored height={target_h_final}px)")
-                else:
-                    print("[AssetManager] WARNING: authored sheet failed; "
-                          "using procedural fallback")
-            except (OSError, ValueError, pygame.error) as exc:
-                print(f"[AssetManager] WARNING: could not load authored "
-                      f"player sheet ({exc}); using procedural fallback")
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
