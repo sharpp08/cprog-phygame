@@ -76,7 +76,7 @@ class CombatSystem:
                     # Headshot: near-center hits deal bonus damage.
                     center_ratio = ((dx * dx + dy * dy) ** 0.5) / max(0.01, rr)
                     dmg = b.damage * (1.6 if center_ratio < 0.45 else 1.0)
-                    z.on_hit(dmg, b, knock_dir=dx / m)
+                    z.on_hit(dmg, b, knock_dir=(-dx / m, -dy / m))
                     b.active = False
                     if particles:
                         particles.burst(
