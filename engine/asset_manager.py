@@ -690,19 +690,15 @@ class AssetManager:
             hx += idle_sway
         hy = hip_y
 
-        # Articulated hips, knees and ankles.  The knee bends more during
-        # recovery, while the planted leg extends behind the body's centre.
-        # For a 2.5D isometric view, legs must point toward the viewer
-        # (positive Y = down the screen) rather than sideways.  The X offset
-        # separates the two legs subtly for depth; the dominant swing is
-        # vertical (lift) plus a small forward-backward toe travel.
-        foot_a_x = cx - 3 * sc + leg_a * 0.30
-        foot_b_x = cx + 3 * sc + leg_b * 0.30
-        foot_a = (foot_a_x, gy - lift_a)
-        foot_b = (foot_b_x, gy - lift_b)
-        knee_a = (cx - 2 * sc + leg_a * 0.25 + asym * leg_b * 0.5,
+        # Forward-facing legs: feet and knees stay at a fixed X offset from
+        # the body centre and only move vertically (lift).  The legs do not
+        # swing sideways; the stride is conveyed purely by foot height and
+        # a very slight knee bend so the gait still reads clearly.
+        foot_a = (cx - 3 * sc, gy - lift_a)
+        foot_b = (cx + 3 * sc, gy - lift_b)
+        knee_a = (cx - 3 * sc - lift_a * 0.12,
                   hip_y + 9 * sc - lift_a * 0.48)
-        knee_b = (cx + 2 * sc + leg_b * 0.25 - asym * leg_a * 0.5,
+        knee_b = (cx + 3 * sc + lift_b * 0.12,
                   hip_y + 9 * sc - lift_b * 0.48)
         leg_width = max(3, int((6 if kind in ("tank", "armored") else 5) * sc))
         pygame.draw.line(s, shade(bot, -0.28), (hx - 2, hy), knee_a, leg_width)
