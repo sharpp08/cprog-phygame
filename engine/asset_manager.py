@@ -1112,10 +1112,19 @@ class AssetManager:
                         pygame.draw.rect(breathe, (0, 0, 0, 0),
                                          (0, 0, target_w, 1))
                     pl["idle"] = [idle_frame, breathe]
+                    # Action states (shoot, reload, hit, crouch) reuse the
+                    # authored frames so the character model stays consistent
+                    # during every gameplay action.  The renderer still
+                    # overlays muzzle flashes, weapon sprites, and damage
+                    # effects on top of these frames.
+                    pl["shoot"] = [padded[0]]
+                    pl["reload"] = [padded[k % 8] for k in range(4)]
+                    pl["hit"] = [padded[4]]
+                    pl["crouch"] = [padded[k % 8] for k in range(8)]
                     print(f"[AssetManager] Loaded authored player sheet "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
-                          f"8 frames -> run/walk, idle uses frame 0, "
-                          f"foot-anchored height={max_h}px)")
+                          f"8 frames -> all states, foot-anchored "
+                          f"height={target_h_final}px)")
                 else:
                     print("[AssetManager] WARNING: authored sheet failed; "
                           "using procedural fallback")
