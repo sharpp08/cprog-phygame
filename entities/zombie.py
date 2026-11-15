@@ -171,7 +171,12 @@ class Zombie(Entity):
 
         target_factor = (0.68 if self.state in ("idle", "wandering", "stalking")
                          else 1.0)
-        target_speed = self.speed * target_factor if has_target else 0.0
+        # AI uses the magnitude of its steering vector for intentional speed
+        # modifiers (crawler pace, stalking and wandering). Clamp repulsion
+        # blends so separation cannot accidentally accelerate an infected.
+        input_scale = min(1.0, requested_mag)
+        target_speed = (self.speed * target_factor * input_scale
+                        if has_target else 0.0)
         direction_x = vx / requested_mag if has_target else 0.0
         direction_y = vy / requested_mag if has_target else 0.0
 
@@ -259,7 +264,7 @@ class Zombie(Entity):
             self._action_phase = 0.0
 
     # ------------------------------------------------------------------
-    def on_hit(self, dmg: float, src, knock_dir: float = 1.0) -> None:
+    def on_hit(self, dmg: float, src, knock_dir: float | tuple[float, float] = 1.0) -> None:
         if self.ztype == "armored":
             dmg *= 0.58
         self.hp -= dmg
