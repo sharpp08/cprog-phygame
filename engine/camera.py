@@ -11,6 +11,7 @@ import math
 from typing import Sequence, Tuple
 
 import config
+from engine.movement import smooth_damp
 
 
 class Camera:
@@ -20,6 +21,8 @@ class Camera:
         self.sh = screen_h
         self.zoom = float(zoom)
         self.fx = 0.0
+        self._vx = 0.0          # spring velocity (tiles/s)
+        self._vy = 0.0
         self.fy = 0.0
         self.fz = 0.0
         self._minx = self._miny = 0.0
@@ -51,6 +54,7 @@ class Camera:
         """Jump immediately to a target (used when loading a save)."""
         self.fx = target_x
         self.fy = target_y
+        self._vx = self._vy = 0.0
         self._clamp()
 
     # ------------------------------------------------------------------
@@ -97,11 +101,26 @@ class Camera:
         self.set_bounds(minx, miny, maxx, maxy)
 
     def update(self, dt, target_x=None, target_y=None) -> None:
-        """Smooth follow.  ``target`` is optional so legacy one-arg calls
-        still work (reuses the last focus point)."""
+        """Critically damped follow (no overshoot, stable at any frame time).
+
+        ``target`` is optional so legacy one-arg calls still work (reuses the
+        last focus point).  The caller may lead the target by the player's
+        velocity so the steady-state lag stays small while starts and stops
+        still feel weighty.
+        """
         if target_x is None:
             target_x, target_y = self.fx, self.fy
-        t = 1.0 - math.exp(-config.CAM_FOLLOW_SMOOTH * dt)
-        self.fx += (target_x - self.fx) * t
-        self.fy += (target_y - self.fy) * t
+        dt = max(0.0, float(dt))
+        if dt <= 0.0:
+            return
+        self.fx, self._vx = smooth_damp(self.fx, target_x, self._vx,
+                                        config.CAM_SMOOTH_TIME, dt)
+        self.fy, self._vy = smooth_damp(self.fy, target_y, self._vy,
+                                        config.CAM_SMOOTH_TIME, dt)
+        px, py = self.fx, self.fy
         self._clamp()
+        # Do not wind up velocity against the map edge.
+        if self.fx != px:
+            self._vx = 0.0
+        if self.fy != py:
+            self._vy = 0.0

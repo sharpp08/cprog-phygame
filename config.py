@@ -76,6 +76,9 @@ CAM_MIN_ZOOM = 0.6
 CAM_MAX_ZOOM = 1.8
 CAM_DEFAULT_ZOOM = 1.15
 CAM_FOLLOW_SMOOTH = 4.0      # higher = snappier follow
+CAM_SMOOTH_TIME = 0.20       # critically damped follow (seconds to settle)
+CAM_LOOKAHEAD = 0.10         # seconds of player velocity the camera leads by
+CAM_LOOKAHEAD_MAX = 1.0      # tiles
 CAM_MARGIN = 4.0            # world-space clamp margin around the map
 
 
@@ -89,6 +92,49 @@ PLAYER_MAX_HP = 100
 PLAYER_INVULN = 0.6        # seconds of i-frames after being hit
 PLAYER_RADIUS = 0.42      # collision radius in tiles
 
+# Movement physics (see engine/movement.py).  Speeds are tiles/s, rates tiles/s^2.
+PLAYER_PHYSICS_MAX_STEP = 1.0 / 120.0   # a frame is split into steps this small
+PLAYER_ACCEL_WALK = 16.0        # up to walking pace
+PLAYER_ACCEL_SPRINT = 6.5       # from walking pace towards a sprint
+PLAYER_ACCEL_RAMP = 0.10        # seconds of held input to reach full acceleration
+PLAYER_ACCEL_RAMP_START = 0.35  # fraction of acceleration on the very first step
+PLAYER_BRAKE = 26.0             # input opposing current velocity
+PLAYER_FRICTION = 20.0          # constant deceleration with no input
+PLAYER_FRICTION_SPRINT = 0.30   # sprinting coasts further: friction cut at full run
+PLAYER_GRIP = 18.0              # sideways velocity removed while steering
+PLAYER_OVERSPEED_DECEL = 12.0   # easing from a sprint down to walking pace
+
+# Weight and load
+PLAYER_AIM_SPEED_BASE = 0.86    # strafing; forward 1.0, backpedalling 0.72
+PLAYER_AIM_SPEED_GAIN = 0.14
+PLAYER_SPRINT_MIN_ALIGN = -1.0  # sprint only within this dot of aim (-1 = always)
+PLAYER_RELOAD_SPEED = 0.80
+PLAYER_FIRE_SPEED = 0.85
+PLAYER_FIRE_SLOW_TIME = 0.30
+PLAYER_WINDED_SPEED = 0.85      # walking pace while recovering from exhaustion
+
+# Stagger (zombie hits)
+PLAYER_STAGGER_TIME = 0.22
+PLAYER_STAGGER_CONTROL = 0.40   # fraction of control left at the moment of impact
+PLAYER_KNOCKBACK_MIN = 2.5      # tiles/s impulse
+PLAYER_KNOCKBACK_MAX = 5.0
+PLAYER_KNOCKBACK_PER_DMG = 0.08
+PLAYER_BUMP_SHAKE_MIN = 3.0     # wall impact speed that shakes the camera
+
+# Gait (cycles per tile; art-matched endpoints, blended by speed)
+PLAYER_GAIT_CYCLES_WALK = 0.81
+PLAYER_GAIT_CYCLES_RUN = 0.44
+
+# Acceleration lean (renderer rotates the baked sprite about the feet)
+PLAYER_LEAN_RESPONSE = 12.0
+PLAYER_LEAN_ACCEL_SCALE = 12.0  # screen-x acceleration giving full lean
+PLAYER_LEAN_DEG = 2.5           # degrees per lean bucket (two buckets each way)
+
+# Stamina
+STAMINA_RESUME = 25.0           # sprint stays locked after exhaustion until here
+STAMINA_WINDED_TIME = 2.0
+STAMINA_FADE_BELOW = 25.0       # sprint speed fades below this much stamina
+
 # ---------------------------------------------------------------------------
 # Weapons  (tunable stats, referenced by entities.weapon)
 # ---------------------------------------------------------------------------
@@ -101,6 +147,7 @@ WEAPONS = {
         "reload_time": 1.1, "spread": 0.02, "pellets": 1,
         "bullet_speed": 26.0, "recoil": 0.10, "ammo_type": "pistol",
         "color": (210, 190, 150),
+        "handling": 1.00,           # movement speed/accel factor while held
     },
     "shotgun": {
         "name": "Shotgun", "fire_mode": "semi", "damage": 14,
@@ -110,6 +157,7 @@ WEAPONS = {
         "reload_time": 1.9, "spread": 0.34, "pellets": 7,
         "bullet_speed": 22.0, "recoil": 0.5, "ammo_type": "shotgun",
         "color": (230, 170, 110),
+        "handling": 0.93,
     },
     "rifle": {
         "name": "Assault Rifle", "fire_mode": "auto", "damage": 16,
@@ -119,6 +167,7 @@ WEAPONS = {
         "reload_time": 2.2, "spread": 0.05, "pellets": 1,
         "bullet_speed": 34.0, "recoil": 0.07, "ammo_type": "rifle",
         "color": (190, 200, 220),
+        "handling": 0.90,
     },
 }
 WEAPON_ORDER = ("pistol", "shotgun", "rifle")

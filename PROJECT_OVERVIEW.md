@@ -42,7 +42,8 @@ Wave sizes follow `int(8 × 1.7^(wave−1))`, giving **8, 13 and 23** zombies. W
 ### 2.2 Player
 
 - 8-directional movement (WASD or arrow keys, diagonals normalised), mouse aiming converted from screen space to the ground plane so aim stays correct under isometric projection.
-- Walk 3.2 and run 5.6 tiles/s; **stamina** drains while sprinting and sprinting is disabled at zero.
+- Walk 3.2 and run 5.6 tiles/s (top speeds). Velocity is acceleration-limited (`engine/movement.py`): about 0.35 s to walking pace, about 1 s to full sprint, with separate braking, friction and sideways grip; physics runs in sub-steps of at most 1/120 s so results are frame-rate independent. Speed is scaled by aim direction (strafe 0.86, backpedal 0.72), weapon handling, reloading/firing, terrain surface and sprint stamina; zombie hits apply knockback and a short stagger.
+- **Stamina** drains while sprinting; at zero the player is winded and sprint is locked until 25% (hysteresis).
 - **Crouch** (Left Ctrl): 52% speed, quieter footsteps, shorter zombie sight range.
 - 100 HP, 0.6 s invulnerability after a hit.
 - Starts with the pistol. The shotgun and assault rifle are found as pickups.

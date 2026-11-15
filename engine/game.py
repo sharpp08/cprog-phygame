@@ -1,6 +1,7 @@
 """The game: owns state, the loop, menus and ties every system together."""
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import pygame
@@ -10,6 +11,7 @@ from engine.asset_manager import AssetManager
 from engine.audio_manager import AudioManager
 from engine.camera import Camera
 from engine.input_manager import InputManager
+from engine.movement import surface_for
 from engine.particles import ParticleSystem
 from engine.renderer import Renderer
 from entities.player import Player
@@ -411,19 +413,37 @@ class Game:
         requested_run = InputManager.running() and (mv[0] != 0.0 or mv[1] != 0.0)
         crouching = bool(pygame.key.get_pressed()[pygame.K_LCTRL])
         player.crouching = crouching
-        sprinting = requested_run and not crouching
+        sprinting = (requested_run and not crouching
+                     and player.sprint_allowed(mv))
         can_run = self.survival.update(dt, sprinting) if self.survival else True
         if self.survival is not None:
             player.flashlight_on = self.survival.flashlight_on
-        player.apply_movement(mv, sprinting and can_run, dt, self.wm.grid,
-                              speed_scale=0.52 if crouching else 1.0)
+        winded = self.survival is not None and self.survival.winded
+        speed_scale = 0.52 if crouching else 1.0
+        if winded:
+            speed_scale *= config.PLAYER_WINDED_SPEED
+        # Ground under the player sets traction, pace and footstep noise.
+        rain = 0.0
+        if self.renderer is not None:
+            rain = float(getattr(self.renderer.weather, "rain_amount", 0.0))
+        tile = self.wm.world.terrain.type(int(math.floor(player.x)),
+                                          int(math.floor(player.y)))
+        surface = surface_for(tile, rain)
+        player.apply_movement(
+            mv, sprinting and can_run, dt, self.wm.grid,
+            speed_scale=speed_scale, surface=surface,
+            run_scale=self.survival.sprint_factor if self.survival else 1.0)
+        if (player.bump_impact > config.PLAYER_BUMP_SHAKE_MIN
+                and self.renderer is not None):
+            self.renderer.shake.add(min(1.2, player.bump_impact * 0.2), 0.15)
         player.update(dt)
         if player.footstep_sound:
             self.audio.play("footstep")
             if self.wm.controller:
                 self.wm.controller.emit_noise(
                     player.x, player.y,
-                    11.0 if player.running else (2.4 if crouching else 5.0),
+                    (11.0 if player.running else (2.4 if crouching else 5.0))
+                    * surface.noise,
                     1.1 if player.running else 0.45)
             player.footstep_sound = False
         # weapon switching 1/2/3
@@ -511,7 +531,14 @@ class Game:
             self.renderer.tick_weather(dt)
             self.audio.set_rain(self.renderer.weather.rain_amount)
         # camera follow
-        cam.update(self.dt, player.x, player.y)
+        vx, vy = player.velocity
+        lead = config.CAM_LOOKAHEAD
+        lx, ly = vx * lead, vy * lead
+        lm = math.hypot(lx, ly)
+        if lm > config.CAM_LOOKAHEAD_MAX:
+            lx *= config.CAM_LOOKAHEAD_MAX / lm
+            ly *= config.CAM_LOOKAHEAD_MAX / lm
+        cam.update(self.dt, player.x + lx, player.y + ly)
         # damage vignette
         if player.hp < self._prev_hp:
             self.hud.damage_pulse(1.0)

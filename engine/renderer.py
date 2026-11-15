@@ -44,6 +44,7 @@ class Renderer:
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
         self._flip_cache: dict = {}
+        self._lean_cache: dict = {}     # (id(frame), bucket) -> (surface, dx, dy)
         self._beacon_glow = pygame.Surface((48, 48), pygame.SRCALPHA)
         pygame.draw.circle(self._beacon_glow, (255, 210, 120, 110),
                            (24, 24), 23)
@@ -407,10 +408,42 @@ class Renderer:
                                 cy - 136 * cam.zoom + off))
 
     # ------------------------------------------------------------------
+    def _lean_frame(self, frame: pygame.Surface, bucket: int):
+        """Return ``(surface, dx, dy)``: the frame tilted about the feet.
+
+        ``dx, dy`` is the top-left offset from the feet pivot (bottom centre of
+        the unrotated sprite), so the feet stay on the ground anchor.  A
+        positive bucket leans towards screen-right.  Frames are cached; the
+        cache is bounded because zoom changes create new scaled frames.
+        """
+        w, h = frame.get_size()
+        if bucket == 0:
+            return frame, -w / 2.0, -float(h)
+        key = (id(frame), bucket)
+        hit = self._lean_cache.get(key)
+        if hit is None:
+            if len(self._lean_cache) > 768:
+                self._lean_cache.clear()
+            angle = -bucket * config.PLAYER_LEAN_DEG     # clockwise = right
+            rot = pygame.transform.rotate(frame, angle)
+            theta = math.radians(angle)
+            c = -h / 2.0                  # sprite centre above the pivot
+            hit = (rot,
+                   c * math.sin(theta) - rot.get_width() / 2.0,
+                   c * math.cos(theta) - rot.get_height() / 2.0)
+            self._lean_cache[key] = hit
+        return hit
+
+    # ------------------------------------------------------------------
     def _draw_player(self, p) -> None:
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
+        # Feet pivot: the old sprite baseline, so lean never lifts the feet.
+        ax = cx
+        ay = cy + 10 * cam.zoom
+        lean = max(-1.0, min(1.0, float(getattr(p, "lean", 0.0))))
+        bucket = int(round(lean * 2.0))
 
         def frame_for(state, frame_index):
             frames = self.assets.player_frames(state)
@@ -422,17 +455,17 @@ class Renderer:
                     flipped = pygame.transform.flip(frame, True, False)
                     self._flip_cache[key] = flipped
                 frame = flipped
-            return frame
+            return self._lean_frame(frame, bucket)
 
         blend = max(0.0, min(1.0, float(getattr(p, "anim_blend", 1.0))))
         if blend < 1.0 and p.prev_anim_state != p.anim_state:
-            previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
+            previous, pdx, pdy = frame_for(p.prev_anim_state,
+                                           p.prev_frame_index)
+            previous = previous.copy()
             previous.set_alpha(int(255 * (1.0 - blend)))
-            self.screen.blit(previous, (cx - previous.get_width() / 2,
-                                        cy - previous.get_height()
-                                        + 10 * cam.zoom))
+            self.screen.blit(previous, (ax + pdx, ay + pdy))
 
-        spr = frame_for(p.anim_state, p.frame_index)
+        spr, sdx, sdy = frame_for(p.anim_state, p.frame_index)
         if blend < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * blend))
@@ -441,12 +474,10 @@ class Renderer:
             spr = spr.copy()
             spr.set_alpha(120 if blend >= 1.0 else
                           int(120 * blend))
-        # Torso bob and lean are authored inside the cached pose. Never
-        # offset the complete sprite during a stride: the feet stay pinned
-        # to the isometric ground anchor instead of sliding or floating.
-        self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height()
-                               + 10 * cam.zoom))
+        # Torso bob is authored inside the cached pose; the only whole-sprite
+        # transform is a small lean rotated about the feet pivot, so the feet
+        # stay pinned to the isometric ground anchor instead of sliding.
+        self.screen.blit(spr, (ax + sdx, ay + sdy))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(200 * p.dmg_flash))

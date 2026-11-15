@@ -8,6 +8,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 import config
 from engine.asset_manager import AssetManager
+from engine.movement import cycles_per_tile
 from entities.player import Player
 from entities.weapon import Weapon
 from entities.zombie import Zombie
@@ -43,21 +44,29 @@ class TestPlayerAnimation(unittest.TestCase):
         player = Player(2.0, 2.0)
         player.apply_movement((1.0, 0.0), False, 0.1, HalfBlockedGrid())
         travelled = player.actual_speed * 0.1
-        self.assertAlmostEqual(player._gait, travelled * 0.81, places=6)
+        self.assertAlmostEqual(
+            player._gait_total,
+            travelled * cycles_per_tile(player.actual_speed), places=6)
         self.assertGreater(player.actual_speed, 0.0)
 
-    def test_walk_and_run_gait_rates_match_their_stride_lengths(self):
-        walking = Player(2.0, 2.0)
-        walking.apply_movement((1.0, 0.0), False, 0.1, OpenGrid())
-        self.assertAlmostEqual(walking._gait,
-                               walking.actual_speed * 0.1 * 0.81,
-                               places=6)
-        running = Player(2.0, 2.0)
-        running.apply_movement((1.0, 0.0), True, 0.1, OpenGrid())
-        self.assertTrue(running.running)
-        self.assertAlmostEqual(running._gait,
-                               running.actual_speed * 0.1 * 0.44,
-                               places=6)
+    def test_gait_stride_blends_smoothly_between_walk_and_run(self):
+        walk, run = config.PLAYER_WALK_SPEED, config.PLAYER_RUN_SPEED
+        self.assertAlmostEqual(cycles_per_tile(walk), 0.81, places=6)
+        self.assertAlmostEqual(cycles_per_tile(run), 0.44, places=6)
+        self.assertAlmostEqual(cycles_per_tile(0.5), 0.81, places=6)
+        rates = [cycles_per_tile(walk + (run - walk) * i / 20.0)
+                 for i in range(21)]
+        self.assertTrue(all(a >= b for a, b in zip(rates, rates[1:])))
+        # no jump larger than a few percent between neighbouring speeds
+        self.assertLess(max(a - b for a, b in zip(rates, rates[1:])), 0.05)
+
+    def test_sprint_reaches_run_speed_and_run_state(self):
+        player = Player(2.0, 2.0)
+        for _ in range(180):
+            player.apply_movement((1.0, 0.0), True, 1.0 / 60.0, OpenGrid())
+        self.assertTrue(player.running)
+        self.assertAlmostEqual(player.actual_speed, config.PLAYER_RUN_SPEED,
+                               delta=0.05)
 
     def test_state_change_starts_blend(self):
         player = Player(2.0, 2.0)
@@ -397,14 +406,8 @@ class TestFrameValidity(unittest.TestCase):
 
     def test_walking_vs_running_stride_behavior(self):
         """Walking should have a shorter stride (higher gait rate) than running."""
-        player = Player(5.0, 5.0)
-        # Walk
-        player.apply_movement((1.0, 0.0), False, 1.0, OpenGrid())
-        walk_gait_rate = 0.81  # from player.py
-        # Run
-        player2 = Player(5.0, 5.0)
-        player2.apply_movement((1.0, 0.0), True, 1.0, OpenGrid())
-        run_gait_rate = 0.44   # from player.py
+        walk_gait_rate = cycles_per_tile(config.PLAYER_WALK_SPEED)
+        run_gait_rate = cycles_per_tile(config.PLAYER_RUN_SPEED)
         self.assertGreater(walk_gait_rate, run_gait_rate,
                            "Walk should have more cycles per tile than run")
 
