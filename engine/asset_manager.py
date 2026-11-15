@@ -692,13 +692,17 @@ class AssetManager:
 
         # Articulated hips, knees and ankles.  The knee bends more during
         # recovery, while the planted leg extends behind the body's centre.
-        foot_a_x = cx - 6 * sc + leg_a
-        foot_b_x = cx + 6 * sc + leg_b
+        # For a 2.5D isometric view, legs must point toward the viewer
+        # (positive Y = down the screen) rather than sideways.  The X offset
+        # separates the two legs subtly for depth; the dominant swing is
+        # vertical (lift) plus a small forward-backward toe travel.
+        foot_a_x = cx - 3 * sc + leg_a * 0.30
+        foot_b_x = cx + 3 * sc + leg_b * 0.30
         foot_a = (foot_a_x, gy - lift_a)
         foot_b = (foot_b_x, gy - lift_b)
-        knee_a = (cx - 4 * sc + leg_a * 0.50 + asym * leg_b,
+        knee_a = (cx - 2 * sc + leg_a * 0.25 + asym * leg_b * 0.5,
                   hip_y + 9 * sc - lift_a * 0.48)
-        knee_b = (cx + 4 * sc + leg_b * 0.50 - asym * leg_a,
+        knee_b = (cx + 2 * sc + leg_b * 0.25 - asym * leg_a * 0.5,
                   hip_y + 9 * sc - lift_b * 0.48)
         leg_width = max(3, int((6 if kind in ("tank", "armored") else 5) * sc))
         pygame.draw.line(s, shade(bot, -0.28), (hx - 2, hy), knee_a, leg_width)
@@ -708,11 +712,11 @@ class AssetManager:
         pygame.draw.line(s, shade(bot, -0.18), knee_b, foot_b,
                          max(3, int(4 * sc)))
         boot = (35, 32, 29) if kind == "player" else (42, 38, 31)
-        # Boots point along the stride, with a small toe angle on recovery.
-        pygame.draw.line(s, boot, (foot_a[0] - 3, foot_a[1]),
-                         (foot_a[0] + 4, foot_a[1] - min(2, lift_a * 0.12)), 3)
-        pygame.draw.line(s, boot, (foot_b[0] - 3, foot_b[1]),
-                         (foot_b[0] + 4, foot_b[1] - min(2, lift_b * 0.12)), 3)
+        # Boots face the viewer: toe points slightly down-forward.
+        pygame.draw.line(s, boot, (foot_a[0] - 2, foot_a[1]),
+                         (foot_a[0] + 3, foot_a[1] + 2), 3)
+        pygame.draw.line(s, boot, (foot_b[0] - 2, foot_b[1]),
+                         (foot_b[0] + 3, foot_b[1] + 2), 3)
 
         # Torso compression and shoulder counter-rotation add weight to impact.
         # Forward lean skews the torso: shoulders shift ahead of hips.
