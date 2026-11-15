@@ -49,6 +49,10 @@ class Player(Entity):
         self.frame_index = 0
         # Gait phase drives the cached eight-frame walk/run cycle (0..1).
         self._gait = 0.0
+        # Gait ramp: eases between idle and walk/run to avoid pose snap.
+        # Starts at 1.0 so the first gait frame is immediate; drops to 0
+        # when entering idle and eases back up on the next step.
+        self._gait_ramp = 1.0
         # Footstep cadence: which foot hits next + stride accumulator.
         self._foot = 0.0
         self._stride = 0.0
@@ -218,9 +222,19 @@ class Player(Entity):
 
         # Pick the gait frame. Walk/run/crouch share one continuous cycle;
         # the gait phase; idle gently breathes through the idle frames.
+        # When transitioning from idle to walk, ease the gait amplitude
+        # over ~0.25s so the limbs don't snap from the idle pose to a
+        # mid-stride walking pose.
         if self.anim_state in ("walk", "run", "crouch"):
-            self.frame_index = int(self._gait * 8) % 8
+            # Ease gait amplitude after leaving idle to avoid a sudden
+            # pose jump.
+            self._gait_ramp = min(1.0, self._gait_ramp + dt / 0.25)
+            frame_phase = self._gait * self._gait_ramp
+            self.frame_index = int(frame_phase * 8) % 8
         elif self.anim_state == "idle":
+            # Ease the gait amplitude down so the limbs settle into the
+            # idle pose rather than snapping.
+            self._gait_ramp = max(0.0, self._gait_ramp - dt / 0.25)
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 1.5) % 4
         elif self.anim_state == "reload":
