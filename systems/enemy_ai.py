@@ -159,6 +159,9 @@ class ZombieController:
             z._tx, z._ty = p.x, p.y
             z.update(dt)
             self._behaviour(z, dt, p)
+            # Refresh the selected pose after AI/movement without advancing
+            # timers twice; animation now reflects this step's resolved travel.
+            z.update(0.0)
         self.zombies = [z for z in self.zombies if z.alive]
 
     # ------------------------------------------------------------------
