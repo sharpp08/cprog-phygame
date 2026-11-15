@@ -12,8 +12,11 @@ bridge and a misty waterfall.
 """
 from __future__ import annotations
 
+import base64
 import math
 import random
+from io import BytesIO
+from pathlib import Path
 from typing import Dict, Tuple
 
 import pygame
@@ -1004,6 +1007,26 @@ class AssetManager:
             "emerge": [self._humanoid("player", "emerge", phase=k / 3.0)
                        for k in range(3)],
         }
+        # Prefer the authored eight-frame player run sprite sheet when present.
+        # Other player states and all enemy archetypes remain procedural.
+        sprite_path = Path(__file__).resolve().parent.parent / "assets" / "player_run_sheet.b64"
+        try:
+            encoded = sprite_path.read_text(encoding="ascii").strip()
+            sheet = pygame.image.load(BytesIO(base64.b64decode(encoded))).convert_alpha()
+            cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
+            target_size = pl["run"][0].get_size()
+            authored_run = []
+            for frame_index in range(8):
+                col, row = frame_index % 4, frame_index // 4
+                frame = sheet.subsurface((col * cell_w, row * cell_h, cell_w, cell_h)).copy()
+                # Nearest-neighbour scaling preserves the pixel-art edges.
+                frame = pygame.transform.scale(frame, target_size)
+                authored_run.append(frame)
+            if len(authored_run) == 8 and all(frame.get_size() == target_size for frame in authored_run):
+                pl["run"] = authored_run
+        except (OSError, ValueError, pygame.error):
+            # A missing/invalid optional art file must never prevent startup.
+            pass
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
