@@ -80,7 +80,7 @@ class Zombie(Entity):
         self._gait_rate = gait_rates.get(ztype, 0.68) * random.uniform(0.95, 1.05)
         self._sway = random.uniform(0.5, 1.0)   # body sway amplitude
         self._sway_ph = random.uniform(0.0, math.pi * 2)
-        self._stumble = 0.0                  # seconds until next stumble
+        self._stumble = random.uniform(2.0, 5.0)  # seconds until next stumble
         self._stumble_t = 0.0
         self._stumble_dir = 1.0
 
@@ -89,7 +89,7 @@ class Zombie(Entity):
         self.death_stagger = 0.0
         self._corpse_t = 0.0          # time the corpse stays visible
         self._hit_knock = 0.0         # brief backward recoil
-        self._hit_knock_dir = 1.0
+        self._hit_knock_dir = (0.0, 0.0)
 
         # Zombie-specific gait feel by type.
         self._gait_stretch = {"regular": 0.9, "fast": 1.15,
@@ -104,7 +104,8 @@ class Zombie(Entity):
         self.alerted = False
         self.variation = random.uniform(0.92, 1.08)  # per-zombie variation
         self.speed *= self.variation
-        self._speed_current = self.speed * 0.68
+        self._speed_current = 0.0
+        self._velocity = (0.0, 0.0)  # collision-resolved world-space velocity
         self.detect *= random.uniform(0.95, 1.05)
 
     # ------------------------------------------------------------------
@@ -146,42 +147,77 @@ class Zombie(Entity):
         return False
 
     def apply_move(self, vx: float, vy: float, dt: float, grid) -> None:
-        """Advance the zombie; gait and facing follow actual displacement."""
+        """Move with archetype-specific inertia; gait follows resolved travel.
+
+        AI supplies a desired direction, not a teleport velocity.  This method
+        integrates acceleration, braking, stumble impulses and hit recoil,
+        then feeds collision-resolved displacement back into velocity.
+        """
         if self.spawning:
             self.moving = False
             return
         dt = max(0.0, min(float(dt), 0.1))
-        m = math.hypot(vx, vy)
-        # Occasional stumble: brief speed dip + sideways lurch.
-        self._stumble -= dt
-        if self._stumble <= 0:
-            self._stumble = random.uniform(2.0, 5.0)
-            self._stumble_t = random.uniform(0.25, 0.5)
-            self._stumble_dir = random.choice((-1.0, 1.0))
+        requested_mag = math.hypot(vx, vy)
+        has_target = requested_mag > 1e-6
+
+        # A stumble is a timed gait interruption, not a permanent random
+        # multiplier. It only starts while the zombie is actually moving.
+        if has_target:
+            self._stumble -= dt
+            if self._stumble <= 0.0 and self._stumble_t <= 0.0:
+                self._stumble = random.uniform(2.0, 5.0)
+                self._stumble_t = random.uniform(0.25, 0.5)
+                self._stumble_dir = random.choice((-1.0, 1.0))
+
         target_factor = (0.68 if self.state in ("idle", "wandering", "stalking")
                          else 1.0)
-        target_speed = self.speed * target_factor
+        target_speed = self.speed * target_factor if has_target else 0.0
+        direction_x = vx / requested_mag if has_target else 0.0
+        direction_y = vy / requested_mag if has_target else 0.0
+
+        if self._stumble_t > 0.0 and has_target:
+            target_speed *= 0.42
+            # A short lateral catch-step interrupts the straight pursuit line.
+            lateral = self._stumble_dir * 0.22
+            direction_x, direction_y = (
+                direction_x - direction_y * lateral,
+                direction_y + direction_x * lateral)
+            direction_mag = math.hypot(direction_x, direction_y) or 1.0
+            direction_x /= direction_mag
+            direction_y /= direction_mag
+            self._stumble_t = max(0.0, self._stumble_t - dt)
+
         speed_blend = 1.0 - math.exp(-1.8 * dt)
         self._speed_current += (target_speed - self._speed_current) * speed_blend
-        speed = self._speed_current
-        if self._stumble_t > 0:
-            speed *= 0.35
-            self._stumble_t -= dt
-        if m > 1e-6:
-            dx = vx / m * speed * dt
-            dy = vy / m * speed * dt
-            # Lateral shuffle during a stumble.
-            if self._stumble_t > 0:
-                dx += -vy / m * self._stumble_dir * speed * 0.6 * dt
-                dy += vx / m * self._stumble_dir * speed * 0.6 * dt
-        else:
-            dx = dy = 0.0
-        # Hit recoil: rear up and back away from the attacker.
-        if self._hit_knock > 0:
-            k = self._hit_knock * 6.0 * dt
-            dx += self._hit_knock_dir * k * 0.4
-            dy += self._hit_knock_dir * k * 0.4
-            self._hit_knock -= dt
+        desired_vx = direction_x * self._speed_current
+        desired_vy = direction_y * self._speed_current
+
+        # Fast infected react quickly; heavy bodies need more time to redirect.
+        accel_rates = {
+            "regular": 6.5, "fast": 10.0, "tank": 2.8,
+            "crawler": 5.5, "exploder": 5.8, "screamer": 5.0,
+            "armored": 3.2, "stalker": 8.0,
+        }
+        brake_rates = {
+            "regular": 7.5, "fast": 9.0, "tank": 2.4,
+            "crawler": 5.0, "exploder": 5.5, "screamer": 5.0,
+            "armored": 2.8, "stalker": 8.0,
+        }
+        response = accel_rates.get(self.ztype, 6.0) if has_target else \
+                   brake_rates.get(self.ztype, 6.0)
+        blend = 1.0 - math.exp(-response * dt)
+        current_vx, current_vy = self._velocity
+        current_vx += (desired_vx - current_vx) * blend
+        current_vy += (desired_vy - current_vy) * blend
+        dx, dy = current_vx * dt, current_vy * dt
+
+        # Recoil is a decaying impulse along the vector from the hit source
+        # through the zombie, rather than an arbitrary diagonal displacement.
+        if self._hit_knock > 0.0:
+            impulse = self._hit_knock * 5.0 * dt
+            dx += self._hit_knock_dir[0] * impulse
+            dy += self._hit_knock_dir[1] * impulse
+            self._hit_knock = max(0.0, self._hit_knock - dt)
 
         old_x, old_y = self.x, self.y
         self.x, self.y = grid.move_circle((old_x, old_y), (dx, dy),
@@ -190,17 +226,14 @@ class Zombie(Entity):
         actual_dy = self.y - old_y
         travelled = math.hypot(actual_dx, actual_dy)
         self._actual_speed = travelled / dt if dt > 0.0 else 0.0
+        self._velocity = ((actual_dx / dt, actual_dy / dt)
+                          if dt > 0.0 else (0.0, 0.0))
         self.moving = self._actual_speed > 0.05
         if self.moving:
-            # Feet cycle in proportion to distance actually walked, so a
-            # zombie jammed against geometry never foot-slides.
-            # Run stride profiles are calibrated to foot travel; walking uses
-            # a 30% shorter step and therefore advances its cycle faster.
+            # Foot phase is distance-driven: blocked enemies cannot foot-slide.
             cycle_rate = (self._gait_rate if self._uses_run_cycle()
                           else self._gait_rate / 0.70)
             self._gait = (self._gait + travelled * cycle_rate) % 1.0
-            # Turn toward collision-resolved screen travel, not requested AI
-            # steering, so sliding along an obstacle cannot face the wrong way.
             screen_dx = actual_dx - actual_dy
             if abs(screen_dx) > 1e-5:
                 target = -1.0 if screen_dx < 0.0 else 1.0
@@ -232,7 +265,13 @@ class Zombie(Entity):
         self.hit_flash = 0.12
         # Recoil impulse away from the hit source (applied in apply_move).
         self._hit_knock = 0.5
-        self._hit_knock_dir = 1.0 if knock_dir >= 0 else -1.0
+        if isinstance(knock_dir, (tuple, list)) and len(knock_dir) >= 2:
+            kx, ky = float(knock_dir[0]), float(knock_dir[1])
+            km = math.hypot(kx, ky) or 1.0
+            self._hit_knock_dir = (kx / km, ky / km)
+        else:
+            # Backwards-compatible scalar input: horizontal recoil only.
+            self._hit_knock_dir = (1.0 if float(knock_dir) >= 0 else -1.0, 0.0)
         # Powerful hits stagger non-tank zombies briefly.
         if dmg >= 20 and self.ztype != "tank":
             self.stagger_timer = max(getattr(self, "stagger_timer", 0.0), 0.18)
