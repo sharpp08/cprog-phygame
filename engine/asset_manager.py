@@ -1009,24 +1009,83 @@ class AssetManager:
         }
         # Prefer the authored eight-frame player run sprite sheet when present.
         # Other player states and all enemy archetypes remain procedural.
-        sprite_path = Path(__file__).resolve().parent.parent / "assets" / "player_run_sheet.b64"
-        try:
-            encoded = sprite_path.read_text(encoding="ascii").strip()
-            sheet = pygame.image.load(BytesIO(base64.b64decode(encoded)))
-            cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
-            target_size = pl["run"][0].get_size()
-            authored_run = []
-            for frame_index in range(8):
-                col, row = frame_index % 4, frame_index // 4
-                frame = sheet.subsurface((col * cell_w, row * cell_h, cell_w, cell_h)).copy()
-                # Nearest-neighbour scaling preserves the pixel-art edges.
-                frame = pygame.transform.scale(frame, target_size)
-                authored_run.append(frame)
-            if len(authored_run) == 8 and all(frame.get_size() == target_size for frame in authored_run):
-                pl["run"] = authored_run
-        except (OSError, ValueError, pygame.error):
-            # A missing/invalid optional art file must never prevent startup.
-            pass
+        sprite_path = Path(__file__).resolve().parent.parent / "assets" / "sprites" / "player_run_sheet.png"
+        if sprite_path.exists():
+            try:
+                sheet = pygame.image.load(str(sprite_path)).convert_alpha()
+                cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
+                target_w, target_h = pl["run"][0].get_size()
+                # Compute a consistent ground anchor for all 8 frames.
+                # For each frame, find the lowest opaque pixel row and the
+                # horizontal centre of mass.  All frames are then cropped
+                # and re-anchored so the feet sit on the same baseline and
+                # the character does not drift sideways between frames.
+                cell_frames = []
+                for fi in range(8):
+                    col, row = fi % 4, fi // 4
+                    cell = sheet.subsurface(col * cell_w, row * cell_h,
+                                            cell_w, cell_h).copy()
+                    cell_frames.append(cell)
+                # Find the lowest opaque Y in each frame
+                lowest_ys = []
+                for cell in cell_frames:
+                    min_y = cell_h - 1
+                    for y in range(cell_h - 1, -1, -1):
+                        for x in range(cell_w):
+                            if cell.get_at((x, y))[3] > 16:
+                                min_y = y
+                                break
+                        if min_y < cell_h - 1:
+                            break
+                    lowest_ys.append(min_y)
+                baseline = max(lowest_ys)
+                # Compute centre-X for each frame (centre of mass of opaque pixels)
+                cx_offsets = []
+                for cell in cell_frames:
+                    sum_x, count = 0, 0
+                    for y in range(0, cell_h, 4):
+                        for x in range(0, cell_w, 4):
+                            if cell.get_at((x, y))[3] > 16:
+                                sum_x += x
+                                count += 1
+                    cx_offsets.append(sum_x / count if count else cell_w // 2)
+                # The renderer blits with bottom-centre anchor.  To keep all
+                # feet on the same line and guarantee identical bounding-rect
+                # bottoms, use a UNIFORM canvas size and add a 1px solid
+                # ground strip at the very bottom of every frame.  This
+                # forces the bounding rect bottom to be the canvas bottom
+                # for all 8 frames, regardless of where the feet land.
+                median_cx = sorted(cx_offsets)[4]
+                # Uniform canvas dimensions (same for all 8 frames)
+                max_pad_l = int(max(abs(median_cx - cx) for cx in cx_offsets))
+                uniform_w = cell_w + max_pad_l * 2
+                uniform_h = cell_h + max_pad_l + 2  # +2 for ground strip
+                authored_run = []
+                for cell, cy_off, cx_off in zip(cell_frames, lowest_ys, cx_offsets):
+                    pad_l = max_pad_l + int(median_cx - cx_off)
+                    pad_top = max_pad_l
+                    canvas = pygame.Surface((uniform_w, uniform_h), pygame.SRCALPHA)
+                    canvas.fill((0, 0, 0, 0))
+                    canvas.blit(cell, (pad_l, pad_top))
+                    # Add a 1px solid ground strip at the very bottom so the
+                    # bounding rect bottom is always uniform_h - 1.
+                    # Use a dark colour that blends with the shadow.
+                    pygame.draw.rect(canvas, (40, 35, 30, 60),
+                                     (0, uniform_h - 1, uniform_w, 1))
+                    # Downscale uniformly to the procedural sprite size.
+                    canvas = pygame.transform.smoothscale(canvas, (target_w, target_h))
+                    authored_run.append(canvas)
+                if len(authored_run) == 8:
+                    pl["run"] = authored_run
+                    print(f"[AssetManager] Loaded authored player run sheet "
+                          f"({sheet.get_width()}x{sheet.get_height()}, "
+                          f"8 frames, target {target_w}x{target_h})")
+                else:
+                    print("[AssetManager] WARNING: authored sheet extracted "
+                          "fewer than 8 frames; using procedural fallback")
+            except (OSError, ValueError, pygame.error) as exc:
+                print(f"[AssetManager] WARNING: could not load authored "
+                      f"player run sheet ({exc}); using procedural fallback")
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
