@@ -779,12 +779,20 @@ class AssetManager:
                            "stalker": 0.20, "regular": 0.30}.get(kind, 0.30)
             head_stabilize = torso_twist * 0.20 - lean_offset * lean_resist
         head_hx = hx + head_stabilize
+        # Keep the player's head proportionate to the shoulders and torso.
+        # The slightly narrower, shorter skull matches the supplied reference
+        # while retaining the same face position and overall character height.
+        head_w = 9.5 * sc
+        head_h = 9.5 * sc
         pygame.draw.ellipse(s, shade(skin, -0.2),
-                            (head_hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
+                            (head_hx - head_w / 2, head_cy - head_h / 2,
+                             head_w, head_h))
         pygame.draw.ellipse(s, skin,
-                            (head_hx - 5 * sc, head_cy - 5 * sc, 11 * sc, 11 * sc))
+                            (head_hx - 4.2 * sc, head_cy - 4.2 * sc,
+                             8.4 * sc, 8.4 * sc))
         pygame.draw.ellipse(s, p["hair"],
-                            (head_hx - 5 * sc, head_cy - 6 * sc, 11 * sc, 6 * sc))
+                            (head_hx - 4.4 * sc, head_cy - 4.9 * sc,
+                             9.0 * sc, 5.0 * sc))
         eye = (240, 90, 60) if pose == "hit" else (30, 24, 20)
         pygame.draw.circle(s, eye, (int(head_hx - 2), int(head_cy)), 1)
         pygame.draw.circle(s, eye, (int(head_hx + 3), int(head_cy)), 1)
