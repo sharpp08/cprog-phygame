@@ -28,7 +28,9 @@ parameters should not silently change collision size or world speed.
 1. AI/navigation supplies a desired world-space direction.
 2. Archetype-specific acceleration or braking response eases current velocity
    toward that target. Fast and stalker types redirect quickly; tanks and
-   armored types retain momentum.
+   armored types retain momentum. The exponential response is integrated
+   analytically so equal elapsed time produces equal free-space travel across
+   timestep sizes.
 3. Circle-vs-grid collision resolves the proposed displacement.
 4. Actual displacement divided by simulation time becomes the new velocity.
    Blocked axes lose momentum while an unobstructed axis can continue sliding.
