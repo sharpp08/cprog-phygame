@@ -222,8 +222,11 @@ class Player(Entity):
         if self.anim_state in ("walk", "run", "crouch"):
             self.frame_index = int(self._gait * 8) % 8
         elif self.anim_state == "idle":
+            # Idle uses the authored idle sheet (8 frames) cycling slowly
+            # for a natural breathing/resting rhythm.  Frame rate ~1 fps
+            # keeps the movement subtle without looking frozen.
             self.anim_timer += dt
-            self.frame_index = int(self.anim_timer * 1.5) % 4
+            self.frame_index = int(self.anim_timer * 1.0) % 8
         elif self.anim_state == "reload":
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 3.0) % 4
