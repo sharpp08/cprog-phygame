@@ -11,6 +11,8 @@ class SurvivalSystem:
         self.low_battery_warned = False
         self.battery_cells = 2
         self.scrap = 0
+        # Hysteresis prevents sprint from flickering at empty stamina.
+        self._sprint_locked = False
 
     def toggle_flashlight(self) -> bool:
         if self.flashlight_on:
@@ -42,12 +44,16 @@ class SurvivalSystem:
                 self.flashlight_on = False
         # A switched-off cell does not recharge: replacement cells are loot.
 
-        can_run = self.stamina > 1.0
-        if running and can_run:
-            self.stamina = max(0.0, self.stamina - 27.0 * dt)
+        if running:
+            if not self._sprint_locked:
+                self.stamina = max(0.0, self.stamina - 27.0 * dt)
+                if self.stamina <= 5.0:
+                    self._sprint_locked = True
         else:
             self.stamina = min(100.0, self.stamina + 18.0 * dt)
-        return can_run
+            if self._sprint_locked and self.stamina >= 25.0:
+                self._sprint_locked = False
+        return not self._sprint_locked and self.stamina > 0.0
 
     def add_scrap(self, amount: int = 1) -> None:
         self.scrap = max(0, self.scrap + int(amount))

@@ -112,8 +112,6 @@ class Player(Entity):
         vy += (target_vy - vy) * blend
         if not requested and math.hypot(vx, vy) < 0.04:
             vx = vy = 0.0
-        self._velocity = (vx, vy)
-
         old_x, old_y = self.x, self.y
         self.x, self.y = grid.move_circle(
             (old_x, old_y), (vx * dt, vy * dt), self.radius)
@@ -122,6 +120,9 @@ class Player(Entity):
         travelled = math.hypot(actual_dx, actual_dy)
         self.actual_speed = travelled / dt if dt > 0.0 else 0.0
         self._cur_speed = self.actual_speed
+        # Collision-resolved velocity preserves wall sliding and clears blocked axes.
+        self._velocity = ((actual_dx / dt, actual_dy / dt)
+                          if dt > 0.0 else (0.0, 0.0))
         self.moving = self.actual_speed > 0.05
         self.running = (running and self.moving and
                         self.actual_speed > config.PLAYER_WALK_SPEED * 1.05)

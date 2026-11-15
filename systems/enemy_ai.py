@@ -159,6 +159,9 @@ class ZombieController:
             z._tx, z._ty = p.x, p.y
             z.update(dt)
             self._behaviour(z, dt, p)
+            # Refresh the selected pose after AI/movement without advancing
+            # timers twice; animation now reflects this step's resolved travel.
+            z.update(0.0)
         self.zombies = [z for z in self.zombies if z.alive]
 
     # ------------------------------------------------------------------
@@ -191,16 +194,24 @@ class ZombieController:
         """Steer away from nearby zombies to avoid stacking/clumping."""
         sx = sy = 0.0
         count = 0
-        for other in self.zombies:
+        for index, other in enumerate(self.zombies):
             if other is z or not other.alive or getattr(other, "spawning", False):
                 continue
             dx = z.x - other.x
             dy = z.y - other.y
             d2 = dx * dx + dy * dy
             min_d = z.radius + other.radius + 0.15
-            if d2 < min_d * min_d and d2 > 1e-6:
-                d = d2 ** 0.5
-                push = (min_d - d) / min_d
+            if d2 < min_d * min_d:
+                if d2 <= 1e-6:
+                    # Coincident centres have no geometric separation vector.
+                    # Use a stable per-pair direction so overlap is resolved
+                    # deterministically instead of allowing permanent stacking.
+                    angle = (index + 1) * 2.399963229728653 + z.x * 0.37 + z.y * 0.61
+                    dx, dy, d = math.cos(angle), math.sin(angle), 1.0
+                    push = 1.0
+                else:
+                    d = math.sqrt(d2)
+                    push = (min_d - d) / min_d
                 sx += (dx / d) * push
                 sy += (dy / d) * push
                 count += 1

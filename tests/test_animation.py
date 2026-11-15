@@ -170,6 +170,7 @@ class TestZombieAnimation(unittest.TestCase):
                 zombie.spawning = False
                 zombie.state = "pursue"
                 zombie._speed_current = zombie.speed
+                zombie._velocity = (zombie.speed, 0.0)
                 zombie._stumble = 10.0
                 zombie._stumble_t = 0.0
                 before = zombie._gait
@@ -211,6 +212,7 @@ class TestZombieAnimation(unittest.TestCase):
         # Run
         zombie.state = "pursue"
         zombie._speed_current = zombie.speed
+        zombie._velocity = (zombie.speed, 0.0)
         zombie._actual_speed = zombie.speed
         zombie.moving = True
         zombie.update(0.1)
@@ -222,6 +224,7 @@ class TestZombieAnimation(unittest.TestCase):
         zombie.spawning = False
         zombie.state = "pursue"
         zombie._speed_current = zombie.speed
+        zombie._velocity = (zombie.speed, 0.0)
         gait_before = zombie._gait
         zombie.apply_move(1.0, 0.0, 0.5, BlockedGrid())
         zombie.update(0.5)
@@ -240,6 +243,7 @@ class TestZombieAnimation(unittest.TestCase):
             z._gait_rate = 0.82
             z._gait = 0.0
             z._speed_current = z.speed
+            z._velocity = (z.speed, 0.0)
             z._stumble = 10.0
             z._stumble_t = 0.0
         # z1 simulates at 60fps, z2 at 30fps — same total time (1 second)

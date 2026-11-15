@@ -520,6 +520,25 @@ class AssetManager:
                     hair=(52, 62, 46), size=0.96),
     }
 
+    @staticmethod
+    def _gait_leg_pose(phase: float, stride: float, lift: float):
+        """Return horizontal foot offset and height for one gait cycle.
+
+        Each foot spends 60% of its cycle in stance and 40% in swing.
+        Opposite feet are half a cycle apart, creating a short double-support
+        interval instead of the old instantaneous two-feet-down pose.
+        """
+        phase = phase % 1.0
+        stance_fraction = 0.60
+        if phase < stance_fraction:
+            progress = phase / stance_fraction
+            return stride * (0.5 - progress), 0.0
+        progress = (phase - stance_fraction) / (1.0 - stance_fraction)
+        smooth = progress * progress * (3.0 - 2.0 * progress)
+        foot_offset = stride * (-0.5 + smooth)
+        foot_lift = lift * math.sin(math.pi * progress)
+        return foot_offset, foot_lift
+
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
                   reach: float = 0.0, crouch: float = 0.0,
                   flash: bool = False, phase: float = 0.0,
@@ -632,14 +651,10 @@ class AssetManager:
         amp = 0.5 + 0.5 * min(1.5, abs(gait))
         stride = stride_base * (1.0 if running else 0.70) * amp
         lift = lift_base * (1.0 if running else 0.48)
-        # Opposite legs exchange support and recovery.  At phase 0 and 0.5
-        # both feet pass through ground contact; each half-cycle then lifts
-        # only one foot, avoiding the old simultaneous floating appearance.
-        swing = math.cos(cycle)
-        leg_a = -swing * stride
-        leg_b = swing * stride
-        lift_a = max(0.0, math.sin(cycle)) * lift
-        lift_b = max(0.0, -math.sin(cycle)) * lift
+        # Opposite feet are half a cycle apart. Each has a planted stance
+        # phase and a lifted recovery phase, with brief double support.
+        leg_a, lift_a = self._gait_leg_pose(phase, stride, lift)
+        leg_b, lift_b = self._gait_leg_pose(phase + 0.5, stride, lift)
         # Two restrained COM rises per cycle, one for each recovery phase.
         bob_wave = abs(math.sin(cycle)) if moving else 0.0
         if moving:
@@ -650,7 +665,7 @@ class AssetManager:
             torso_twist = math.sin(cycle) * 1.8 * (0.7 if running else 0.35)
             # Torso compression during stance: squash slightly when foot
             # impacts ground, restore during swing for grounded feel.
-            stance_phase = abs(math.sin(cycle))
+            stance_phase = abs(math.cos(cycle))  # impact compression at foot contact
             torso_compress = stance_phase * 1.2 * (1.0 if running else 0.4)
         else:
             # Preserve subtle breathing, attack wind-up and reload hand motion
