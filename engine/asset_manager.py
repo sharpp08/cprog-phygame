@@ -1191,6 +1191,30 @@ class AssetManager:
                                         idle_padded.append(ns)
                                     else:
                                         idle_padded.append(f)
+                            # Match the visible idle character to the visible
+                            # running character, not merely the transparent canvas.
+                            # Use the largest opaque run-frame bounds as the size
+                            # reference, then scale each idle pose proportionally
+                            # and keep its feet on the same bottom anchor.
+                            run_bounds = [frame.get_bounding_rect() for frame in padded]
+                            run_visible_w = max((b.width for b in run_bounds), default=target_w)
+                            run_visible_h = max((b.height for b in run_bounds), default=idle_h)
+                            size_matched_idle = []
+                            for idle_frame in idle_padded:
+                                bounds = idle_frame.get_bounding_rect()
+                                canvas = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
+                                if bounds.width > 0 and bounds.height > 0:
+                                    scale = min(run_visible_w / bounds.width,
+                                                run_visible_h / bounds.height)
+                                    new_size = (max(1, round(bounds.width * scale)),
+                                                max(1, round(bounds.height * scale)))
+                                    visible = idle_frame.subsurface(bounds).copy()
+                                    visible = pygame.transform.smoothscale(visible, new_size)
+                                    x = (target_w - new_size[0]) // 2
+                                    y = idle_h - new_size[1]
+                                    canvas.blit(visible, (x, y))
+                                size_matched_idle.append(canvas)
+                            idle_padded = size_matched_idle
                             if len(idle_padded) == 8:
                                 pl["idle"] = idle_padded
                                 print(f"[AssetManager] Loaded authored idle sheet "
