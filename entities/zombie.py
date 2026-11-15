@@ -205,19 +205,21 @@ class Zombie(Entity):
             "crawler": 5.0, "exploder": 5.5, "screamer": 5.0,
             "armored": 2.8, "stalker": 8.0,
         }
-        speed_response = accel_rates.get(self.ztype, 6.0) if has_target else \
-                         brake_rates.get(self.ztype, 6.0)
-        speed_blend = 1.0 - math.exp(-speed_response * dt)
-        self._speed_current += (target_speed - self._speed_current) * speed_blend
-        desired_vx = direction_x * self._speed_current
-        desired_vy = direction_y * self._speed_current
         response = accel_rates.get(self.ztype, 6.0) if has_target else \
                    brake_rates.get(self.ztype, 6.0)
-        blend = 1.0 - math.exp(-response * dt)
-        current_vx, current_vy = self._velocity
-        current_vx += (desired_vx - current_vx) * blend
-        current_vy += (desired_vy - current_vy) * blend
-        dx, dy = current_vx * dt, current_vy * dt
+        desired_vx = direction_x * target_speed
+        desired_vy = direction_y * target_speed
+        old_vx, old_vy = self._velocity
+        decay = math.exp(-response * dt)
+        # Exact integral of a first-order velocity response. This gives the
+        # same travelled distance over equal elapsed time at different update
+        # rates, while retaining a smooth terminal velocity for the next step.
+        current_vx = desired_vx + (old_vx - desired_vx) * decay
+        current_vy = desired_vy + (old_vy - desired_vy) * decay
+        travel_blend = (1.0 - decay) / response if response > 1e-8 else dt
+        dx = desired_vx * dt + (old_vx - desired_vx) * travel_blend
+        dy = desired_vy * dt + (old_vy - desired_vy) * travel_blend
+        self._speed_current = math.hypot(current_vx, current_vy)
 
         # Recoil is a decaying impulse along the vector from the hit source
         # through the zombie, rather than an arbitrary diagonal displacement.
@@ -234,8 +236,19 @@ class Zombie(Entity):
         actual_dy = self.y - old_y
         travelled = math.hypot(actual_dx, actual_dy)
         self._actual_speed = travelled / dt if dt > 0.0 else 0.0
-        self._velocity = ((actual_dx / dt, actual_dy / dt)
-                          if dt > 0.0 else (0.0, 0.0))
+        if dt > 0.0:
+            # Preserve integrated terminal velocity on free axes, but remove
+            # blocked-axis momentum when collision resolution rejects travel.
+            tol_x = max(1e-6, abs(dx) * 0.05)
+            tol_y = max(1e-6, abs(dy) * 0.05)
+            resolved_vx = (current_vx if abs(actual_dx - dx) <= tol_x
+                           else actual_dx / dt)
+            resolved_vy = (current_vy if abs(actual_dy - dy) <= tol_y
+                           else actual_dy / dt)
+            self._velocity = (resolved_vx, resolved_vy)
+        else:
+            self._velocity = (0.0, 0.0)
+        self._speed_current = math.hypot(*self._velocity)
         self.moving = self._actual_speed > 0.05
         if self.moving:
             # Foot phase is distance-driven: blocked enemies cannot foot-slide.
