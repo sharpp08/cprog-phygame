@@ -83,6 +83,28 @@ class CharacterPhysicsTests(unittest.TestCase):
         self.assertAlmostEqual(zombie.x, 5.0, places=7)
         self.assertLess(zombie.y, 5.0)
 
+    def test_ai_speed_scalars_are_not_lost_during_velocity_normalization(self):
+        slow = Zombie(5.0, 5.0, "regular")
+        fast = Zombie(5.0, 5.0, "regular")
+        for zombie in (slow, fast):
+            zombie.spawning = False
+            zombie.state = "pursue"
+            zombie._stumble = 20.0
+        for _ in range(90):
+            slow.apply_move(0.45, 0.0, 1.0 / 60.0, OpenGrid())
+            fast.apply_move(1.0, 0.0, 1.0 / 60.0, OpenGrid())
+        self.assertLess(slow._actual_speed, fast._actual_speed)
+
+    def test_exactly_overlapping_enemies_receive_separation_steering(self):
+        from systems.enemy_ai import ZombieController
+        controller = ZombieController(OpenGrid(), None, 20, 20)
+        first = Zombie(5.0, 5.0, "regular")
+        second = Zombie(5.0, 5.0, "regular")
+        first.spawning = second.spawning = False
+        controller.zombies = [first, second]
+        sx, sy = controller._separation(first, 1.0 / 60.0)
+        self.assertGreater((sx * sx + sy * sy) ** 0.5, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
