@@ -1012,7 +1012,7 @@ class AssetManager:
         sprite_path = Path(__file__).resolve().parent.parent / "assets" / "player_run_sheet.b64"
         try:
             encoded = sprite_path.read_text(encoding="ascii").strip()
-            sheet = pygame.image.load(BytesIO(base64.b64decode(encoded))).convert_alpha()
+            sheet = pygame.image.load(BytesIO(base64.b64decode(encoded)))
             cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
             target_size = pl["run"][0].get_size()
             authored_run = []
