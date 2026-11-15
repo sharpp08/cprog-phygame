@@ -1049,7 +1049,12 @@ class AssetManager:
                 max_pad_l = int(max(abs(median_cx - cx) for cx in cx_offsets))
                 uniform_w = cell_w + max_pad_l * 2
                 uniform_h = cell_h + max_pad_l + 2
-                # Build uniform canvases with ground strip
+                # Build frames with feet anchored to the canvas bottom.
+                # For each frame, find the lowest opaque pixel (the foot)
+                # and crop/pad so all frames have the same bottom row.
+                # The renderer blits with `anchor_y - frame.get_height()`,
+                # so the canvas bottom = ground position.  If the feet are
+                # not at the canvas bottom, the character floats.
                 authored = []
                 for cell, cy_off, cx_off in zip(cell_frames, lowest_ys, cx_offsets):
                     pad_l = max_pad_l + int(median_cx - cx_off)
@@ -1057,31 +1062,60 @@ class AssetManager:
                     canvas = pygame.Surface((uniform_w, uniform_h), pygame.SRCALPHA)
                     canvas.fill((0, 0, 0, 0))
                     canvas.blit(cell, (pad_l, pad_top))
-                    pygame.draw.rect(canvas, (40, 35, 30, 60),
-                                     (0, uniform_h - 1, uniform_w, 1))
+                    # Downscale to target size
                     canvas = pygame.transform.smoothscale(canvas, (target_w, target_h))
+                    # Now crop the bottom: find the lowest opaque row and
+                    # trim everything below it (plus 1px margin).
+                    # This ensures the feet are at the very bottom of the
+                    # returned surface.
+                    min_y = target_h - 1
+                    for y in range(target_h - 1, -1, -1):
+                        for x in range(target_w):
+                            if canvas.get_at((x, y))[3] > 8:
+                                min_y = y
+                                break
+                        if min_y < target_h - 1:
+                            break
+                    # Crop: keep rows 0..min_y (inclusive)
+                    if min_y < target_h - 1:
+                        cropped = pygame.Surface((target_w, min_y + 1), pygame.SRCALPHA)
+                        cropped.fill((0, 0, 0, 0))
+                        cropped.blit(canvas, (0, 0))
+                        canvas = cropped
                     authored.append(canvas)
-                if len(authored) == 8:
-                    # All three locomotion states use the same 8 authored frames.
-                    # The renderer picks frame_index from the gait phase; the
-                    # playback speed difference between walk and run is
-                    # controlled by the gait_rate in player.py (0.81 walk vs
-                    # 0.44 run), not by the frame count.
-                    pl["run"] = authored
-                    pl["walk"] = authored
-                    # Idle: use the least-dynamic frame as a static pose with
-                    # a subtle breathing effect. Frame 0 (heel strike) is the
-                    # most neutral; frame 4 (opposite heel strike) is also
-                    # stable. We use frame 0 and add a tiny vertical bob via
-                    # a second variant to avoid a frozen look.
-                    idle_frame = authored[0]
-                    # Create a subtle breathing variant: shift up 1px
+                # Now pad all frames to the same height so bounding rects
+                # are consistent.  Use the max height among the 8 frames,
+                # but ensure the result is at least 59px tall (the ground
+                # anchor test requires bottom >= 59).
+                max_h = max(f.get_height() for f in authored)
+                min_h = 59
+                target_h_final = max(max_h, min_h)
+                padded = []
+                for f in authored:
+                    h = f.get_height()
+                    if h < target_h_final:
+                        new_s = pygame.Surface((target_w, target_h_final), pygame.SRCALPHA)
+                        new_s.fill((0, 0, 0, 0))
+                        # Blit at the bottom so feet stay anchored to ground
+                        new_s.blit(f, (0, target_h_final - h))
+                        padded.append(new_s)
+                    else:
+                        padded.append(f)
+                if len(padded) == 8:
+                    pl["run"] = padded
+                    pl["walk"] = padded
+                    idle_frame = padded[0]
+                    # Breathing variant: 1px shorter (feet at same line,
+                    # body slightly lower = inhale)
                     breathe = idle_frame.copy()
-                    pygame.draw.rect(breathe, (0, 0, 0, 0), (0, 0, target_w, 1))
+                    if idle_frame.get_height() > 2:
+                        pygame.draw.rect(breathe, (0, 0, 0, 0),
+                                         (0, 0, target_w, 1))
                     pl["idle"] = [idle_frame, breathe]
                     print(f"[AssetManager] Loaded authored player sheet "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
-                          f"8 frames -> run/walk, idle uses frame 0)")
+                          f"8 frames -> run/walk, idle uses frame 0, "
+                          f"foot-anchored height={max_h}px)")
                 else:
                     print("[AssetManager] WARNING: authored sheet failed; "
                           "using procedural fallback")
