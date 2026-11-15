@@ -193,12 +193,8 @@ class Zombie(Entity):
                 direction_y /= direction_mag
             self._stumble_t = max(0.0, self._stumble_t - dt)
 
-        speed_blend = 1.0 - math.exp(-1.8 * dt)
-        self._speed_current += (target_speed - self._speed_current) * speed_blend
-        desired_vx = direction_x * self._speed_current
-        desired_vy = direction_y * self._speed_current
-
-        # Fast infected react quickly; heavy bodies need more time to redirect.
+        # Fast infected accelerate and redirect quickly; heavy bodies take
+        # longer to build speed and to shed momentum.
         accel_rates = {
             "regular": 6.5, "fast": 10.0, "tank": 2.8,
             "crawler": 5.5, "exploder": 5.8, "screamer": 5.0,
@@ -209,6 +205,12 @@ class Zombie(Entity):
             "crawler": 5.0, "exploder": 5.5, "screamer": 5.0,
             "armored": 2.8, "stalker": 8.0,
         }
+        speed_response = accel_rates.get(self.ztype, 6.0) if has_target else \
+                         brake_rates.get(self.ztype, 6.0)
+        speed_blend = 1.0 - math.exp(-speed_response * dt)
+        self._speed_current += (target_speed - self._speed_current) * speed_blend
+        desired_vx = direction_x * self._speed_current
+        desired_vy = direction_y * self._speed_current
         response = accel_rates.get(self.ztype, 6.0) if has_target else \
                    brake_rates.get(self.ztype, 6.0)
         blend = 1.0 - math.exp(-response * dt)
