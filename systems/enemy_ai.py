@@ -324,7 +324,10 @@ class ZombieController:
                     if z.hp <= 0:
                         self.kill(z)
                         return
+                hp_before = p.hp
                 p.take_damage(dmg)
+                if p.hp < hp_before and hasattr(p, "apply_knockback"):
+                    p.apply_knockback(z.x, z.y, dmg)
                 if self._audio:
                     self._audio.play("zombie_hit")
                 if self._particles:

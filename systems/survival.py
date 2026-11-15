@@ -1,11 +1,17 @@
 """Survival resources: stamina, finite flashlight cells and scavenging."""
 from __future__ import annotations
 
+import config
+
 
 class SurvivalSystem:
     def __init__(self) -> None:
         self.stamina = 100.0
         self.max_stamina = 100.0
+        # Exhaustion has hysteresis: after stamina hits zero sprinting stays
+        # locked until STAMINA_RESUME, so it cannot flicker at the cusp.
+        self.exhausted = False
+        self.winded_timer = 0.0
         self.flashlight_battery = 100.0
         self.flashlight_on = True
         self.low_battery_warned = False
@@ -42,12 +48,31 @@ class SurvivalSystem:
                 self.flashlight_on = False
         # A switched-off cell does not recharge: replacement cells are loot.
 
-        can_run = self.stamina > 1.0
+        if self.exhausted and self.stamina >= config.STAMINA_RESUME:
+            self.exhausted = False
+        can_run = not self.exhausted
+        self.winded_timer = max(0.0, self.winded_timer - dt)
         if running and can_run:
             self.stamina = max(0.0, self.stamina - 27.0 * dt)
+            if self.stamina <= 0.0:
+                self.exhausted = True
+                self.winded_timer = config.STAMINA_WINDED_TIME
         else:
             self.stamina = min(100.0, self.stamina + 18.0 * dt)
         return can_run
+
+    @property
+    def winded(self) -> bool:
+        """True while recovering from a full exhaustion (slower walking)."""
+        return self.winded_timer > 0.0
+
+    @property
+    def sprint_factor(self) -> float:
+        """Sprint speed fraction: fades over the last of the stamina."""
+        low = config.STAMINA_FADE_BELOW
+        if self.stamina >= low:
+            return 1.0
+        return 0.8 + 0.2 * max(0.0, self.stamina) / low
 
     def add_scrap(self, amount: int = 1) -> None:
         self.scrap = max(0, self.scrap + int(amount))
