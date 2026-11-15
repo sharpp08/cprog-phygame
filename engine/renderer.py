@@ -425,28 +425,33 @@ class Renderer:
             return frame
 
         blend = max(0.0, min(1.0, float(getattr(p, "anim_blend", 1.0))))
-        if blend < 1.0 and p.prev_anim_state != p.anim_state:
+        # Ease the blend curve so the outgoing pose fades faster at the edges
+        # and the new pose settles in smoothly -- a smoother morph than a flat
+        # linear alpha crossfade, with no visible double-exposure ghost.
+        eased = blend * blend * (3.0 - 2.0 * blend)
+        anchor_y = cy - 0 + 10 * cam.zoom
+        if eased < 1.0 and p.prev_anim_state != p.anim_state:
             previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
-            previous.set_alpha(int(255 * (1.0 - blend)))
-            self.screen.blit(previous, (cx - previous.get_width() / 2,
-                                        cy - previous.get_height()
-                                        + 10 * cam.zoom))
-
+            previous.set_alpha(int(255 * (1.0 - eased)))
+            # Align both frames on the same ground anchor so the planted feet
+            # do not shift sideways while the pose morphs.
+            px = cx - (previous.get_width() // 2)
+            py = anchor_y - previous.get_height()
+            self.screen.blit(previous, (px, py))
         spr = frame_for(p.anim_state, p.frame_index)
-        if blend < 1.0:
+        if eased < 1.0:
             spr = spr.copy()
-            spr.set_alpha(int(255 * blend))
+            spr.set_alpha(int(255 * eased))
         # flicker while invulnerable
         if p.invuln > 0 and int(p.invuln * 20) % 2 == 0:
             spr = spr.copy()
-            spr.set_alpha(120 if blend >= 1.0 else
-                          int(120 * blend))
+            spr.set_alpha(120 if eased >= 1.0 else
+                          int(120 * eased))
         # Torso bob and lean are authored inside the cached pose. Never
         # offset the complete sprite during a stride: the feet stay pinned
         # to the isometric ground anchor instead of sliding or floating.
-        self.screen.blit(spr, (cx - spr.get_width() / 2,
-                               cy - spr.get_height()
-                               + 10 * cam.zoom))
+        self.screen.blit(spr, (cx - spr.get_width() // 2,
+                               anchor_y - spr.get_height()))
         if p.dmg_flash > 0:
             self._white_flash(30, 40, int(cx), int(cy - 22),
                               int(200 * p.dmg_flash))

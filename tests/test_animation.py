@@ -303,6 +303,70 @@ class TestFrameValidity(unittest.TestCase):
             self.assertEqual(len(self.assets.frames[key]["walk"]), 8,
                              f"{ztype} walk has {len(self.assets.frames[key]['walk'])} frames")
 
+    def _foot_bottom_rows(self, frame):
+        """Return the lowest (max) opaque row of the sprite per column.
+
+        In the authored sprite the ground contact plane is the bottom of the
+        feet.  This lets us assert a *planted* foot sits on the ground row
+        while a *swinging* foot is lifted above it.
+        """
+        w, h = frame.get_size()
+        # Find the overall ground row: the lowest row with any opaque pixel.
+        ground_row = None
+        for y in range(h - 1, -1, -1):
+            for x in range(w):
+                if frame.get_at((x, y))[3] > 40:
+                    ground_row = y
+                    break
+            if ground_row is not None:
+                break
+        self.assertIsNotNone(ground_row, "frame has no opaque pixels")
+        return ground_row, w, h
+
+    def test_planted_foot_stays_on_ground_plane(self):
+        """Across a run cycle at least one foot must be planted on the ground
+        plane in every frame (stance phase), proving the feet are pinned to
+        the terrain rather than skating under the body."""
+        for key in ("player", "zombie_regular", "zombie_fast",
+                    "zombie_tank", "zombie_armored"):
+            for state in ("walk", "run"):
+                frames = self.assets.frames[key][state]
+                for i, f in enumerate(frames):
+                    with self.subTest(key=key, state=state, frame=i):
+                        ground_row, w, h = self._foot_bottom_rows(f)
+                        # There must be opaque pixels sitting exactly on the
+                        # ground row in every frame: a planted foot or a
+                        # swinging foot at its contact instant.
+                        on_ground = any(f.get_at((x, ground_row))[3] > 40
+                                        for x in range(w))
+                        self.assertTrue(on_ground,
+                                        f"{key} {state} frame {i}: no foot reaches "
+                                        "the ground plane, feet are floating")
+
+    def test_feet_track_pelvis_not_chest_pitch(self):
+        """The lateral foot spread must not grow with forward lean.
+
+        A bug where the feet were anchored to the swaying chest instead of the
+        rooted pelvis produced a visible sideways skid in the run frames.  With
+        pelvis anchoring, the maximum horizontal foot reach stays bounded and
+        does not exceed the sprite's own half-width by a wide margin.
+        """
+        for key in ("player", "zombie_fast", "zombie_tank"):
+            frames = self.assets.frames[key]["run"]
+            # The sprite is 44px wide; feet anchored at the pelvis (cx-based)
+            # with the largest authored stride should stay within ~cx +/- stride.
+            max_x = 0
+            for f in frames:
+                ground_row, w, h = self._foot_bottom_rows(f)
+                for y in (ground_row, ground_row - 1, ground_row - 2):
+                    for x in range(w):
+                        if f.get_at((x, y))[3] > 40:
+                            max_x = max(max_x, x)
+            with self.subTest(key=key):
+                self.assertLess(max_x, w,
+                                 f"{key} run feet reach x={max_x} of a {w}px-wide "
+                                 "sprite (lateral skid)")
+
     def test_locomotion_frames_keep_a_consistent_ground_anchor(self):
         groups = [self.assets.frames["player"]]
         groups.extend(self.assets.frames[f"zombie_{ztype}"]

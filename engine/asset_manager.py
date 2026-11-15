@@ -684,10 +684,15 @@ class AssetManager:
         lean += lean_base * (1.0 if running else (0.55 if pose == "walk" else 0.0))
         if kind == "exploder" and moving:
             lean += math.sin(cycle * 0.5) * 1.8
+        # The pelvis (hip) is the body's root. It stays close to the centre
+        # line; only a *reduced* fraction of the forward lean shifts it, so
+        # the planted foot and the torso don't both lurch forward together.
         hx = cx - lean * 0.32 + body_sway
         leaning = lean > 3.0  # Track if character is forward-leaning
-        # Visible forward lean: shift the torso forward relative to hips
-        # so the upper body appears to lean ahead during running.
+        # Visible forward lean: shift the *torso* ahead of the hips so the
+        # upper body pitches forward while the pelvis stays rooted. This is a
+        # single lean contribution applied only to the chest polygon, so it
+        # is never stacked a second time onto the hip position.
         lean_offset = lean * 0.15 if running else (lean * 0.08 if moving else 0.0)
         shoulder_x_offset = lean_offset
         # Apply torso twist for upper-body follow-through during running.
@@ -695,8 +700,9 @@ class AssetManager:
         if moving:
             hx += torso_twist * 0.5
             shoulder_y -= torso_compress * 0.3
-            # Shift upper body forward for visible lean
-            hx += lean_offset * 0.5
+            # The hip advances only a small share of the lean so the stride
+            # length is preserved; the chest polygon carries the rest.
+            hx += lean_offset * 0.25
         # Idle body sway (only for non-crawler zombies): subtle lateral shift
         # so idle poses don't look frozen. This is baked into the cached
         # frame so the renderer's ground anchor stays fixed.
@@ -707,13 +713,20 @@ class AssetManager:
 
         # Articulated hips, knees and ankles.  The knee bends more during
         # recovery, while the planted leg extends behind the body's centre.
-        foot_a_x = cx - 6 * sc + leg_a
-        foot_b_x = cx + 6 * sc + leg_b
+        #
+        # Feet are anchored to the *pelvis* (hx), not the fixed sprite centre
+        # cx.  The pelvis barely shifts (lean contributes only 0.25x to hx),
+        # so a planted foot stays pinned to the ground instead of skating in
+        # sync with the chest's forward pitch.  Lateral body sway therefore
+        # carries the hips with it rather than leaving the feet stranded.
+        hip_root_x = hx
+        foot_a_x = hip_root_x - 6 * sc + leg_a
+        foot_b_x = hip_root_x + 6 * sc + leg_b
         foot_a = (foot_a_x, gy - lift_a)
         foot_b = (foot_b_x, gy - lift_b)
-        knee_a = (cx - 4 * sc + leg_a * 0.50 + asym * leg_b,
+        knee_a = (hip_root_x - 4 * sc + leg_a * 0.50 + asym * leg_b,
                   hip_y + 9 * sc - lift_a * 0.48)
-        knee_b = (cx + 4 * sc + leg_b * 0.50 - asym * leg_a,
+        knee_b = (hip_root_x + 4 * sc + leg_b * 0.50 - asym * leg_a,
                   hip_y + 9 * sc - lift_b * 0.48)
         leg_width = max(3, int((6 if kind in ("tank", "armored") else 5) * sc))
         pygame.draw.line(s, shade(bot, -0.28), (hx - 2, hy), knee_a, leg_width)
@@ -730,29 +743,38 @@ class AssetManager:
                          (foot_b[0] + 4, foot_b[1] - min(2, lift_b * 0.12)), 3)
 
         # Torso compression and shoulder counter-rotation add weight to impact.
-        # Forward lean skews the torso: shoulders shift ahead of hips.
+        # Forward lean skews the *chest* ahead of the *pelvis*: the hip base
+        # stays at the rooted pelvis x (keeping the feet aligned) while the
+        # shoulders get the full lean skew. This single skew on the upper body
+        # replaces the old double-lean that shifted both the hip and the chest.
         torso_top = shoulder_y + (4 if crouch else 0)
         torso_bottom = hip_y
         lean_skew = shoulder_x_offset if moving else 0.0
-        torso = [(hx - 8 * sc - lean_skew * 0.4, torso_top + 2),
-                 (hx + 8 * sc + lean_skew * 0.4, torso_top + 2),
-                 (hx + 6 * sc, torso_bottom), (hx - 6 * sc, torso_bottom)]
+        torso = [(hip_root_x - 8 * sc - lean_skew, torso_top + 2),
+                 (hip_root_x + 8 * sc + lean_skew, torso_top + 2),
+                 (hip_root_x + 6 * sc, torso_bottom), (hip_root_x - 6 * sc, torso_bottom)]
         pygame.draw.polygon(s, shade(top, -0.28), torso)
         pygame.draw.polygon(s, top,
-                            [(hx - 7 * sc - lean_skew * 0.3, torso_top + 1),
-                             (hx + 7 * sc + lean_skew * 0.3, torso_top + 1),
-                             (hx + 5 * sc, torso_bottom - 2),
-                             (hx - 5 * sc, torso_bottom - 2)])
+                            [(hip_root_x - 7 * sc - lean_skew * 0.8, torso_top + 1),
+                             (hip_root_x + 7 * sc + lean_skew * 0.8, torso_top + 1),
+                             (hip_root_x + 5 * sc, torso_bottom - 2),
+                             (hip_root_x - 5 * sc, torso_bottom - 2)])
         pygame.draw.line(s, shade(bot, -0.2),
-                         (hx - 6 * sc, hip_y - 3),
-                         (hx + 6 * sc, hip_y - 3), 3)
+                         (hip_root_x - 6 * sc, hip_y - 3),
+                         (hip_root_x + 6 * sc, hip_y - 3), 3)
 
         # Head stays relatively stable while the chest pitches forward.
-        # During running, head counter-rotates to keep gaze forward.
+        # The head carries only a small *opposing* share of the chest skew so
+        # the gaze reads level; the coefficient is archetype-aware so heavy
+        # brutes (large lean) don't over-pitch their heads while light types
+        # under-compensate.
         head_stabilize = 0.0
         if moving:
-            # Head resists forward lean while following torso twist slightly
-            head_stabilize = torso_twist * 0.25 + lean_offset * 0.3
+            # Lean resistance: heavy archetypes keep the head nearly planted,
+            # agile archetypes let it follow the torso a little more.
+            lean_resist = {"tank": 0.35, "armored": 0.40, "fast": 0.15,
+                           "stalker": 0.20, "regular": 0.30}.get(kind, 0.30)
+            head_stabilize = torso_twist * 0.20 - lean_offset * lean_resist
         head_hx = hx + head_stabilize
         pygame.draw.ellipse(s, shade(skin, -0.2),
                             (head_hx - 6 * sc, head_cy - 6 * sc, 12 * sc, 12 * sc))
