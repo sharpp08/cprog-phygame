@@ -60,6 +60,8 @@ class Game:
         self.running = True
         self.clock = pygame.time.Clock()
         self.dt = 1.0 / config.TARGET_FPS
+        self._fixed_dt = 1.0 / config.TARGET_FPS
+        self._sim_accumulator = 0.0
 
         # menus
         self.main_menu = MainMenu(config.WINDOW_W, config.WINDOW_H,
@@ -277,13 +279,20 @@ class Game:
 
     # ------------------------------------------------------------------
     def _frame(self) -> None:
-        dt = min((pygame.time.get_ticks() - self._last) / 1000.0,
-                 1.0 / config.MIN_FPS)
+        # Fixed-step simulation keeps movement, collision and animation stable.
+        frame_dt = min(max((pygame.time.get_ticks() - self._last) / 1000.0,
+                           0.0), 0.1)
         self._last = pygame.time.get_ticks()
-        self.dt = dt
         for event in pygame.event.get():
             self._on_event(event)
-        self._update(dt)
+        self._sim_accumulator = min(
+            self._sim_accumulator + frame_dt, self._fixed_dt * 8.0)
+        steps = 0
+        while self._sim_accumulator >= self._fixed_dt and steps < 8:
+            self.dt = self._fixed_dt
+            self._update(self._fixed_dt)
+            self._sim_accumulator -= self._fixed_dt
+            steps += 1
         self._render()
         self.clock.tick(config.TARGET_FPS)
         pygame.display.flip()
