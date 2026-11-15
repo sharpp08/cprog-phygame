@@ -175,16 +175,17 @@ class Zombie(Entity):
         direction_x = vx / requested_mag if has_target else 0.0
         direction_y = vy / requested_mag if has_target else 0.0
 
-        if self._stumble_t > 0.0 and has_target:
-            target_speed *= 0.42
-            # A short lateral catch-step interrupts the straight pursuit line.
-            lateral = self._stumble_dir * 0.22
-            direction_x, direction_y = (
-                direction_x - direction_y * lateral,
-                direction_y + direction_x * lateral)
-            direction_mag = math.hypot(direction_x, direction_y) or 1.0
-            direction_x /= direction_mag
-            direction_y /= direction_mag
+        if self._stumble_t > 0.0:
+            if has_target:
+                target_speed *= 0.42
+                # A short lateral catch-step interrupts the straight pursuit line.
+                lateral = self._stumble_dir * 0.22
+                direction_x, direction_y = (
+                    direction_x - direction_y * lateral,
+                    direction_y + direction_x * lateral)
+                direction_mag = math.hypot(direction_x, direction_y) or 1.0
+                direction_x /= direction_mag
+                direction_y /= direction_mag
             self._stumble_t = max(0.0, self._stumble_t - dt)
 
         speed_blend = 1.0 - math.exp(-1.8 * dt)
