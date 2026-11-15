@@ -1242,6 +1242,11 @@ class AssetManager:
                             pygame.draw.rect(breathe, (0, 0, 0, 0),
                                              (0, 0, target_w, 1))
                         pl["idle"] = [idle_frame, breathe]
+                    # Keep the idle model's exact head-to-body proportions from
+                    # the authored running character.  The separate idle sheet
+                    # can have different anatomy/scale, so use a still run pose
+                    # for idle rather than allowing those proportions to drift.
+                    pl["idle"] = [padded[0]]
                     print(f"[AssetManager] Loaded authored player sheets "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
                           f"8 frames -> all states, "
