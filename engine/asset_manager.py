@@ -1007,26 +1007,24 @@ class AssetManager:
             "emerge": [self._humanoid("player", "emerge", phase=k / 3.0)
                        for k in range(3)],
         }
-        # Prefer the authored eight-frame player run sprite sheet when present.
-        # Other player states and all enemy archetypes remain procedural.
+        # Prefer the authored eight-frame player sprite sheet when present.
+        # The same 8 frames serve idle, walk, and run states with different
+        # playback speeds. Other states (shoot, crouch, reload, hit, dead,
+        # emerge) and all enemy archetypes remain procedural.
         sprite_path = Path(__file__).resolve().parent.parent / "assets" / "sprites" / "player_run_sheet.png"
         if sprite_path.exists():
             try:
                 sheet = pygame.image.load(str(sprite_path)).convert_alpha()
                 cell_w, cell_h = sheet.get_width() // 4, sheet.get_height() // 2
                 target_w, target_h = pl["run"][0].get_size()
-                # Compute a consistent ground anchor for all 8 frames.
-                # For each frame, find the lowest opaque pixel row and the
-                # horizontal centre of mass.  All frames are then cropped
-                # and re-anchored so the feet sit on the same baseline and
-                # the character does not drift sideways between frames.
+                # Extract 8 frames in row-major order (top row 0-3, bottom 4-7)
                 cell_frames = []
                 for fi in range(8):
                     col, row = fi % 4, fi // 4
                     cell = sheet.subsurface(col * cell_w, row * cell_h,
                                             cell_w, cell_h).copy()
                     cell_frames.append(cell)
-                # Find the lowest opaque Y in each frame
+                # Compute consistent anchoring across all 8 frames
                 lowest_ys = []
                 for cell in cell_frames:
                     min_y = cell_h - 1
@@ -1038,8 +1036,6 @@ class AssetManager:
                         if min_y < cell_h - 1:
                             break
                     lowest_ys.append(min_y)
-                baseline = max(lowest_ys)
-                # Compute centre-X for each frame (centre of mass of opaque pixels)
                 cx_offsets = []
                 for cell in cell_frames:
                     sum_x, count = 0, 0
@@ -1049,43 +1045,49 @@ class AssetManager:
                                 sum_x += x
                                 count += 1
                     cx_offsets.append(sum_x / count if count else cell_w // 2)
-                # The renderer blits with bottom-centre anchor.  To keep all
-                # feet on the same line and guarantee identical bounding-rect
-                # bottoms, use a UNIFORM canvas size and add a 1px solid
-                # ground strip at the very bottom of every frame.  This
-                # forces the bounding rect bottom to be the canvas bottom
-                # for all 8 frames, regardless of where the feet land.
                 median_cx = sorted(cx_offsets)[4]
-                # Uniform canvas dimensions (same for all 8 frames)
                 max_pad_l = int(max(abs(median_cx - cx) for cx in cx_offsets))
                 uniform_w = cell_w + max_pad_l * 2
-                uniform_h = cell_h + max_pad_l + 2  # +2 for ground strip
-                authored_run = []
+                uniform_h = cell_h + max_pad_l + 2
+                # Build uniform canvases with ground strip
+                authored = []
                 for cell, cy_off, cx_off in zip(cell_frames, lowest_ys, cx_offsets):
                     pad_l = max_pad_l + int(median_cx - cx_off)
                     pad_top = max_pad_l
                     canvas = pygame.Surface((uniform_w, uniform_h), pygame.SRCALPHA)
                     canvas.fill((0, 0, 0, 0))
                     canvas.blit(cell, (pad_l, pad_top))
-                    # Add a 1px solid ground strip at the very bottom so the
-                    # bounding rect bottom is always uniform_h - 1.
-                    # Use a dark colour that blends with the shadow.
                     pygame.draw.rect(canvas, (40, 35, 30, 60),
                                      (0, uniform_h - 1, uniform_w, 1))
-                    # Downscale uniformly to the procedural sprite size.
                     canvas = pygame.transform.smoothscale(canvas, (target_w, target_h))
-                    authored_run.append(canvas)
-                if len(authored_run) == 8:
-                    pl["run"] = authored_run
-                    print(f"[AssetManager] Loaded authored player run sheet "
+                    authored.append(canvas)
+                if len(authored) == 8:
+                    # All three locomotion states use the same 8 authored frames.
+                    # The renderer picks frame_index from the gait phase; the
+                    # playback speed difference between walk and run is
+                    # controlled by the gait_rate in player.py (0.81 walk vs
+                    # 0.44 run), not by the frame count.
+                    pl["run"] = authored
+                    pl["walk"] = authored
+                    # Idle: use the least-dynamic frame as a static pose with
+                    # a subtle breathing effect. Frame 0 (heel strike) is the
+                    # most neutral; frame 4 (opposite heel strike) is also
+                    # stable. We use frame 0 and add a tiny vertical bob via
+                    # a second variant to avoid a frozen look.
+                    idle_frame = authored[0]
+                    # Create a subtle breathing variant: shift up 1px
+                    breathe = idle_frame.copy()
+                    pygame.draw.rect(breathe, (0, 0, 0, 0), (0, 0, target_w, 1))
+                    pl["idle"] = [idle_frame, breathe]
+                    print(f"[AssetManager] Loaded authored player sheet "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
-                          f"8 frames, target {target_w}x{target_h})")
+                          f"8 frames -> run/walk, idle uses frame 0)")
                 else:
-                    print("[AssetManager] WARNING: authored sheet extracted "
-                          "fewer than 8 frames; using procedural fallback")
+                    print("[AssetManager] WARNING: authored sheet failed; "
+                          "using procedural fallback")
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: could not load authored "
-                      f"player run sheet ({exc}); using procedural fallback")
+                      f"player sheet ({exc}); using procedural fallback")
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
