@@ -1104,27 +1104,116 @@ class AssetManager:
                 if len(padded) == 8:
                     pl["run"] = padded
                     pl["walk"] = padded
-                    idle_frame = padded[0]
-                    # Breathing variant: 1px shorter (feet at same line,
-                    # body slightly lower = inhale)
-                    breathe = idle_frame.copy()
-                    if idle_frame.get_height() > 2:
-                        pygame.draw.rect(breathe, (0, 0, 0, 0),
-                                         (0, 0, target_w, 1))
-                    pl["idle"] = [idle_frame, breathe]
-                    # Action states (shoot, reload, hit, crouch) reuse the
-                    # authored frames so the character model stays consistent
-                    # during every gameplay action.  The renderer still
-                    # overlays muzzle flashes, weapon sprites, and damage
-                    # effects on top of these frames.
+                    # Action states reuse the run frames so the character
+                    # model stays consistent during every gameplay action.
                     pl["shoot"] = [padded[0]]
                     pl["reload"] = [padded[k % 8] for k in range(4)]
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
-                    print(f"[AssetManager] Loaded authored player sheet "
+                    # Load the dedicated idle sheet if available; it provides
+                    # a subtle breathing cycle distinct from the run frames.
+                    idle_path = (Path(__file__).resolve().parent.parent
+                                 / "assets" / "sprites" / "player_idle_sheet.png")
+                    if idle_path.exists():
+                        try:
+                            idle_sheet = pygame.image.load(str(idle_path)).convert_alpha()
+                            icw, ich = idle_sheet.get_width() // 4, idle_sheet.get_height() // 2
+                            idle_cells = []
+                            for fi in range(8):
+                                col, row = fi % 4, fi // 4
+                                cell = idle_sheet.subsurface(col * icw, row * ich,
+                                                             icw, ich).copy()
+                                idle_cells.append(cell)
+                            # Same anchoring pipeline as the run sheet
+                            idle_lowest = []
+                            for cell in idle_cells:
+                                min_y = ich - 1
+                                for y in range(ich - 1, -1, -1):
+                                    for x in range(icw):
+                                        if cell.get_at((x, y))[3] > 16:
+                                            min_y = y
+                                            break
+                                    if min_y < ich - 1:
+                                        break
+                                idle_lowest.append(min_y)
+                            idle_cx = []
+                            for cell in idle_cells:
+                                sx, cnt = 0, 0
+                                for y in range(0, ich, 4):
+                                    for x in range(0, icw, 4):
+                                        if cell.get_at((x, y))[3] > 16:
+                                            sx += x
+                                            cnt += 1
+                                idle_cx.append(sx / cnt if cnt else icw // 2)
+                            median = sorted(idle_cx)[4]
+                            max_pad = int(max(abs(median - c) for c in idle_cx))
+                            uw = icw + max_pad * 2
+                            uh = ich + max_pad + 2
+                            idle_authored = []
+                            for cell, cy, cx in zip(idle_cells, idle_lowest, idle_cx):
+                                pad_l = max_pad + int(median - cx)
+                                canvas = pygame.Surface((uw, uh), pygame.SRCALPHA)
+                                canvas.fill((0, 0, 0, 0))
+                                canvas.blit(cell, (pad_l, max_pad))
+                                canvas = pygame.transform.smoothscale(
+                                    canvas, (target_w, target_h))
+                                # Crop bottom transparent padding
+                                min_y2 = target_h - 1
+                                for y in range(target_h - 1, -1, -1):
+                                    for x in range(target_w):
+                                        if canvas.get_at((x, y))[3] > 8:
+                                            min_y2 = y
+                                            break
+                                    if min_y2 < target_h - 1:
+                                        break
+                                if min_y2 < target_h - 1:
+                                    cropped = pygame.Surface(
+                                        (target_w, min_y2 + 1), pygame.SRCALPHA)
+                                    cropped.fill((0, 0, 0, 0))
+                                    cropped.blit(canvas, (0, 0))
+                                    canvas = cropped
+                                idle_authored.append(canvas)
+                            # Pad to uniform height matching the run frames
+                            idle_h = target_h_final
+                            idle_padded = []
+                            for f in idle_authored:
+                                if f.get_height() < idle_h:
+                                    ns = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
+                                    ns.fill((0, 0, 0, 0))
+                                    ns.blit(f, (0, idle_h - f.get_height()))
+                                    idle_padded.append(ns)
+                                else:
+                                    # Crop to target height if taller
+                                    if f.get_height() > idle_h:
+                                        ns = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
+                                        ns.fill((0, 0, 0, 0))
+                                        ns.blit(f, (0, 0))
+                                        idle_padded.append(ns)
+                                    else:
+                                        idle_padded.append(f)
+                            if len(idle_padded) == 8:
+                                pl["idle"] = idle_padded
+                                print(f"[AssetManager] Loaded authored idle sheet "
+                                      f"({idle_sheet.get_width()}x"
+                                      f"{idle_sheet.get_height()}, 8 frames)")
+                        except (OSError, ValueError, pygame.error) as exc:
+                            print(f"[AssetManager] WARNING: idle sheet "
+                                  f"failed ({exc}); using run frame 0 for idle")
+                            idle_frame = padded[0]
+                            breathe = idle_frame.copy()
+                            pl["idle"] = [idle_frame, breathe]
+                    else:
+                        # Fallback: use run frame 0 with breathing variant
+                        idle_frame = padded[0]
+                        breathe = idle_frame.copy()
+                        if idle_frame.get_height() > 2:
+                            pygame.draw.rect(breathe, (0, 0, 0, 0),
+                                             (0, 0, target_w, 1))
+                        pl["idle"] = [idle_frame, breathe]
+                    print(f"[AssetManager] Loaded authored player sheets "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
-                          f"8 frames -> all states, foot-anchored "
-                          f"height={target_h_final}px)")
+                          f"8 frames -> all states, "
+                          f"foot-anchored height={target_h_final}px)")
                 else:
                     print("[AssetManager] WARNING: authored sheet failed; "
                           "using procedural fallback")
