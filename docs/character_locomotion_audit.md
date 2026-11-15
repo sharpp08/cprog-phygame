@@ -59,7 +59,8 @@ cycle; the visual amplitudes remain game-art tuning values.
 - The grid collision model treats blocked tiles and map boundaries as solid;
   circle resolution permits wall sliding.
 - A* uses eight-way movement and prevents diagonal corner cutting.
-- Zombie separation adds local steering to reduce stacking.
+- Zombie separation adds local steering to reduce stacking, including a stable
+  fallback direction when two enemies occupy exactly the same centre.
 - Player footsteps and gunfire emit noise; zombie perception also accounts
   for line of sight, flashlight state, crouching and rain.
 - Water is treated as impassable ground rather than a wading surface.
