@@ -101,6 +101,9 @@ class Zombie(Entity):
         self.stagger_timer = 0.0
         self.suspicion = 0.0
         self.last_known = (x, y)
+        # Gait ramp: eases between idle and walk/run to avoid pose snap.
+        # Starts at 1.0 for immediate first step; drops on idle entry.
+        self._gait_ramp = 1.0
         self.alerted = False
         self.variation = random.uniform(0.92, 1.08)  # per-zombie variation
         self.speed *= self.variation
@@ -297,15 +300,22 @@ class Zombie(Entity):
         self.anim_blend = min(1.0, self.anim_blend + dt * 3.5)
 
         if state in ("walk", "run"):
-            self.frame_index = int(self._gait * 8) % 8
+            # Ease gait amplitude after leaving idle to avoid a sudden
+            # pose jump from the breathing cycle to mid-stride.
+            self._gait_ramp = min(1.0, self._gait_ramp + dt / 0.25)
+            frame_phase = self._gait * self._gait_ramp
+            self.frame_index = int(frame_phase * 8) % 8
         elif state == "attack":
             # Attack wind-up cycles on its own clock so the lunge reads
             # clearly even though the body is stationary.
+            self._gait_ramp = max(0.0, self._gait_ramp - dt / 0.25)
             self.frame_index = int(self._action_phase * 4) % 4
         elif state == "idle":
+            self._gait_ramp = max(0.0, self._gait_ramp - dt / 0.25)
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 1.2) % 4
         else:
+            self._gait_ramp = max(0.0, self._gait_ramp - dt / 0.25)
             self.frame_index = 0
 
     def to_dict(self) -> dict:
