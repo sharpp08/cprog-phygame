@@ -665,7 +665,7 @@ class AssetManager:
             torso_twist = math.sin(cycle) * 1.8 * (0.7 if running else 0.35)
             # Torso compression during stance: squash slightly when foot
             # impacts ground, restore during swing for grounded feel.
-            stance_phase = abs(math.sin(cycle))
+            stance_phase = abs(math.cos(cycle))  # impact compression at foot contact
             torso_compress = stance_phase * 1.2 * (1.0 if running else 0.4)
         else:
             # Preserve subtle breathing, attack wind-up and reload hand motion
