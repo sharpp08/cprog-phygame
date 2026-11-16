@@ -159,8 +159,8 @@ class Renderer:
                 self._clouds.append([
                     rng.uniform(0.0, float(world.W)),
                     rng.uniform(0.0, float(world.H)),
-                    rng.uniform(82.0, 142.0),
-                    rng.uniform(0.72, 1.42),
+                    rng.uniform(4.0, 7.0),
+                    rng.uniform(0.85, 1.35),
                     rng.uniform(0.008, 0.026) * rng.choice((-1.0, 1.0)),
                     rng.uniform(-0.009, 0.009),
                     rng.uniform(0.0, math.tau),
@@ -187,9 +187,11 @@ class Renderer:
             if wx < minx - 5 or wx > maxx + 5 or wy < miny - 5 or wy > maxy + 5:
                 continue
             sx, sy = self.cam.iso_to_screen(wx, wy, height)
-            scale = size * zoom
+            # `size` is a modest sprite multiplier, not a world-pixel size.
+            # Keep the cloud texture near its authored dimensions and let the
+            # camera zoom scale it; multiplying by 80-140 made it screen-filling.
             texture = self._scale_sprite(
-                self._cloud_textures[texture_index], scale)
+                self._cloud_textures[texture_index], size * zoom)
             if sx < -texture.get_width() or sx > self.W + texture.get_width():
                 continue
             if sy < -texture.get_height() or sy > self.H + texture.get_height():
