@@ -145,9 +145,6 @@ class Renderer:
         self._draw_bullets(bullets)
         self._draw_particles()
         self._apply_lighting(world, player, zombies)
-        self.visual.draw_atmosphere(self.screen, self.cam, world,
-                                    self.time, self.quality,
-                                    fog_extra=self.weather.fog_density)
         # Debug-only counters and camera projections are skipped during
         # normal play to avoid per-frame allocations and extra transforms.
         if self.show_debug:
@@ -330,16 +327,6 @@ class Renderer:
         oy = -o.z * config.SCALE_Z * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + oy + 8 * cam.zoom))
-        if o.kind == "waterfall" and self.quality >= 1:
-            mist = self.assets.spr.get("mist")
-            if mist is not None:
-                mist = self._scale_sprite(mist)
-                mist.set_alpha(105 if self.quality == 1 else 145)
-                drift = math.sin(self.time * 0.8) * 5
-                self.screen.blit(mist, (cx - 42 + drift,
-                                         cy - 32 + math.sin(
-                                             self.time * 1.3) * 2))
-
     def _draw_zombie(self, z) -> None:
         key = f"zombie_{z.ztype}"
         frames = self.assets.frames[key]
@@ -699,7 +686,7 @@ class Renderer:
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,
                      dt: float, tension: float = 0.0) -> None:
-        """Render one full frame: world -> rain -> lighting -> mist ->
+        """Render one full frame: world -> rain -> lighting ->
         cinematic post-processing.  The HUD is drawn by the caller on top
         of the result, so UI stays perfectly readable."""
         self.time += dt
