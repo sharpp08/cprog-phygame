@@ -440,15 +440,8 @@ class Renderer:
             py = anchor_y - previous.get_height()
             self.screen.blit(previous, (px, py))
         spr = frame_for(p.anim_state, p.frame_index)
-        # Give the crouch a clear forward/downward body lean. Rotate around
-        # the feet (bottom-center anchor), not the sprite center, so the
-        # character stays planted on the isometric ground while facing either
-        # direction.
-        if p.anim_state in ("crouch_down", "crouch_idle"):
-            # Pygame's positive rotation leans the top of the sprite left.
-            # Lean toward the facing direction with a clearly visible angle.
-            lean_angle = -26.0 if p.facing >= 0 else 26.0
-            spr = pygame.transform.rotate(spr, lean_angle)
+        # Crouch poses are already authored in the correct lowered/leaning
+        # posture. Do not rotate them again; that distorts the provided art.
         if eased < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * eased))
