@@ -32,6 +32,12 @@ class VisualEnhancement:
         self._beam_core = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._beam_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._beam_core_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # A second downsample pass feathers rasterized wedges and removes
+        # the visible polygon seams without blurring the player or scene.
+        self._beam_soft = pygame.Surface((max(1, self.width // 8),
+                                          max(1, self.height // 8)), pygame.SRCALPHA)
+        self._beam_core_soft = pygame.Surface((max(1, self.width // 8),
+                                               max(1, self.height // 8)), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog_full = pygame.Surface((self.width, self.height),
                                         pygame.SRCALPHA)
@@ -210,7 +216,7 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                max_range = 30.0
+                max_range = 36.0
                 self._beam.fill((0, 0, 0, 0))
                 self._beam_core.fill((0, 0, 0, 0))
                 self._beam_full.fill((0, 0, 0, 0))
@@ -218,11 +224,11 @@ class VisualEnhancement:
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
-                ray_count = (65, 97, 129, 161)[max(0, min(3, int(quality)))]
+                ray_count = (97, 129, 161, 193)[max(0, min(3, int(quality)))]
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.31)
+                    half_spread=0.38)
                 ox, oy = sx, sy
                 previous = None
                 previous_core = None
@@ -237,7 +243,7 @@ class VisualEnhancement:
                         # Soft spill is drawn into a smaller buffer; smooth
                         # upscaling feathers the cone boundary instead of
                         # exposing a hard-edged polygon.
-                        edge_alpha = int(175 * lvl * strength * fog_gain)
+                        edge_alpha = int(238 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
@@ -248,16 +254,29 @@ class VisualEnhancement:
                         # cutoff produced by a fixed-width inner fan.
                         angular = (ray_index - mid_ray) / max(1.0, mid_ray)
                         core_profile = math.exp(-5.0 * angular * angular)
-                        core_alpha = int(210 * lvl * strength *
+                        core_alpha = int(245 * lvl * strength *
                                          core_profile * fog_gain)
                         if core_alpha > 0:
                             pygame.draw.polygon(
-                                self._beam_core_full,
+                                self._beam_core,
                                 (0, 0, 0, core_alpha),
-                                [(int(ox), int(oy)), previous, current])
+                                [(int(center_x), int(center_y)),
+                                 (int(previous[0] / 4.0), int(previous[1] / 4.0)),
+                                 (int(current[0] / 4.0), int(current[1] / 4.0))])
                     previous = current
+                # Feather both layers through an additional low-resolution
+                # pass. The core is no longer rasterized at native resolution,
+                # which was the source of the hard inner polygon edge.
                 pygame.transform.smoothscale(
-                    self._beam, (self.width, self.height), self._beam_full)
+                    self._beam, self._beam_soft.get_size(), self._beam_soft)
+                pygame.transform.smoothscale(
+                    self._beam_soft, (self.width, self.height), self._beam_full)
+                pygame.transform.smoothscale(
+                    self._beam_core, self._beam_core_soft.get_size(),
+                    self._beam_core_soft)
+                pygame.transform.smoothscale(
+                    self._beam_core_soft, (self.width, self.height),
+                    self._beam_core_full)
         else:
             self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
         # close-enemy glow: subtle cool light so pursuers read in the dark
