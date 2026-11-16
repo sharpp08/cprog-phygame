@@ -163,7 +163,7 @@ class VisualEnhancement:
         # Ambient environment brightness is independent of flashlight
         # state. Toggling the flashlight only adds/removes its directional
         # beam; it must not darken or brighten the entire world.
-        alpha = max(0, min(232, int(190 + darkness * 24 + quality_bias)))
+        alpha = max(0, min(246, int(224 + darkness * 20 + quality_bias)))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
@@ -185,7 +185,7 @@ class VisualEnhancement:
         if player is not None:
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
             halo_radius = 6.0 * 32.0 * zoom / 4.0
-            halo_strength = 0.30
+            halo_strength = 0.24
             lights.append((psx / 4.0, psy / 4.0,
                            halo_radius, halo_strength))
         if player is not None and getattr(player, "flashlight_on", True):
@@ -216,7 +216,7 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                max_range = 36.0
+                max_range = 40.0
                 self._beam.fill((0, 0, 0, 0))
                 self._beam_core.fill((0, 0, 0, 0))
                 self._beam_full.fill((0, 0, 0, 0))
@@ -224,11 +224,11 @@ class VisualEnhancement:
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
-                ray_count = (97, 129, 161, 193)[max(0, min(3, int(quality)))]
+                ray_count = (129, 161, 193, 225)[max(0, min(3, int(quality)))]
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.38)
+                    half_spread=0.42)
                 ox, oy = sx, sy
                 previous = None
                 previous_core = None
@@ -243,7 +243,7 @@ class VisualEnhancement:
                         # Soft spill is drawn into a smaller buffer; smooth
                         # upscaling feathers the cone boundary instead of
                         # exposing a hard-edged polygon.
-                        edge_alpha = int(238 * lvl * strength * fog_gain)
+                        edge_alpha = int(248 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
@@ -254,7 +254,7 @@ class VisualEnhancement:
                         # cutoff produced by a fixed-width inner fan.
                         angular = (ray_index - mid_ray) / max(1.0, mid_ray)
                         core_profile = math.exp(-5.0 * angular * angular)
-                        core_alpha = int(245 * lvl * strength *
+                        core_alpha = int(252 * lvl * strength *
                                          core_profile * fog_gain)
                         if core_alpha > 0:
                             pygame.draw.polygon(
