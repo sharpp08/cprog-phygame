@@ -63,8 +63,11 @@ class CloudField:
         if not self._initialized:
             self.initialize(camera_x, camera_y)
 
-        target_x = float(wind) * math.cos(float(wind_dir))
-        target_y = float(wind) * math.sin(float(wind_dir))
+        # Weather.wind_dir is a signed horizontal direction (-1 or +1),
+        # not an angle. Keep only a slight crosswind component.
+        direction = -1.0 if float(wind_dir) < 0.0 else 1.0
+        target_x = float(wind) * direction
+        target_y = float(wind) * 0.12 * direction
         blend = min(1.0, dt * 0.12)
         self.wind_x += (target_x - self.wind_x) * blend
         self.wind_y += (target_y - self.wind_y) * blend
