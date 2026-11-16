@@ -1342,35 +1342,57 @@ class AssetManager:
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: could not load authored "
                       f"player sheet ({exc}); using procedural fallback")
-        # Load the authored crouch transition/idle sheet (4 columns x 3 rows).
-        # Row order: crouch down, crouch idle, crouch up. Frames are already
-        # trimmed and foot-aligned on a 44x66 transparent canvas.
+        # The supplied sheet is a designed layout, not a uniform grid:
+        # its left column contains a preview and section labels. Crop only the
+        # twelve character poses, in row order: down, idle, up.
         crouch_path = (Path(__file__).resolve().parent.parent
                        / "assets" / "sprites" / "player_crouch_sheet.png")
         if crouch_path.exists():
             try:
                 crouch_sheet = pygame.image.load(str(crouch_path)).convert_alpha()
-                cw, ch = crouch_sheet.get_width() // 4, crouch_sheet.get_height() // 3
+                # Tight character bounds measured from the authored 1536x1024
+                # sheet. A little padding keeps antialiased edges intact.
+                crouch_bounds = (
+                    ((430, 79, 591, 331), (706, 106, 878, 323),
+                     (992, 127, 1156, 323), (1259, 141, 1433, 327)),
+                    ((422, 427, 589, 622), (699, 430, 875, 620),
+                     (980, 430, 1153, 617), (1264, 432, 1438, 626)),
+                    ((423, 732, 592, 958), (706, 725, 875, 953),
+                     (990, 715, 1147, 958), (1264, 703, 1429, 958)),
+                )
+                if crouch_sheet.get_size() != (1536, 1024):
+                    raise ValueError(
+                        "unexpected crouch sheet size "
+                        f"{crouch_sheet.get_size()} (expected 1536x1024)")
                 crouch_rows = []
-                for row in range(3):
+                for row_bounds in crouch_bounds:
                     row_frames = []
-                    for col in range(4):
-                        cell = crouch_sheet.subsurface(
-                            col * cw, row * ch, cw, ch).copy()
-                        if cell.get_size() != (44, 66):
-                            cell = pygame.transform.scale(cell, (44, 66))
-                        row_frames.append(cell)
+                    for x0, y0, x1, y1 in row_bounds:
+                        crop = crouch_sheet.subsurface(
+                            (x0, y0, x1 - x0, y1 - y0)).copy()
+                        # Preserve the original character proportions and
+                        # align every frame to the same bottom/ground anchor.
+                        scale = min(44.0 / crop.get_width(),
+                                    66.0 / crop.get_height())
+                        size = (max(1, round(crop.get_width() * scale)),
+                                max(1, round(crop.get_height() * scale)))
+                        fitted = pygame.transform.smoothscale(crop, size)
+                        frame = pygame.Surface((44, 66), pygame.SRCALPHA)
+                        frame.blit(fitted, ((44 - size[0]) // 2,
+                                            66 - size[1]))
+                        row_frames.append(frame)
                     crouch_rows.append(row_frames)
                 pl["crouch_down"] = crouch_rows[0]
                 pl["crouch_idle"] = crouch_rows[1]
                 pl["crouch_up"] = crouch_rows[2]
-                # Keep the legacy state key as an alias for compatibility.
                 pl["crouch"] = pl["crouch_idle"]
-                print("[AssetManager] Loaded authored crouch sheet "
-                      "(12 frames: down/idle/up)")
+                print("[AssetManager] Loaded 12 correctly cropped crouch poses")
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: crouch sheet failed ({exc}); "
                       "using procedural crouch fallback")
+                pl["crouch_down"] = pl["crouch"]
+                pl["crouch_idle"] = pl["crouch"]
+                pl["crouch_up"] = list(reversed(pl["crouch"]))
         else:
             pl["crouch_down"] = pl["crouch"]
             pl["crouch_idle"] = pl["crouch"]
