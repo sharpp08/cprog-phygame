@@ -203,38 +203,29 @@ class Renderer:
                         (cloud[5] + wind * 0.035) * dt) % world_h
 
     def _draw_clouds(self, world) -> None:
-        """Draw map-seeded clouds on a distant parallax sky plane.
+        """Draw clouds as elevated world objects using the exact world camera.
 
-        The clouds keep their own world-space positions and drift, but the
-        distant sky responds to only part of the camera movement. This makes
-        clouds visibly slide relative to nearby terrain instead of appearing
-        glued to the viewport or moving exactly like ground objects.
+        Each formation has a persistent map position and independent wind
+        drift. Projecting it with the same camera transform as terrain makes
+        it travel through the actual game world instead of behaving like a
+        separate screen-space/parallax overlay.
         """
         if world is None or self.quality < 1:
             return
         cam = self.cam
-        zoom = cam.zoom
         rain = self.weather.rain_amount
-        # Distant clouds exhibit less parallax than ground-level objects.
-        # Crucially, this is still camera-relative projection of map-seeded
-        # cloud positions; it is not a fixed screen-space animation.
-        parallax = 0.34
-        camera_dx = (cam.fx - cam.fy) * parallax
-        camera_dy = (cam.fx + cam.fy) * parallax
         for wx, wy, height, size, _vx, _vy, phase, texture_index in self._clouds:
-            sx = ((wx - wy - camera_dx) * config.SCALE_X * zoom
-                  + cam.sw / 2.0)
-            sy = ((wx + wy - camera_dy) * config.SCALE_Y * zoom
-                  - height * config.HEIGHT_SCALE * zoom + cam.sh / 2.0)
+            sx, sy = cam.iso_to_screen(wx, wy, height)
             texture = self._scale_sprite(
-                self._cloud_textures[texture_index], size * zoom)
+                self._cloud_textures[texture_index], size * cam.zoom)
             tw, th = texture.get_size()
             if sx < -tw or sx > self.W + tw or sy < -th or sy > self.H + th:
                 continue
-            # Overcast clouds become fuller and darker as rain builds.
+            # Keep the cloud deck atmospheric rather than washing over the
+            # scene like a translucent HUD layer.
             breathe = 0.94 + 0.06 * math.sin(self.time * 0.16 + phase)
-            alpha = int((52 + 22 * rain) * breathe)
-            texture.set_alpha(max(0, min(110, alpha)))
+            alpha = int((34 + 16 * rain) * breathe)
+            texture.set_alpha(max(0, min(68, alpha)))
             self.screen.blit(texture, (int(sx - tw * 0.5),
                                        int(sy - th * 0.5)))
 
