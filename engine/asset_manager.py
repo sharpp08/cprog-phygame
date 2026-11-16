@@ -1156,6 +1156,14 @@ class AssetManager:
                     else:
                         padded.append(f)
                 if len(padded) == 8:
+                    # Default to the authored run frames; when the idle sheet
+                    # loads successfully these are reduced to its visual scale.
+                    pl["run"] = padded
+                    pl["walk"] = padded
+                    pl["shoot"] = [padded[0]]
+                    pl["reload"] = [padded[k % 8] for k in range(4)]
+                    pl["hit"] = [padded[4]]
+                    pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Load the dedicated idle sheet if available; it provides
                     # a subtle breathing cycle distinct from the run frames.
                     idle_path = (Path(__file__).resolve().parent.parent
