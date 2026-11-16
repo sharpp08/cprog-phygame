@@ -440,6 +440,14 @@ class Renderer:
             py = anchor_y - previous.get_height()
             self.screen.blit(previous, (px, py))
         spr = frame_for(p.anim_state, p.frame_index)
+        # Give the crouch a clear forward/downward body lean. Rotate around
+        # the feet (bottom-center anchor), not the sprite center, so the
+        # character stays planted on the isometric ground while facing either
+        # direction.
+        if p.anim_state in ("crouch_down", "crouch_idle"):
+            lean_angle = 11.0 if p.facing >= 0 else -11.0
+            rotated = pygame.transform.rotate(spr, lean_angle)
+            spr = rotated
         if eased < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * eased))
