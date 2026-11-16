@@ -48,6 +48,11 @@ class Renderer:
         pygame.draw.ellipse(self._lightning_glow, (190, 220, 255, 255),
                             self._lightning_glow.get_rect())
         self._lightning_strike = None   # world-space (x, y), never screen-locked
+        # Clouds are persistent world objects: their positions and drift are
+        # stored in map coordinates, then projected through the camera.
+        self._cloud_textures = self._build_cloud_textures()
+        self._clouds: list = []
+        self._cloud_world_id = None
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
@@ -108,6 +113,95 @@ class Renderer:
         return scaled
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _build_cloud_textures() -> tuple:
+        """Create soft, layered cloud silhouettes once at startup."""
+        textures = []
+        layouts = (
+            ((38, 75, 42, 31), (83, 55, 55, 43), (137, 70, 53, 38),
+             (187, 78, 34, 27)),
+            ((34, 79, 36, 27), (77, 63, 49, 37), (122, 48, 46, 39),
+             (166, 64, 52, 40), (211, 83, 29, 24)),
+            ((42, 83, 48, 30), (91, 65, 53, 39), (145, 76, 58, 36),
+             (197, 68, 40, 30)),
+        )
+        for layout in layouts:
+            cloud = pygame.Surface((256, 128), pygame.SRCALPHA)
+            # A cool grey underside gives the cloud volume and depth.
+            for x, y, rx, ry in layout:
+                pygame.draw.ellipse(
+                    cloud, (91, 105, 119, 30),
+                    (x - rx, y - ry // 2 + 15, rx * 2, ry))
+            # Overlapping bright lobes form an irregular cumulus silhouette.
+            for index, (x, y, rx, ry) in enumerate(layout):
+                alpha = 62 if index % 2 else 76
+                pygame.draw.ellipse(
+                    cloud, (211, 222, 231, alpha),
+                    (x - rx, y - ry, rx * 2, ry * 2))
+                pygame.draw.ellipse(
+                    cloud, (235, 241, 245, 24),
+                    (x - int(rx * 0.72), y - int(ry * 0.72),
+                     int(rx * 1.44), int(ry * 1.25)))
+            # Down/up sampling feathers the edges without per-frame blur work.
+            small = pygame.transform.smoothscale(cloud, (128, 64))
+            cloud = pygame.transform.smoothscale(small, (256, 128))
+            textures.append(cloud)
+        return tuple(textures)
+
+    def _update_clouds(self, dt: float, world) -> None:
+        """Advance clouds in map space; camera movement never carries them."""
+        if world is None:
+            return
+        if self._cloud_world_id != id(world):
+            rng = random.Random(81427 + world.W * 31 + world.H)
+            self._clouds = []
+            for _ in range(22):
+                self._clouds.append([
+                    rng.uniform(0.0, float(world.W)),
+                    rng.uniform(0.0, float(world.H)),
+                    rng.uniform(82.0, 142.0),
+                    rng.uniform(0.72, 1.42),
+                    rng.uniform(0.008, 0.026) * rng.choice((-1.0, 1.0)),
+                    rng.uniform(-0.009, 0.009),
+                    rng.uniform(0.0, math.tau),
+                    rng.randrange(len(self._cloud_textures)),
+                ])
+            self._cloud_world_id = id(world)
+
+        wind = self.weather.wind * self.weather.wind_dir
+        for cloud in self._clouds:
+            cloud[0] += (cloud[4] + wind * 0.012) * dt
+            cloud[1] += (cloud[5] + wind * 0.003) * dt
+            # Wrap at the map edges so clouds circulate through the whole level.
+            cloud[0] %= max(1.0, float(world.W))
+            cloud[1] %= max(1.0, float(world.H))
+
+    def _draw_clouds(self, world) -> None:
+        """Draw overhead clouds at fixed world coordinates, behind the canopy."""
+        if world is None or self.quality < 1:
+            return
+        minx, miny, maxx, maxy = self._cull_bounds()
+        zoom = self.cam.zoom
+        rain = self.weather.rain_amount
+        for wx, wy, height, size, _vx, _vy, phase, texture_index in self._clouds:
+            if wx < minx - 5 or wx > maxx + 5 or wy < miny - 5 or wy > maxy + 5:
+                continue
+            sx, sy = self.cam.iso_to_screen(wx, wy, height)
+            scale = size * zoom
+            texture = self._scale_sprite(
+                self._cloud_textures[texture_index], scale)
+            if sx < -texture.get_width() or sx > self.W + texture.get_width():
+                continue
+            if sy < -texture.get_height() or sy > self.H + texture.get_height():
+                continue
+            # Overcast clouds become fuller and darker as rain builds.
+            breathe = 0.94 + 0.06 * math.sin(self.time * 0.16 + phase)
+            alpha = int((52 + 22 * rain) * breathe)
+            texture.set_alpha(max(0, min(110, alpha)))
+            self.screen.blit(texture, (int(sx - texture.get_width() * 0.5),
+                                       int(sy - texture.get_height() * 0.5)))
+
+    # ------------------------------------------------------------------
     def _cull_bounds(self) -> Tuple[int, int, int, int]:
         cam = self.cam
         pts = [cam.screen_to_world(x, y, 0.0) for (x, y) in
@@ -136,6 +230,7 @@ class Renderer:
             minx, miny, maxx, maxy, pad=0.0)
         self._draw_ground(world, minx, miny, maxx, maxy)
         self._draw_water(world, minx, miny, maxx, maxy)
+        self._draw_clouds(world)
         items = self._depth_items(
             world, player, zombies, pickups,
             visible_obstacles=visible_obstacles)
@@ -702,6 +797,7 @@ class Renderer:
         cinematic post-processing.  The HUD is drawn by the caller on top
         of the result, so UI stays perfectly readable."""
         self.time += dt
+        self._update_clouds(dt, world)
         if dt > 0:
             self._fps = self._fps * 0.9 + (1.0 / dt) * 0.1
         self.screen.fill((30, 26, 20))
