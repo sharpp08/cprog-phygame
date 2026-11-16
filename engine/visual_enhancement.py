@@ -165,21 +165,7 @@ class VisualEnhancement:
             lights.append((sx / 4.0, sy / 4.0,
                            radius * 32.0 * zoom / 4.0,
                            max(0.0, min(1.0, float(intensity) * breathe))))
-        if player is not None:
-            # A restrained player halo is always present. With the flashlight
-            # off, widen it so nearby terrain remains navigable without
-            # revealing the whole forest.
-            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
-            flashlight_on = bool(getattr(player, "flashlight_on", True))
-            if flashlight_on:
-                ambient_tiles, ambient_strength = 13.0, 0.48
-            else:
-                # Weak close-range visibility keeps the player and nearby
-                # ground readable without illuminating the surrounding forest.
-                ambient_tiles, ambient_strength = 5.0, 0.28
-            ambient_radius = ambient_tiles * 32.0 * zoom / 4.0
-            lights.append((psx / 4.0, psy / 4.0,
-                           ambient_radius, ambient_strength))
+        # No player-centred ambient light: visibility follows the aim.
         if player is not None and getattr(player, "flashlight_on", True):
             # smooth on/off transition
             target = 1.0
@@ -202,16 +188,6 @@ class VisualEnhancement:
             lvl *= flick
             self._fl_level = lvl
             sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
-            # Focused flashlight pool: a soft centre and a fast outer falloff.
-            # Keep a compact pool around the player's feet; the forward
-            # beam does the useful exploration lighting.
-            base_r = 9.5 * 32.0 * zoom / 4.0
-            base_s = 0.99
-            if fog_beam:
-                base_r *= 1.1
-                base_s = min(1.0, base_s + 0.15)
-            lights.append((sx / 4.0, sy / 4.0,
-                           base_r * max(0.0, lvl), base_s * max(0.0, lvl)))
             if lvl > 0.03:
                 aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
                 dx = (aim_x - aim_y) * config.SCALE_X
@@ -227,7 +203,7 @@ class VisualEnhancement:
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.52)
+                    half_spread=0.38)
                 ox, oy = sx / 4.0, sy / 4.0
                 previous = None
                 fog_gain = 1.08 if fog_beam else 1.0
