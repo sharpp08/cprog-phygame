@@ -115,58 +115,74 @@ class Renderer:
     # ------------------------------------------------------------------
     @staticmethod
     def _build_cloud_textures() -> tuple:
-        """Create soft, layered cloud silhouettes once at startup."""
+        """Generate varied, soft-edged cloud volumes procedurally at startup."""
         textures = []
-        layouts = (
-            ((38, 75, 42, 31), (83, 55, 55, 43), (137, 70, 53, 38),
-             (187, 78, 34, 27)),
-            ((34, 79, 36, 27), (77, 63, 49, 37), (122, 48, 46, 39),
-             (166, 64, 52, 40), (211, 83, 29, 24)),
-            ((42, 83, 48, 30), (91, 65, 53, 39), (145, 76, 58, 36),
-             (197, 68, 40, 30)),
-        )
-        for layout in layouts:
-            cloud = pygame.Surface((256, 128), pygame.SRCALPHA)
-            # A cool grey underside gives the cloud volume and depth.
-            for x, y, rx, ry in layout:
+        for texture_id in range(10):
+            rng = random.Random(49271 + texture_id * 7919)
+            cloud = pygame.Surface((384, 192), pygame.SRCALPHA)
+
+            # A broad, translucent underside gives each formation depth.
+            base_y = rng.randint(86, 112)
+            puff_count = rng.randint(8, 13)
+            puffs = []
+            for _ in range(puff_count):
+                x = rng.randint(42, 342)
+                y = base_y + rng.randint(-32, 25)
+                rx = rng.randint(25, 66)
+                ry = rng.randint(18, 43)
+                puffs.append((x, y, rx, ry))
+
+            for x, y, rx, ry in puffs:
                 pygame.draw.ellipse(
-                    cloud, (91, 105, 119, 30),
-                    (x - rx, y - ry // 2 + 15, rx * 2, ry))
-            # Overlapping bright lobes form an irregular cumulus silhouette.
-            for index, (x, y, rx, ry) in enumerate(layout):
-                alpha = 62 if index % 2 else 76
+                    cloud, (63, 78, 96, rng.randint(17, 29)),
+                    (x - int(rx * 1.18), y - int(ry * 0.22),
+                     int(rx * 2.36), int(ry * 1.25)))
+            # Layered puffs overlap irregularly; highlights sit toward the
+            # upper edges while cool grey tones remain underneath.
+            for index, (x, y, rx, ry) in enumerate(puffs):
+                shade = rng.randint(-8, 8)
                 pygame.draw.ellipse(
-                    cloud, (211, 222, 231, alpha),
+                    cloud, (176 + shade, 192 + shade, 207 + shade,
+                            rng.randint(38, 58)),
                     (x - rx, y - ry, rx * 2, ry * 2))
                 pygame.draw.ellipse(
-                    cloud, (235, 241, 245, 24),
-                    (x - int(rx * 0.72), y - int(ry * 0.72),
-                     int(rx * 1.44), int(ry * 1.25)))
-            # Down/up sampling feathers the edges without per-frame blur work.
-            small = pygame.transform.smoothscale(cloud, (128, 64))
-            cloud = pygame.transform.smoothscale(small, (256, 128))
+                    cloud, (224, 232, 239, rng.randint(24, 43)),
+                    (x - int(rx * 0.76), y - int(ry * 0.88),
+                     int(rx * 1.52), int(ry * 1.42)))
+                # Smaller upper lobes break up the repeated bubble outline.
+                if index % 2 == 0:
+                    hx = x + rng.randint(-int(rx * 0.35), int(rx * 0.35))
+                    hy = y - int(ry * 0.42)
+                    pygame.draw.ellipse(
+                        cloud, (238, 243, 247, rng.randint(15, 29)),
+                        (hx - int(rx * 0.43), hy - int(ry * 0.42),
+                         int(rx * 0.86), int(ry * 0.80)))
+
+            # Down/up sampling softens the silhouette without a costly
+            # per-frame blur operation.
+            cloud = pygame.transform.smoothscale(cloud, (128, 64))
+            cloud = pygame.transform.smoothscale(cloud, (320, 160))
             textures.append(cloud)
         return tuple(textures)
 
     def _update_clouds(self, dt: float, world) -> None:
-        """Simulate slow cloud drift in map coordinates, independent of camera."""
+        """Create and drift independent cloud formations in world coordinates."""
         if world is None:
             return
         if self._cloud_world_id != id(world):
             rng = random.Random(81427 + world.W * 31 + world.H)
             self._clouds = []
-            # Scatter distinct cloud formations over the map rather than a
-            # screen-filling layer. Their world positions persist as the
-            # camera follows the player.
-            count = max(12, min(24, int(world.W * world.H / 90)))
+            # Randomly scattered formations fill the playable sky without
+            # forming a static screen-space pattern.
+            count = max(18, min(36, int(world.W * world.H / 65)))
             for _ in range(count):
                 angle = rng.uniform(0.0, math.tau)
-                speed = rng.uniform(0.035, 0.075)
+                speed = rng.uniform(0.10, 0.22)
                 self._clouds.append([
                     rng.uniform(0.0, float(world.W)),
                     rng.uniform(0.0, float(world.H)),
-                    rng.uniform(4.0, 7.0),
-                    rng.uniform(0.85, 1.35),
+                    rng.uniform(4.0, 8.5),
+                    rng.uniform(0.65, 1.45),
                     math.cos(angle) * speed,
                     math.sin(angle) * speed * 0.55,
                     rng.uniform(0.0, math.tau),
@@ -174,18 +190,17 @@ class Renderer:
                 ])
             self._cloud_world_id = id(world)
 
-        # Advance each formation through the actual world. Wind gently bends
-        # the drift; it never uses player position, camera offset, or screen
-        # dimensions, so camera motion and cloud motion remain independent.
+        # Wind changes the motion of every formation in map space. No camera,
+        # player, viewport or screen coordinates participate in the simulation.
         wind = self.weather.wind * self.weather.wind_dir
         for cloud in self._clouds:
-            cloud[0] += (cloud[4] + wind * 0.006) * dt
-            cloud[1] += (cloud[5] + wind * 0.002) * dt
+            cloud[0] += (cloud[4] + wind * 0.018) * dt
+            cloud[1] += (cloud[5] + wind * 0.006) * dt
             cloud[0] %= max(1.0, float(world.W))
             cloud[1] %= max(1.0, float(world.H))
 
     def _draw_clouds(self, world) -> None:
-        """Draw overhead clouds at fixed world coordinates, behind the canopy."""
+        """Draw drifting, procedurally generated clouds behind the canopy."""
         if world is None or self.quality < 1:
             return
         minx, miny, maxx, maxy = self._cull_bounds()
