@@ -1368,7 +1368,7 @@ class AssetManager:
                 # while keeping the shared 44x66 frame canvas unchanged, so
                 # every crouch pose stays aligned to the same planted-foot
                 # anchor and transitions do not shift the player position.
-                crouch_scale = 0.78
+                crouch_scale = 0.65
                 crouch_size = (
                     max(1, round(size[0] * crouch_scale)),
                     max(1, round(size[1] * crouch_scale)),
