@@ -38,9 +38,6 @@ class VisualEnhancement:
                                           max(1, self.height // 8)), pygame.SRCALPHA)
         self._beam_core_soft = pygame.Surface((max(1, self.width // 8),
                                                max(1, self.height // 8)), pygame.SRCALPHA)
-        self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
-        self._fog_full = pygame.Surface((self.width, self.height),
-                                        pygame.SRCALPHA)
         # Cheap selective blur: downsample the scene once, then reveal it only
         # outside the player's immediate visibility bubble.
         self._bw = max(1, self.width // 8)
@@ -310,38 +307,7 @@ class VisualEnhancement:
         screen.blit(self._shade_full, (0, 0))
         screen.blit(self._vignette, (0, 0))
 
-    def draw_atmosphere(self, screen: pygame.Surface, cam, world,
-                        time_value: float, quality: int,
-                        fog_extra: float = 0.0) -> None:
-        """Screen-space drifting ground mist (broad, subtle, non-occluding).
-
-        ``fog_extra`` (0..1, from the weather system) thickens the mist
-        during rain / fog states so the weather is visible, not just heard.
-        """
-        if quality < 1:
-            return
-        self._fog.fill((0, 0, 0, 0))
-        # Low, slow-moving ground mist; screen-space puffs are intentionally
-        # broad and subtle so they never obscure the player or UI.
-        n_puffs = 5 if quality == 1 else 8
-        base = (18 + 30 * float(fog_extra)) if quality == 1 else \
-            (27 + 22 * float(fog_extra))
-        for i in range(n_puffs):
-            phase = time_value * (0.10 + i * 0.009) + i * 1.73
-            x = int((0.5 + 0.42 * math.sin(phase)) * self._lw)
-            y = int((0.58 + 0.25 * math.sin(phase * 0.71 + i)) * self._lh)
-            rx = 22 + (i % 3) * 9
-            ry = 5 + (i % 2) * 3
-            color = (115, 139, 157, min(255, int(base)))
-            pygame.draw.ellipse(self._fog, color,
-                                (x - rx, y - ry, rx * 2, ry * 2))
-            pygame.draw.ellipse(self._fog,
-                                (145, 164, 176, min(255, int(base // 2))),
-                                (x - rx // 2, y - ry - 2, rx, ry * 2))
-        pygame.transform.scale(self._fog, (self.width, self.height),
-                               self._fog_full)
-        screen.blit(self._fog_full, (0, 0))
+    def draw_grain(self, screen: pygame.Surface, quality: int) -> None:
+        """Apply subtle film grain without generating screen-space mist puffs."""
         if quality >= 2:
-            # Normal alpha blending keeps grain subtle; additive blending
-            # turns individual noise pixels into distracting white specks.
             screen.blit(self._grain, (0, 0))
