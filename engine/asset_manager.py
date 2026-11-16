@@ -1342,6 +1342,39 @@ class AssetManager:
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: could not load authored "
                       f"player sheet ({exc}); using procedural fallback")
+        # Load the authored crouch transition/idle sheet (4 columns x 3 rows).
+        # Row order: crouch down, crouch idle, crouch up. Frames are already
+        # trimmed and foot-aligned on a 44x66 transparent canvas.
+        crouch_path = (Path(__file__).resolve().parent.parent
+                       / "assets" / "sprites" / "player_crouch_sheet.png")
+        if crouch_path.exists():
+            try:
+                crouch_sheet = pygame.image.load(str(crouch_path)).convert_alpha()
+                cw, ch = crouch_sheet.get_width() // 4, crouch_sheet.get_height() // 3
+                crouch_rows = []
+                for row in range(3):
+                    row_frames = []
+                    for col in range(4):
+                        cell = crouch_sheet.subsurface(
+                            col * cw, row * ch, cw, ch).copy()
+                        if cell.get_size() != (44, 66):
+                            cell = pygame.transform.scale(cell, (44, 66))
+                        row_frames.append(cell)
+                    crouch_rows.append(row_frames)
+                pl["crouch_down"] = crouch_rows[0]
+                pl["crouch_idle"] = crouch_rows[1]
+                pl["crouch_up"] = crouch_rows[2]
+                # Keep the legacy state key as an alias for compatibility.
+                pl["crouch"] = pl["crouch_idle"]
+                print("[AssetManager] Loaded authored crouch sheet "
+                      "(12 frames: down/idle/up)")
+            except (OSError, ValueError, pygame.error) as exc:
+                print(f"[AssetManager] WARNING: crouch sheet failed ({exc}); "
+                      "using procedural crouch fallback")
+        else:
+            pl["crouch_down"] = pl["crouch"]
+            pl["crouch_idle"] = pl["crouch"]
+            pl["crouch_up"] = list(reversed(pl["crouch"]))
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
