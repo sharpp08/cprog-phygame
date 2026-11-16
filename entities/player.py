@@ -205,7 +205,12 @@ class Player(Entity):
         elif self._shoot_flash > 0:
             next_anim_state = "shoot"
         elif self.crouching:
-            next_anim_state = "crouch"
+            next_anim_state = (
+                self.anim_state if self.anim_state in ("crouch_down", "crouch_idle")
+                else "crouch_down"
+            )
+        elif self.anim_state in ("crouch_down", "crouch_idle", "crouch_up"):
+            next_anim_state = "crouch_up"
         elif self.running:
             next_anim_state = "run"
         elif self.moving:
@@ -217,14 +222,30 @@ class Player(Entity):
         self._set_anim_state(next_anim_state)
         self.anim_blend = min(1.0, self.anim_blend + max(0.0, dt) / 0.16)
 
-        # Pick the gait frame. Walk/run/crouch share one continuous cycle;
-        # the gait phase; idle gently breathes through the idle frames.
-        if self.anim_state in ("walk", "run", "crouch"):
+        # Crouch transitions play once; the crouch idle loops while held.
+        if self.anim_state in ("crouch_down", "crouch_up"):
+            self.anim_timer += dt
+            transition_frames = 4
+            frame = int(self.anim_timer * 10.0)
+            if frame >= transition_frames:
+                if self.anim_state == "crouch_down":
+                    self._set_anim_state("crouch_idle")
+                    self.frame_index = 0
+                else:
+                    # Finish standing into the currently appropriate locomotion pose.
+                    standing_state = ("run" if self.running else
+                                      "walk" if self.moving else "idle")
+                    self._set_anim_state(standing_state)
+                    self.frame_index = 0
+            else:
+                self.frame_index = frame
+        elif self.anim_state == "crouch_idle":
+            self.anim_timer += dt
+            self.frame_index = int(self.anim_timer * 5.0) % 4
+        elif self.anim_state in ("walk", "run"):
             self.frame_index = int(self._gait * 8) % 8
         elif self.anim_state == "idle":
-            # Idle uses the authored idle sheet (8 frames) cycling slowly
-            # for a natural breathing/resting rhythm.  Frame rate ~1 fps
-            # keeps the movement subtle without looking frozen.
+            # Idle uses the authored idle sheet (8 frames) cycling slowly.
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 1.0) % 8
         elif self.anim_state == "reload":
