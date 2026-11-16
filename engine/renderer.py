@@ -145,6 +145,7 @@ class Renderer:
         self._draw_bullets(bullets)
         self._draw_particles()
         self._apply_lighting(world, player, zombies)
+        self.visual.draw_grain(self.screen, self.quality)
         # Debug-only counters and camera projections are skipped during
         # normal play to avoid per-frame allocations and extra transforms.
         if self.show_debug:
