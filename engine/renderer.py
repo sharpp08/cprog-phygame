@@ -151,8 +151,10 @@ class Renderer:
         # normal play to avoid per-frame allocations and extra transforms.
         if self.show_debug:
             cam_x, cam_y = cam.fx, cam.fy
-            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \\
+            psx, psy = (
+                cam.iso_to_screen(player.x, player.y, 0.0)
                 if player is not None else (0.0, 0.0)
+            )
             self._dbg_counts = {
                 "tiles_total": world.W * world.H,
                 "obstacles_total": len(world.obstacles),
