@@ -517,7 +517,7 @@ class Game:
         if self.renderer is not None:
             self.renderer.set_battery(self.survival.flashlight_battery
                                      if self.survival else 100.0)
-            self.renderer.tick_weather(dt)
+            self.renderer.tick_weather(dt, self.wm.world)
             self.audio.set_rain(self.renderer.weather.rain_amount)
         # camera follow
         cam.update(self.dt, player.x, player.y)
