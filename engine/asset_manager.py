@@ -1156,40 +1156,6 @@ class AssetManager:
                     else:
                         padded.append(f)
                 if len(padded) == 8:
-                    # Bring the running character up to the current authored
-                    # idle character's visual scale. Enlarge only opaque pixels,
-                    # keep the feet on the same bottom anchor, and retain the
-                    # shared canvas dimensions used by the renderer.
-                    run_size_matched = []
-                    for run_frame in padded:
-                        bounds = run_frame.get_bounding_rect()
-                        canvas = pygame.Surface((target_w, target_h_final),
-                                                pygame.SRCALPHA)
-                        if bounds.width > 0 and bounds.height > 0:
-                            scale = min(
-                                1.04,
-                                (target_w - 2) / bounds.width,
-                                (target_h_final - 1) / bounds.height,
-                            )
-                            new_size = (
-                                max(1, round(bounds.width * scale)),
-                                max(1, round(bounds.height * scale)),
-                            )
-                            visible = run_frame.subsurface(bounds).copy()
-                            visible = pygame.transform.smoothscale(visible, new_size)
-                            x = (target_w - new_size[0]) // 2
-                            y = target_h_final - new_size[1]
-                            canvas.blit(visible, (x, y))
-                        run_size_matched.append(canvas)
-                    padded = run_size_matched
-                    pl["run"] = padded
-                    pl["walk"] = padded
-                    # Action states reuse the run frames so the character
-                    # model stays consistent during every gameplay action.
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
-                    pl["hit"] = [padded[4]]
-                    pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Load the dedicated idle sheet if available; it provides
                     # a subtle breathing cycle distinct from the run frames.
                     idle_path = (Path(__file__).resolve().parent.parent
@@ -1275,36 +1241,46 @@ class AssetManager:
                                         idle_padded.append(ns)
                                     else:
                                         idle_padded.append(f)
-                            # Match the visible idle character to the visible
-                            # running character, not merely the transparent canvas.
-                            # Use the largest opaque run-frame bounds as the size
-                            # reference, then scale each idle pose proportionally
-                            # and keep its feet on the same bottom anchor.
-                            run_bounds = [frame.get_bounding_rect() for frame in padded]
-                            run_visible_w = max((b.width for b in run_bounds), default=target_w)
-                            run_visible_h = max((b.height for b in run_bounds), default=idle_h)
-                            size_matched_idle = []
-                            for idle_frame in idle_padded:
-                                bounds = idle_frame.get_bounding_rect()
-                                canvas = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
+                            # The authored idle sheet is the visual-size reference.
+                            # Keep its original visible dimensions and reduce the
+                            # running frames to fit them, preserving the shared ground
+                            # anchor so idle/run transitions do not pop or float.
+                            idle_bounds = [frame.get_bounding_rect()
+                                           for frame in idle_padded]
+                            idle_visible_w = max(
+                                (b.width for b in idle_bounds), default=target_w)
+                            idle_visible_h = max(
+                                (b.height for b in idle_bounds), default=idle_h)
+                            run_size_matched = []
+                            for run_frame in padded:
+                                bounds = run_frame.get_bounding_rect()
+                                canvas = pygame.Surface((target_w, idle_h),
+                                                         pygame.SRCALPHA)
                                 if bounds.width > 0 and bounds.height > 0:
-                                    # Match the idle sprite to the enlarged run
-                                    # frames without applying a second size boost.
                                     scale = min(
-                                        run_visible_w / bounds.width,
-                                        run_visible_h / bounds.height,
-                                        target_w / bounds.width,
-                                        idle_h / bounds.height,
+                                        1.0,
+                                        idle_visible_w / bounds.width,
+                                        idle_visible_h / bounds.height,
                                     )
-                                    new_size = (max(1, round(bounds.width * scale)),
-                                                max(1, round(bounds.height * scale)))
-                                    visible = idle_frame.subsurface(bounds).copy()
-                                    visible = pygame.transform.smoothscale(visible, new_size)
-                                    x = (target_w - new_size[0]) // 2
-                                    y = idle_h - new_size[1]
-                                    canvas.blit(visible, (x, y))
-                                size_matched_idle.append(canvas)
-                            idle_padded = size_matched_idle
+                                    new_size = (
+                                        max(1, round(bounds.width * scale)),
+                                        max(1, round(bounds.height * scale)),
+                                    )
+                                    visible = run_frame.subsurface(bounds).copy()
+                                    visible = pygame.transform.smoothscale(
+                                        visible, new_size)
+                                    canvas.blit(
+                                        visible,
+                                        ((target_w - new_size[0]) // 2,
+                                         idle_h - new_size[1]))
+                                run_size_matched.append(canvas)
+                            padded = run_size_matched
+                            pl["run"] = padded
+                            pl["walk"] = padded
+                            pl["shoot"] = [padded[0]]
+                            pl["reload"] = [padded[k % 8] for k in range(4)]
+                            pl["hit"] = [padded[4]]
+                            pl["crouch"] = [padded[k % 8] for k in range(8)]
                             if len(idle_padded) == 8:
                                 pl["idle"] = idle_padded
                                 print(f"[AssetManager] Loaded authored idle sheet "
