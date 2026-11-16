@@ -170,7 +170,7 @@ class Renderer:
         if world is None:
             return
         if self._cloud_world_id != id(world):
-            rng = random.Random(81427 + world.W * 31 + world.H)
+            rng = random.Random()  # fresh cloud layout for each generated world
             self._clouds = []
             # Randomly scattered formations fill the playable sky without
             # forming a static screen-space pattern.
