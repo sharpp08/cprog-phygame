@@ -44,6 +44,9 @@ class Renderer:
         self._rain_layer = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._weather_tint = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._lightning_flash = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        self._lightning_glow = pygame.Surface((112, 64), pygame.SRCALPHA)
+        pygame.draw.ellipse(self._lightning_glow, (190, 220, 255, 255),
+                            self._lightning_glow.get_rect())
         self._lightning_strike = None   # world-space (x, y), never screen-locked
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
@@ -565,7 +568,7 @@ class Renderer:
                     if world.tiles[ty][tx] != config.T_WATER:
                         self._splashes.append([
                             wx, wy, random.uniform(0.12, 0.28), 0.28,
-                            random.uniform(0.035, 0.085)])
+                            random.uniform(0.12, 0.22)])
                 continue
 
             sx, sy = self.cam.iso_to_screen(wx, wy, z)
@@ -648,11 +651,10 @@ class Renderer:
 
         # Ground flash is localized at the strike point, not attached to player.
         gx, gy = ground
-        glow = pygame.Surface((112, 64), pygame.SRCALPHA)
-        glow_alpha = int(95 * self.weather.lightning)
-        pygame.draw.ellipse(glow, (190, 220, 255, glow_alpha),
-                            glow.get_rect())
-        self.screen.blit(glow, (int(gx - 56), int(gy - 32)))
+        self._lightning_glow.set_alpha(
+            int(115 * self.weather.lightning))
+        self.screen.blit(self._lightning_glow,
+                         (int(gx - 56), int(gy - 32)))
 
     def _draw_weather_tint(self) -> None:
         """Subtle cool wet-weather grading and a brief whole-scene lightning flash."""
