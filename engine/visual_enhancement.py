@@ -28,6 +28,11 @@ class VisualEnhancement:
                                           pygame.SRCALPHA)
         self._beam = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._beam_core = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
+        # Render the flashlight at native screen resolution so its edges and
+        # illuminated center stay crisp instead of being softened by the
+        # quarter-resolution ambient-light buffer.
+        self._beam_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._beam_core_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog_full = pygame.Surface((self.width, self.height),
                                         pygame.SRCALPHA)
@@ -209,15 +214,17 @@ class VisualEnhancement:
                 max_range = 27.0
                 self._beam.fill((0, 0, 0, 0))
                 self._beam_core.fill((0, 0, 0, 0))
+                self._beam_full.fill((0, 0, 0, 0))
+                self._beam_core_full.fill((0, 0, 0, 0))
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
-                ray_count = (25, 37, 49, 65)[max(0, min(3, int(quality)))]
+                ray_count = (49, 65, 81, 97)[max(0, min(3, int(quality)))]
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.40)
-                ox, oy = sx / 4.0, sy / 4.0
+                    half_spread=0.34)
+                ox, oy = sx, sy
                 previous = None
                 previous_core = None
                 fog_gain = 1.18 if fog_beam else 1.0
@@ -225,23 +232,23 @@ class VisualEnhancement:
                 core_end = len(rays) - core_start
                 for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
                     ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
-                    current = (int(ex / 4.0), int(ey / 4.0))
+                    current = (int(ex), int(ey))
                     if previous is not None:
                         # The wide, low-intensity fringe gives the cone a
                         # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(205 * lvl * strength * fog_gain)
+                        edge_alpha = int(225 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
-                                self._beam, (0, 0, 0, edge_alpha),
+                                self._beam_full, (0, 0, 0, edge_alpha),
                                 [(int(ox), int(oy)), previous, current])
                         # A narrower overlapping core concentrates the beam
                         # toward the aim point, like a focused flashlight.
                         if core_start < ray_index < core_end:
-                            core_alpha = int(185 * lvl * strength * fog_gain)
+                            core_alpha = int(245 * lvl * strength * fog_gain)
                             if core_alpha > 0:
                                 pygame.draw.polygon(
-                                    self._beam_core,
+                                    self._beam_core_full,
                                     (0, 0, 0, core_alpha),
                                     [(int(ox), int(oy)), previous, current])
                     previous = current
@@ -261,12 +268,17 @@ class VisualEnhancement:
         if player is not None and getattr(player, "flashlight_on", True):
             # Composite the soft spill first, then the focused center so the
             # beam reads clearly without washing out the surrounding scene.
-            self._shade.blit(self._beam, (0, 0),
-                             special_flags=pygame.BLEND_RGBA_SUB)
-            self._shade.blit(self._beam_core, (0, 0),
-                             special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),
                                self._shade_full)
+        if player is not None and getattr(player, "flashlight_on", True):
+            # Subtract the native-resolution beam after scaling ambient
+            # lighting, preserving a crisp, sharply defined light cone.
+            self._shade_full.blit(
+                self._beam_full, (0, 0),
+                special_flags=pygame.BLEND_RGBA_SUB)
+            self._shade_full.blit(
+                self._beam_core_full, (0, 0),
+                special_flags=pygame.BLEND_RGBA_SUB)
         screen.blit(self._shade_full, (0, 0))
         screen.blit(self._vignette, (0, 0))
 
