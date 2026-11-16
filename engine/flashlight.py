@@ -13,6 +13,30 @@ from typing import List, Tuple
 import config
 
 
+# World geometry is static during a run. Build the obstacle spatial hash once
+# instead of rebuilding it for every flashlight ray fan on every frame.
+def _blockers_for(world):
+    obstacles = getattr(world, "obstacles", ())
+    signature = (id(obstacles), len(obstacles))
+    if getattr(world, "_flashlight_blocker_signature", None) != signature:
+        blocker_cells = {}
+        for obstacle in obstacles:
+            if not bool(getattr(obstacle, "solid", True)):
+                continue
+            kind = getattr(obstacle, "kind", "")
+            radius = {
+                "tree": 0.76, "shrine": 0.78, "waterfall": 0.68,
+                "ruin": 0.70, "rock": 0.52, "bush": 0.30,
+            }.get(kind, 0.32)
+            bx, by = float(obstacle.x), float(obstacle.y)
+            blocker_cells.setdefault((int(math.floor(bx)),
+                                      int(math.floor(by))), []).append(
+                                          (bx, by, radius))
+        world._flashlight_blocker_cells = blocker_cells
+        world._flashlight_blocker_signature = signature
+    return world._flashlight_blocker_cells
+
+
 _SURFACE_RESPONSE = {
     config.T_GRASS: 0.78, config.T_DIRT: 0.73, config.T_PATH: 0.88,
     config.T_WATER: 1.08, config.T_BRIDGE: 0.91,
@@ -73,29 +97,16 @@ def trace_flashlight_beam(
         dx, dy, aim_len = 1.0, 0.0, 1.0
     dx, dy = dx / aim_len, dy / aim_len
 
-    # Treat obstacles as small world-space footprints rather than
-    # dimensionless tile points. Tall trees and large rocks therefore cast
-    # wider, more convincing shadows that match their ground contact area.
-    blocker_cells = {}
-    for obstacle in getattr(world, "obstacles", ()):
-        if not bool(getattr(obstacle, "solid", True)):
-            continue
-        kind = getattr(obstacle, "kind", "")
-        radius = {
-            "tree": 0.76, "shrine": 0.78, "waterfall": 0.68,
-            "ruin": 0.70, "rock": 0.52, "bush": 0.30,
-        }.get(kind, 0.32)
-        bx, by = float(obstacle.x), float(obstacle.y)
-        blocker_cells.setdefault((int(math.floor(bx)),
-                                  int(math.floor(by))), []).append(
-                                      (bx, by, radius))
+    # Reuse the map's cached spatial hash; rebuilding it every frame
+    # made flashlight cost scale with every obstacle in the entire forest.
+    blocker_cells = _blockers_for(world)
     count = max(3, int(ray_count))
     if count % 2 == 0:
         count += 1
     max_range = max(0.5, float(max_range))
     half_spread = max(0.05, min(1.1, float(half_spread)))
     # Short ray steps reduce light leaks around thin obstacles and tile edges.
-    step = 0.09
+    step = 0.12
     rays: List[Tuple[float, float, float, int]] = []
 
     for index in range(count):
