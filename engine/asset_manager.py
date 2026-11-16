@@ -1342,61 +1342,60 @@ class AssetManager:
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: could not load authored "
                       f"player sheet ({exc}); using procedural fallback")
-        # The supplied sheet is a designed layout, not a uniform grid:
-        # its left column contains a preview and section labels. Crop only the
-        # twelve character poses, in row order: down, idle, up.
-        crouch_path = (Path(__file__).resolve().parent.parent
-                       / "assets" / "sprites" / "player_crouch_sheet.png")
-        if crouch_path.exists():
+        # Three independently authored crouch sheets. Each contains four
+        # transparent character poses arranged horizontally. Keep the poses
+        # separate so crouch transitions can never fall through to run frames.
+        sprite_dir = (Path(__file__).resolve().parent.parent
+                      / "assets" / "sprites")
+
+        def load_crouch_sheet(filename, bounds):
+            path = sprite_dir / filename
+            if not path.exists():
+                return None
+            sheet = pygame.image.load(str(path)).convert_alpha()
+            frames_out = []
+            for x0, y0, x1, y1 in bounds:
+                crop = sheet.subsurface(
+                    (x0, y0, x1 - x0, y1 - y0)).copy()
+                # Match the existing player frame canvas while preserving
+                # the authored pose proportions and a common planted-foot anchor.
+                scale = min(44.0 / crop.get_width(), 66.0 / crop.get_height())
+                size = (max(1, round(crop.get_width() * scale)),
+                        max(1, round(crop.get_height() * scale)))
+                fitted = pygame.transform.smoothscale(crop, size)
+                frame = pygame.Surface((44, 66), pygame.SRCALPHA)
+                frame.blit(fitted, ((44 - size[0]) // 2, 66 - size[1]))
+                frames_out.append(frame)
+            return frames_out
+
+        # Bounds are the transparent-background character extents in each
+        # supplied 1536x246 / 1536x318 / 1212x282 sheet.
+        crouch_sheets = {
+            "crouch_idle": ("player_crouch_idle_sheet.png",
+                            ((426, 22, 585, 210), (703, 25, 870, 207),
+                             (984, 25, 1149, 204), (1267, 27, 1434, 213))),
+            "crouch_up": ("player_crouch_up_sheet.png",
+                          ((427, 30, 588, 248), (710, 23, 869, 243),
+                           (994, 13, 1143, 248), (1268, 1, 1423, 248))),
+            "crouch_down": ("player_crouch_down_sheet.png",
+                            ((108, 12, 263, 257), (385, 38, 549, 248),
+                             (671, 60, 827, 248), (937, 74, 1105, 252))),
+        }
+        for state, (filename, bounds) in crouch_sheets.items():
             try:
-                crouch_sheet = pygame.image.load(str(crouch_path)).convert_alpha()
-                # Tight character bounds measured from the authored 1536x1024
-                # sheet. A little padding keeps antialiased edges intact.
-                crouch_bounds = (
-                    ((430, 79, 591, 331), (706, 106, 878, 323),
-                     (992, 127, 1156, 323), (1259, 141, 1433, 327)),
-                    ((422, 427, 589, 622), (699, 430, 875, 620),
-                     (980, 430, 1153, 617), (1264, 432, 1438, 626)),
-                    ((423, 732, 592, 958), (706, 725, 875, 953),
-                     (990, 715, 1147, 958), (1264, 703, 1429, 958)),
-                )
-                if crouch_sheet.get_size() != (1536, 1024):
-                    raise ValueError(
-                        "unexpected crouch sheet size "
-                        f"{crouch_sheet.get_size()} (expected 1536x1024)")
-                crouch_rows = []
-                for row_bounds in crouch_bounds:
-                    row_frames = []
-                    for x0, y0, x1, y1 in row_bounds:
-                        crop = crouch_sheet.subsurface(
-                            (x0, y0, x1 - x0, y1 - y0)).copy()
-                        # Preserve the original character proportions and
-                        # align every frame to the same bottom/ground anchor.
-                        scale = min(44.0 / crop.get_width(),
-                                    66.0 / crop.get_height())
-                        size = (max(1, round(crop.get_width() * scale)),
-                                max(1, round(crop.get_height() * scale)))
-                        fitted = pygame.transform.smoothscale(crop, size)
-                        frame = pygame.Surface((44, 66), pygame.SRCALPHA)
-                        frame.blit(fitted, ((44 - size[0]) // 2,
-                                            66 - size[1]))
-                        row_frames.append(frame)
-                    crouch_rows.append(row_frames)
-                pl["crouch_down"] = crouch_rows[0]
-                pl["crouch_idle"] = crouch_rows[1]
-                pl["crouch_up"] = crouch_rows[2]
-                pl["crouch"] = pl["crouch_idle"]
-                print("[AssetManager] Loaded 12 correctly cropped crouch poses")
+                loaded = load_crouch_sheet(filename, bounds)
+                if loaded:
+                    pl[state] = loaded
+                    print(f"[AssetManager] Loaded {filename} ({len(loaded)} frames)")
+                else:
+                    pl[state] = list(pl["crouch"])
+                    print(f"[AssetManager] WARNING: {filename} missing; "
+                          "using crouch fallback for this state")
             except (OSError, ValueError, pygame.error) as exc:
-                print(f"[AssetManager] WARNING: crouch sheet failed ({exc}); "
-                      "using procedural crouch fallback")
-                pl["crouch_down"] = pl["crouch"]
-                pl["crouch_idle"] = pl["crouch"]
-                pl["crouch_up"] = list(reversed(pl["crouch"]))
-        else:
-            pl["crouch_down"] = pl["crouch"]
-            pl["crouch_idle"] = pl["crouch"]
-            pl["crouch_up"] = list(reversed(pl["crouch"]))
+                pl[state] = list(pl["crouch"])
+                print(f"[AssetManager] WARNING: {filename} failed ({exc}); "
+                      "using crouch fallback for this state")
+        pl["crouch"] = pl["crouch_idle"]
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
