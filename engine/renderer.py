@@ -40,6 +40,9 @@ class Renderer:
         self._battery = 100.0
         self._last_hp: Optional[float] = None
         self._rain: list = []
+        self._splashes: list = []
+        self._rain_layer = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        self._weather_tint = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
@@ -80,6 +83,8 @@ class Renderer:
         mode change."""
         self.visual.resize(self.W, self.H)
         self.post.resize(self.W, self.H, quality=self.quality)
+        self._rain_layer = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        self._weather_tint = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
 
     def _scale_sprite(self, spr: pygame.Surface, zoom=None):
         """Return a cached sprite scaled to the current isometric camera zoom."""
@@ -507,44 +512,77 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def _draw_rain(self, dt: float) -> None:
-        """Pooled screen-space rain streaks, slanted by the wind.
-
-        Drawn *before* the lighting pass so the streaks darken properly
-        in the night overlay.  The pool is capped by the quality preset.
-        """
+        """Layered wind-driven rain with depth variation and ground splashes."""
         w = self.weather
+        layer = self._rain_layer
+        layer.fill((0, 0, 0, 0))
         if w.rain_amount < 0.06 or self.quality < 1:
-            if self._rain:
-                self._rain = []
+            self._rain.clear()
+            self._splashes.clear()
             return
+
         scale = quality_settings.particle_scale(self.quality)
-        target = int((40 + 70 * w.rain_amount) * scale)
+        target = int((95 + 185 * w.rain_amount) * scale)
         while len(self._rain) < target:
+            depth = random.uniform(0.35, 1.0)
             self._rain.append([random.uniform(0, self.W),
                                random.uniform(0, self.H),
-                               random.uniform(0.6, 1.35)])
+                               random.uniform(0.75, 1.65), depth])
         if len(self._rain) > target:
             del self._rain[target:]
-        slant = w.wind_dir * (0.18 + 0.5 * w.wind)
-        for d in self._rain:
-            sp = d[2]
-            d[0] += slant * 260 * sp * dt
-            d[1] += 320 * sp * dt
-            if d[1] > self.H:
-                d[1] = -8.0
-                d[0] = random.uniform(0, self.W)
-            if d[0] > self.W + 10:
-                d[0] -= self.W + 20
-            elif d[0] < -10:
-                d[0] += self.W + 20
-            ln = int(7 + 9 * sp)
-            x1, y1 = int(d[0]), int(d[1])
-            x2 = int(d[0] + slant * ln * 0.5)
-            # draw.line per streak (draw.lines is broken in some
-            # pygame-ce builds, and per-line cost is trivial at this
-            # particle count)
-            pygame.draw.line(self.screen, (115, 130, 160),
-                             (x1, y1), (x2, y1 + ln))
+
+        slant = w.wind_dir * (0.24 + 0.72 * w.wind)
+        for drop in self._rain:
+            depth = drop[3]
+            speed = drop[2] * (0.55 + depth * 0.9)
+            drop[0] += slant * 360 * speed * dt
+            drop[1] += (390 + 240 * depth) * speed * dt
+            if drop[1] > self.H + 12:
+                drop[1] = random.uniform(-30, -5)
+                drop[0] = random.uniform(0, self.W)
+            if drop[0] > self.W + 12:
+                drop[0] -= self.W + 24
+            elif drop[0] < -12:
+                drop[0] += self.W + 24
+            length = int(5 + 13 * depth * speed)
+            x, y = int(drop[0]), int(drop[1])
+            color = (112 + int(28 * depth), 132 + int(25 * depth),
+                     158 + int(25 * depth), int(48 + 105 * depth * w.rain_amount))
+            pygame.draw.line(layer, color, (x, y),
+                             (int(x + slant * length * 0.55), y + length),
+                             1 if depth < 0.72 else 2)
+
+        # Tiny splash crowns and expanding puddle rings are concentrated
+        # toward the lower screen, where the ground plane is nearest.
+        if random.random() < dt * (18 + 42 * w.rain_amount):
+            self._splashes.append([
+                random.uniform(0, self.W),
+                random.uniform(self.H * 0.42, self.H * 0.98),
+                random.uniform(0.12, 0.30), 0.30,
+                random.uniform(1.5, 4.0)])
+        alive = []
+        for x, y, life, duration, radius in self._splashes:
+            life -= dt
+            if life <= 0:
+                continue
+            progress = 1.0 - life / duration
+            alpha = int(115 * (1.0 - progress))
+            rx = max(1, int(radius * (0.45 + progress * 1.8)))
+            pygame.draw.ellipse(layer, (155, 177, 195, alpha),
+                                (int(x - rx), int(y - max(1, rx * 0.28)),
+                                 rx * 2, max(2, int(rx * 0.55))), 1)
+            if progress < 0.18:
+                pygame.draw.circle(layer, (180, 198, 210, alpha),
+                                   (int(x), int(y)), 1)
+            alive.append([x, y, life, duration, radius])
+        self._splashes = alive
+        self.screen.blit(layer, (0, 0))
+
+    def _draw_weather_tint(self) -> None:
+        """Subtle cool wet-weather grading and a brief whole-scene lightning flash."""
+        amount = self.weather.rain_amount
+        self._weather_tint.fill((12, 22, 38, int(22 * amount)))
+        self.screen.blit(self._weather_tint, (0, 0))
 
     # ------------------------------------------------------------------
     def _enemy_lights(self, player, zombies: Sequence):
@@ -590,6 +628,7 @@ class Renderer:
         self.screen.fill((30, 26, 20))
         self.draw_world(world, player, zombies, pickups, bullets)
         self._draw_rain(dt)
+        self._draw_weather_tint()
         # -- cinematic post-processing (before the HUD) ------------------
         if player is not None:
             hp = getattr(player, "hp", 0.0)
@@ -620,6 +659,14 @@ class Renderer:
             darkness.fill((0, 0, 1))
             darkness.set_alpha(72)
             self.screen.blit(darkness, (0, 0))
+
+        # Lightning briefly illuminates the full scene after post-processing,
+        # but before the HUD, so UI text remains crisp and readable.
+        flash = float(self.weather.lightning)
+        if flash > 0.02:
+            flash_surface = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+            flash_surface.fill((188, 210, 238, int(105 * flash)))
+            self.screen.blit(flash_surface, (0, 0))
 
         if self.show_debug:
             self._draw_debug()
