@@ -148,13 +148,10 @@ class VisualEnhancement:
         quality_bias = (-2, 0, 2, 2)[max(0, min(3, int(quality)))]
         flashlight_enabled = bool(
             getattr(player, "flashlight_on", True)) if player is not None else True
-        # The unlit scene should be darker than the lit scene. Previously
-        # this was accidentally reversed: enabling the flashlight raised the
-        # darkness alpha to ~252, making the whole environment darker.
-        # Keep ambient night visibility restrained while allowing the beam
-        # and nearby halo to reveal the world naturally.
-        alpha = (246 if not flashlight_enabled else
-                 max(0, min(232, int(190 + darkness * 24 + quality_bias))))
+        # Ambient environment brightness is independent of flashlight
+        # state. Toggling the flashlight only adds/removes its directional
+        # beam; it must not darken or brighten the entire world.
+        alpha = max(0, min(232, int(190 + darkness * 24 + quality_bias)))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
@@ -175,7 +172,7 @@ class VisualEnhancement:
         if player is not None:
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
             halo_radius = 6.0 * 32.0 * zoom / 4.0
-            halo_strength = 0.30 if getattr(player, "flashlight_on", True) else 0.10
+            halo_strength = 0.30
             lights.append((psx / 4.0, psy / 4.0,
                            halo_radius, halo_strength))
         if player is not None and getattr(player, "flashlight_on", True):
