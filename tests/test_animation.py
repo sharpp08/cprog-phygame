@@ -72,7 +72,22 @@ class TestPlayerAnimation(unittest.TestCase):
         player = Player(2.0, 2.0)
         player.crouching = True
         player.update(0.016)
-        self.assertEqual(player.anim_state, "crouch")
+        self.assertEqual(player.anim_state, "crouch_down")
+
+    def test_crouch_down_transitions_to_idle_and_up(self):
+        player = Player(2.0, 2.0)
+        player.crouching = True
+        player.update(0.016)
+        self.assertEqual(player.anim_state, "crouch_down")
+        for _ in range(30):
+            player.update(0.05)
+        self.assertEqual(player.anim_state, "crouch_idle")
+        player.crouching = False
+        player.update(0.016)
+        self.assertEqual(player.anim_state, "crouch_up")
+        for _ in range(30):
+            player.update(0.05)
+        self.assertEqual(player.anim_state, "idle")
 
     def test_crouch_speed_scale_reduces_movement(self):
         normal = Player(2.0, 2.0)
