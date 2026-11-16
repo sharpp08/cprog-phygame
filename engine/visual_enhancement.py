@@ -265,9 +265,8 @@ class VisualEnhancement:
             radial.set_alpha(int(255 * strength))
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
                              special_flags=pygame.BLEND_RGBA_SUB)
-        if player is not None and getattr(player, "flashlight_on", True):
-            # Composite the soft spill first, then the focused center so the
-            # beam reads clearly without washing out the surrounding scene.
+        # Scale ambient lighting before compositing the native-resolution
+        # flashlight layers below.
         pygame.transform.scale(self._shade, (self.width, self.height),
                                self._shade_full)
         if player is not None and getattr(player, "flashlight_on", True):
