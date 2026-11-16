@@ -41,7 +41,7 @@ class Game:
             "master": config.MASTER_VOL, "music": config.MUSIC_VOL,
             "sfx": config.SFX_VOL, "resolution": config.DEFAULT_RESOLUTION,
             "fullscreen": config.FULLSCREEN, "quality": 1,
-            "zoom": config.DEFAULT_ZOOM, "post_fx": None,
+            "zoom": config.DEFAULT_ZOOM, "post_fx": False,
         }
         self.audio = AudioManager()
         self.assets = AssetManager()
