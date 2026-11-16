@@ -1156,6 +1156,32 @@ class AssetManager:
                     else:
                         padded.append(f)
                 if len(padded) == 8:
+                    # Bring the running character up to the current authored
+                    # idle character's visual scale. Enlarge only opaque pixels,
+                    # keep the feet on the same bottom anchor, and retain the
+                    # shared canvas dimensions used by the renderer.
+                    run_size_matched = []
+                    for run_frame in padded:
+                        bounds = run_frame.get_bounding_rect()
+                        canvas = pygame.Surface((target_w, target_h_final),
+                                                pygame.SRCALPHA)
+                        if bounds.width > 0 and bounds.height > 0:
+                            scale = min(
+                                1.04,
+                                (target_w - 2) / bounds.width,
+                                (target_h_final - 1) / bounds.height,
+                            )
+                            new_size = (
+                                max(1, round(bounds.width * scale)),
+                                max(1, round(bounds.height * scale)),
+                            )
+                            visible = run_frame.subsurface(bounds).copy()
+                            visible = pygame.transform.smoothscale(visible, new_size)
+                            x = (target_w - new_size[0]) // 2
+                            y = target_h_final - new_size[1]
+                            canvas.blit(visible, (x, y))
+                        run_size_matched.append(canvas)
+                    padded = run_size_matched
                     pl["run"] = padded
                     pl["walk"] = padded
                     # Action states reuse the run frames so the character
@@ -1262,13 +1288,11 @@ class AssetManager:
                                 bounds = idle_frame.get_bounding_rect()
                                 canvas = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
                                 if bounds.width > 0 and bounds.height > 0:
-                                    # Idle poses tend to read a touch smaller because
-                                    # they are more upright and have less limb spread.
-                                    # Apply a subtle 4% visual-size lift, while keeping
-                                    # the sprite inside the same run-frame canvas.
+                                    # Match the idle sprite to the enlarged run
+                                    # frames without applying a second size boost.
                                     scale = min(
-                                        (min(run_visible_w / bounds.width,
-                                             run_visible_h / bounds.height) * 1.04),
+                                        run_visible_w / bounds.width,
+                                        run_visible_h / bounds.height,
                                         target_w / bounds.width,
                                         idle_h / bounds.height,
                                     )
