@@ -149,32 +149,35 @@ class Renderer:
         return tuple(textures)
 
     def _update_clouds(self, dt: float, world) -> None:
-        """Advance clouds in map space; camera movement never carries them."""
+        """Create fixed map-space cloud locations; never attach them to the camera."""
         if world is None:
             return
-        if self._cloud_world_id != id(world):
-            rng = random.Random(81427 + world.W * 31 + world.H)
-            self._clouds = []
-            for _ in range(22):
+        if self._cloud_world_id == id(world):
+            return
+
+        # Use a deterministic map-wide layout. These coordinates are generated
+        # once per world and never offset by the player, camera, viewport, or
+        # weather wind. Camera projection in _draw_clouds makes them scroll
+        # naturally with the rest of the world.
+        rng = random.Random(81427 + world.W * 31 + world.H)
+        self._clouds = []
+        columns = max(3, min(7, int(math.ceil(world.W / 11.0))))
+        rows = max(3, min(7, int(math.ceil(world.H / 11.0))))
+        cell_w = float(world.W) / columns
+        cell_h = float(world.H) / rows
+        for row in range(rows):
+            for column in range(columns):
+                wx = (column + rng.uniform(0.22, 0.78)) * cell_w
+                wy = (row + rng.uniform(0.22, 0.78)) * cell_h
                 self._clouds.append([
-                    rng.uniform(0.0, float(world.W)),
-                    rng.uniform(0.0, float(world.H)),
+                    wx, wy,
                     rng.uniform(4.0, 7.0),
                     rng.uniform(0.85, 1.35),
-                    rng.uniform(0.008, 0.026) * rng.choice((-1.0, 1.0)),
-                    rng.uniform(-0.009, 0.009),
+                    0.0, 0.0,
                     rng.uniform(0.0, math.tau),
                     rng.randrange(len(self._cloud_textures)),
                 ])
-            self._cloud_world_id = id(world)
-
-        wind = self.weather.wind * self.weather.wind_dir
-        for cloud in self._clouds:
-            cloud[0] += (cloud[4] + wind * 0.012) * dt
-            cloud[1] += (cloud[5] + wind * 0.003) * dt
-            # Wrap at the map edges so clouds circulate through the whole level.
-            cloud[0] %= max(1.0, float(world.W))
-            cloud[1] %= max(1.0, float(world.H))
+        self._cloud_world_id = id(world)
 
     def _draw_clouds(self, world) -> None:
         """Draw overhead clouds at fixed world coordinates, behind the canopy."""
