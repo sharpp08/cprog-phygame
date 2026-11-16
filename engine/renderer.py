@@ -445,9 +445,10 @@ class Renderer:
         # character stays planted on the isometric ground while facing either
         # direction.
         if p.anim_state in ("crouch_down", "crouch_idle"):
-            lean_angle = 11.0 if p.facing >= 0 else -11.0
-            rotated = pygame.transform.rotate(spr, lean_angle)
-            spr = rotated
+            # Pygame's positive rotation leans the top of the sprite left.
+            # Lean toward the facing direction with a clearly visible angle.
+            lean_angle = -26.0 if p.facing >= 0 else 26.0
+            spr = pygame.transform.rotate(spr, lean_angle)
         if eased < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * eased))
