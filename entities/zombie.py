@@ -44,6 +44,11 @@ class Zombie(Entity):
         self.anim_blend = 1.0
         self.anim_timer = 0.0
         self.frame_index = 0
+        # Desynchronize idle breathing and attack cadence per infected so a
+        # crowd never loops through identical poses in lockstep.
+        self._idle_anim_rate = random.uniform(0.88, 1.42)
+        self._idle_anim_offset = random.uniform(0.0, 4.0 / self._idle_anim_rate)
+        self._attack_anim_rate = random.uniform(1.45, 2.05)
         self.hit_flash = 0.0
         self._actual_speed = 0.0
         self._action_phase = 0.0
@@ -275,6 +280,8 @@ class Zombie(Entity):
         self.anim_state = state
         self.anim_timer = 0.0
         self.anim_blend = 0.0
+        if state == "idle":
+            self.anim_timer = self._idle_anim_offset
         if state == "attack":
             self._action_phase = 0.0
 
@@ -345,7 +352,8 @@ class Zombie(Entity):
             state = "hit"
         elif self.state == "attack":
             state = "attack"
-            self._action_phase = (self._action_phase + dt * 1.7) % 1.0
+            self._action_phase = (
+                self._action_phase + dt * self._attack_anim_rate) % 1.0
         elif self.moving:
             # Every infected archetype has a distinct run cycle. Heavy types
             # need a higher speed ratio before their lumbering sprint engages;
@@ -364,7 +372,8 @@ class Zombie(Entity):
             self.frame_index = int(self._action_phase * 4) % 4
         elif state == "idle":
             self.anim_timer += dt
-            self.frame_index = int(self.anim_timer * 1.2) % 4
+            self.frame_index = int(
+                self.anim_timer * self._idle_anim_rate) % 4
         else:
             self.frame_index = 0
 
