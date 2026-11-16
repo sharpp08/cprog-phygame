@@ -109,9 +109,12 @@ class VisualEnhancement:
         cy = int(sy * self._bh / self.height)
         # Keep the full player sprite sharp, not just the feet/pivot.
         # The blur is only allowed to fade in well beyond the character.
-        inner = max(8, int(170 * self._bw / self.width))
-        outer = max(inner + 8, int(300 * self._bw / self.width))
-        max_alpha = (42, 52, 62, 68)[max(0, min(3, int(quality)))]
+        inner = max(8, int(135 * self._bw / self.width))
+        outer = max(inner + 8, int(270 * self._bw / self.width))
+        # Blend strongly toward the low-resolution image at long range.
+        # The 1/8-resolution copy provides the actual defocus; this alpha
+        # controls how clearly that blur reads in the distant environment.
+        max_alpha = (145, 165, 185, 200)[max(0, min(3, int(quality)))]
 
         self._blur_mask.fill((255, 255, 255, max_alpha))
         # The player-safe center must have ZERO blur opacity. Draw the
@@ -154,7 +157,7 @@ class VisualEnhancement:
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
-        if player is None or not getattr(player, "flashlight_on", True):
+        if player is not None and not getattr(player, "flashlight_on", True):
             self._apply_dark_edge_blur(screen, cam, player, quality)
         zoom = max(0.4, float(cam.zoom))
         lights = []
