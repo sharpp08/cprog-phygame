@@ -8,7 +8,7 @@ camera zoom.
 The visual language follows the "Isometric Forest Shrine" reference: a dense
 autumn forest in golden/orange/green tones around a central clearing with a
 small wooden shrine (red tiled roof), a green pond with lily pads, a stone
-bridge and a misty waterfall.
+bridge and a waterfall.
 """
 from __future__ import annotations
 
@@ -1457,10 +1457,4 @@ class AssetManager:
                                 [(35 - w, 0), (35 + w, 0),
                                  (35 + 12, 150), (35 - 12, 150)])
         self.spr["ray"] = s
-        # fog / mist puff
-        s = pygame.Surface((80, 50), pygame.SRCALPHA)
-        for (ox, oy, rr) in ((20, 20, 18), (40, 26, 20), (55, 20, 16)):
-            pygame.draw.ellipse(s, (210, 220, 230, 40),
-                                (ox - rr, oy - rr, rr * 2, rr * 2))
-        self.spr["mist"] = s
 
