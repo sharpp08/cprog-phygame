@@ -165,7 +165,15 @@ class VisualEnhancement:
             lights.append((sx / 4.0, sy / 4.0,
                            radius * 32.0 * zoom / 4.0,
                            max(0.0, min(1.0, float(intensity) * breathe))))
-        # No player-centred ambient light: visibility follows the aim.
+        # Keep a soft, blurred pool of visibility around the player. This is
+        # deliberately broad and low-intensity; the sharper directional
+        # flashlight beam still follows the cursor and does the main lighting.
+        if player is not None:
+            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
+            halo_radius = 6.0 * 32.0 * zoom / 4.0
+            halo_strength = 0.20 if getattr(player, "flashlight_on", True) else 0.12
+            lights.append((psx / 4.0, psy / 4.0,
+                           halo_radius, halo_strength))
         if player is not None and getattr(player, "flashlight_on", True):
             # smooth on/off transition
             target = 1.0
