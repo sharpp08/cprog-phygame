@@ -228,7 +228,7 @@ class VisualEnhancement:
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
-                ray_count = (129, 161, 193, 225)[max(0, min(3, int(quality)))]
+                ray_count = (81, 113, 145, 177)[max(0, min(3, int(quality)))]
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
