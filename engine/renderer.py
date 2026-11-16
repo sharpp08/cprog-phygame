@@ -172,32 +172,35 @@ class Renderer:
         if self._cloud_world_id != id(world):
             rng = random.Random()  # fresh cloud layout for each generated world
             self._clouds = []
-            # Randomly scattered formations fill the playable sky without
-            # forming a static screen-space pattern.
-            count = max(18, min(36, int(world.W * world.H / 65)))
+            # Scatter a limited number of distinct formations across the
+            # map. Each one has its own speed and slight crosswind drift, but
+            # they share the prevailing wind direction like a real cloud deck.
+            count = max(14, min(24, int(world.W * world.H / 95)))
             for _ in range(count):
-                angle = rng.uniform(0.0, math.tau)
-                speed = rng.uniform(0.10, 0.22)
                 self._clouds.append([
                     rng.uniform(0.0, float(world.W)),
                     rng.uniform(0.0, float(world.H)),
-                    rng.uniform(4.0, 8.5),
-                    rng.uniform(0.65, 1.45),
-                    math.cos(angle) * speed,
-                    math.sin(angle) * speed * 0.55,
+                    rng.uniform(4.5, 8.0),
+                    rng.uniform(0.75, 1.55),
+                    rng.uniform(0.48, 0.95),       # map tiles per second
+                    rng.uniform(-0.10, 0.10),      # gentle crosswind drift
                     rng.uniform(0.0, math.tau),
                     rng.randrange(len(self._cloud_textures)),
                 ])
             self._cloud_world_id = id(world)
 
-        # Wind changes the motion of every formation in map space. No camera,
-        # player, viewport or screen coordinates participate in the simulation.
+        # Move formations through the map, not with the camera or player.
+        # Their visible positions therefore slide across the world, leave the
+        # viewport, and later return from the opposite map edge. Wind direction
+        # can reverse over time, while individual speeds remain slightly varied.
         wind = self.weather.wind * self.weather.wind_dir
+        world_w = max(1.0, float(world.W))
+        world_h = max(1.0, float(world.H))
         for cloud in self._clouds:
-            cloud[0] += (cloud[4] + wind * 0.018) * dt
-            cloud[1] += (cloud[5] + wind * 0.006) * dt
-            cloud[0] %= max(1.0, float(world.W))
-            cloud[1] %= max(1.0, float(world.H))
+            cloud[0] = (cloud[0] +
+                        (cloud[4] * self.weather.wind_dir + wind * 0.10) * dt) % world_w
+            cloud[1] = (cloud[1] +
+                        (cloud[5] + wind * 0.035) * dt) % world_h
 
     def _draw_clouds(self, world) -> None:
         """Draw drifting, procedurally generated clouds behind the canopy."""
