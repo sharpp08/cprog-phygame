@@ -1342,6 +1342,60 @@ class AssetManager:
             except (OSError, ValueError, pygame.error) as exc:
                 print(f"[AssetManager] WARNING: could not load authored "
                       f"player sheet ({exc}); using procedural fallback")
+        # Three independently authored crouch sheets. Each contains four
+        # transparent character poses arranged horizontally. Keep the poses
+        # separate so crouch transitions can never fall through to run frames.
+        sprite_dir = (Path(__file__).resolve().parent.parent
+                      / "assets" / "sprites")
+
+        def load_crouch_sheet(filename, bounds):
+            path = sprite_dir / filename
+            if not path.exists():
+                return None
+            sheet = pygame.image.load(str(path)).convert_alpha()
+            frames_out = []
+            for x0, y0, x1, y1 in bounds:
+                crop = sheet.subsurface(
+                    (x0, y0, x1 - x0, y1 - y0)).copy()
+                # Match the existing player frame canvas while preserving
+                # the authored pose proportions and a common planted-foot anchor.
+                scale = min(44.0 / crop.get_width(), 66.0 / crop.get_height())
+                size = (max(1, round(crop.get_width() * scale)),
+                        max(1, round(crop.get_height() * scale)))
+                fitted = pygame.transform.smoothscale(crop, size)
+                frame = pygame.Surface((44, 66), pygame.SRCALPHA)
+                frame.blit(fitted, ((44 - size[0]) // 2, 66 - size[1]))
+                frames_out.append(frame)
+            return frames_out
+
+        # Bounds are the transparent-background character extents in each
+        # supplied 1536x246 / 1536x318 / 1212x282 sheet.
+        crouch_sheets = {
+            "crouch_idle": ("player_crouch_idle_sheet.png",
+                            ((426, 22, 585, 210), (703, 25, 870, 207),
+                             (984, 25, 1149, 204), (1267, 27, 1434, 213))),
+            "crouch_up": ("player_crouch_up_sheet.png",
+                          ((427, 30, 588, 248), (710, 23, 869, 243),
+                           (994, 13, 1143, 248), (1268, 1, 1423, 248))),
+            "crouch_down": ("player_crouch_down_sheet.png",
+                            ((108, 12, 263, 257), (385, 38, 549, 248),
+                             (671, 60, 827, 248), (937, 74, 1105, 252))),
+        }
+        for state, (filename, bounds) in crouch_sheets.items():
+            try:
+                loaded = load_crouch_sheet(filename, bounds)
+                if loaded:
+                    pl[state] = loaded
+                    print(f"[AssetManager] Loaded {filename} ({len(loaded)} frames)")
+                else:
+                    pl[state] = list(pl["crouch"])
+                    print(f"[AssetManager] WARNING: {filename} missing; "
+                          "using crouch fallback for this state")
+            except (OSError, ValueError, pygame.error) as exc:
+                pl[state] = list(pl["crouch"])
+                print(f"[AssetManager] WARNING: {filename} failed ({exc}); "
+                      "using crouch fallback for this state")
+        pl["crouch"] = pl["crouch_idle"]
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and

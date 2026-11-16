@@ -418,7 +418,8 @@ class Game:
         # movement
         mv = InputManager.move_vector()
         requested_run = InputManager.running() and (mv[0] != 0.0 or mv[1] != 0.0)
-        crouching = bool(pygame.key.get_pressed()[pygame.K_LCTRL])
+        keys = pygame.key.get_pressed()
+        crouching = bool(keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL])
         player.crouching = crouching
         sprinting = requested_run and not crouching
         can_run = self.survival.update(dt, sprinting) if self.survival else True

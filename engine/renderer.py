@@ -440,6 +440,8 @@ class Renderer:
             py = anchor_y - previous.get_height()
             self.screen.blit(previous, (px, py))
         spr = frame_for(p.anim_state, p.frame_index)
+        # Crouch poses are already authored in the correct lowered/leaning
+        # posture. Do not rotate them again; that distorts the provided art.
         if eased < 1.0:
             spr = spr.copy()
             spr.set_alpha(int(255 * eased))
