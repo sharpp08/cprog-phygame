@@ -97,9 +97,8 @@ class VisualEnhancement:
 
     def _apply_dark_edge_blur(self, screen: pygame.Surface, cam,
                               player, quality: int) -> None:
-        """Disabled: preserve crisp player and world pixels at every distance."""
-        return
-        # An 1/8-resolution copy gives a restrained optical defocus at low cost.
+        """Softly defocus the distant environment while keeping the player sharp."""
+        # An 1/8-resolution copy gives an inexpensive optical defocus.
         pygame.transform.smoothscale(
             screen, (self._bw, self._bh), self._blur_small)
         pygame.transform.smoothscale(
@@ -112,7 +111,7 @@ class VisualEnhancement:
         # The blur is only allowed to fade in well beyond the character.
         inner = max(8, int(170 * self._bw / self.width))
         outer = max(inner + 8, int(300 * self._bw / self.width))
-        max_alpha = (24, 30, 36, 42)[max(0, min(3, int(quality)))]
+        max_alpha = (42, 52, 62, 68)[max(0, min(3, int(quality)))]
 
         self._blur_mask.fill((255, 255, 255, max_alpha))
         # The player-safe center must have ZERO blur opacity. Draw the
@@ -155,7 +154,8 @@ class VisualEnhancement:
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
-        self._apply_dark_edge_blur(screen, cam, player, quality)
+        if player is None or not getattr(player, "flashlight_on", True):
+            self._apply_dark_edge_blur(screen, cam, player, quality)
         zoom = max(0.4, float(cam.zoom))
         lights = []
         for i, (wx, wy, radius, intensity) in enumerate(
@@ -213,7 +213,7 @@ class VisualEnhancement:
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.46)
+                    half_spread=0.40)
                 ox, oy = sx / 4.0, sy / 4.0
                 previous = None
                 previous_core = None
@@ -227,7 +227,7 @@ class VisualEnhancement:
                         # The wide, low-intensity fringe gives the cone a
                         # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(225 * lvl * strength * fog_gain)
+                        edge_alpha = int(205 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
@@ -235,7 +235,7 @@ class VisualEnhancement:
                         # A narrower overlapping core concentrates the beam
                         # toward the aim point, like a focused flashlight.
                         if core_start < ray_index < core_end:
-                            core_alpha = int(145 * lvl * strength * fog_gain)
+                            core_alpha = int(185 * lvl * strength * fog_gain)
                             if core_alpha > 0:
                                 pygame.draw.polygon(
                                     self._beam_core,
