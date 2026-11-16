@@ -294,7 +294,7 @@ class Game:
             self._sim_accumulator -= self._fixed_dt
             steps += 1
         self._render()
-        self.clock.tick(config.TARGET_FPS)
+        self.clock.tick(config.MAX_RENDER_FPS)
         pygame.display.flip()
         self.input.end_frame()
 
