@@ -127,31 +127,36 @@ class Renderer:
     def draw_world(self, world, player, zombies: Sequence, pickups: Sequence,
                    bullets: Sequence) -> None:
         cam = self.cam
-        minx, miny, maxx, maxy = self._cull_bounds()
+        bounds = self._cull_bounds()
+        minx, miny, maxx, maxy = bounds
+        # Cull static obstacles exactly once per frame. The same visible list
+        # feeds depth sorting and diagnostics instead of scanning the full map
+        # repeatedly.
+        visible_obstacles = world.cull_obstacles(
+            minx, miny, maxx, maxy, pad=0.0)
         self._draw_ground(world, minx, miny, maxx, maxy)
         self._draw_water(world, minx, miny, maxx, maxy)
-        items = self._depth_items(world, player, zombies, pickups)
-        drawn_items = 0
+        items = self._depth_items(
+            world, player, zombies, pickups,
+            visible_obstacles=visible_obstacles)
         for it in items:
             self._draw_item(it)
-            drawn_items += 1
         self._draw_bullets(bullets)
         self._draw_particles()
         self._apply_lighting(world, player, zombies)
         self.visual.draw_atmosphere(self.screen, self.cam, world,
                                     self.time, self.quality,
                                     fog_extra=self.weather.fog_density)
-        # cache counts for the debug overlay
+        # Avoid a second full obstacle scan for the debug counter.
         cam_x, cam_y = cam.fx, cam.fy
-        psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \
+        psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \\
             if player is not None else (0.0, 0.0)
         self._dbg_counts = {
             "tiles_total": world.W * world.H,
             "obstacles_total": len(world.obstacles),
-            "obstacles_visible": sum(1 for o in world.obstacles
-                                     if o.in_rect(minx, miny, maxx, maxy, 0.0)),
+            "obstacles_visible": len(visible_obstacles),
             "depth_items": len(items),
-            "drawn_items": drawn_items,
+            "drawn_items": len(items),
             "zombies": len(zombies),
             "pickups": len(pickups),
             "bullets": len(bullets),
@@ -247,18 +252,15 @@ class Renderer:
                 self.screen.blit(ripple, (x - 20, y - 12))
 
     # ------------------------------------------------------------------
-    def _depth_items(self, world, player, zombies, pickups) -> list:
-        minx, miny, maxx, maxy = self._cull_bounds()
-        items = []
-        for o in world.cull_obstacles(minx, miny, maxx, maxy, pad=0.0):
-            items.append((o.depth, "obs", o))
-        for z in zombies:
-            if not z.alive:
-                continue
-            items.append((z.depth, "zombie", z))
-        for p in pickups:
-            if not p.taken:
-                items.append((p.depth, "pickup", p))
+    def _depth_items(self, world, player, zombies, pickups,
+                     visible_obstacles=None) -> list:
+        if visible_obstacles is None:
+            minx, miny, maxx, maxy = self._cull_bounds()
+            visible_obstacles = world.cull_obstacles(
+                minx, miny, maxx, maxy, pad=0.0)
+        items = [(o.depth, "obs", o) for o in visible_obstacles]
+        items.extend((z.depth, "zombie", z) for z in zombies if z.alive)
+        items.extend((p.depth, "pickup", p) for p in pickups if not p.taken)
         if player is not None:
             items.append((player.depth, "player", player))
         # objective beacon above the shrine
