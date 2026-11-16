@@ -73,11 +73,22 @@ def trace_flashlight_beam(
         dx, dy, aim_len = 1.0, 0.0, 1.0
     dx, dy = dx / aim_len, dy / aim_len
 
-    blockers = {
-        (int(o.x), int(o.y))
-        for o in getattr(world, "obstacles", ())
-        if bool(getattr(o, "solid", True))
-    }
+    # Treat obstacles as small world-space footprints rather than
+    # dimensionless tile points. Tall trees and large rocks therefore cast
+    # wider, more convincing shadows that match their ground contact area.
+    blocker_cells = {}
+    for obstacle in getattr(world, "obstacles", ()):
+        if not bool(getattr(obstacle, "solid", True)):
+            continue
+        kind = getattr(obstacle, "kind", "")
+        radius = {
+            "tree": 0.48, "shrine": 0.62, "waterfall": 0.52,
+            "ruin": 0.55, "rock": 0.38, "bush": 0.24,
+        }.get(kind, 0.32)
+        bx, by = float(obstacle.x), float(obstacle.y)
+        blocker_cells.setdefault((int(math.floor(bx)),
+                                  int(math.floor(by))), []).append(
+                                      (bx, by, radius))
     count = max(3, int(ray_count))
     if count % 2 == 0:
         count += 1
@@ -105,8 +116,25 @@ def trace_flashlight_beam(
             px = ox + rdx * next_distance
             py = oy + rdy * next_distance
             tx, ty = int(math.floor(px)), int(math.floor(py))
-            if (tx, ty) in blockers:
-                distance = max(0.0, next_distance - step * 0.55)
+            hit = False
+            # Spatial hash: only inspect blockers in neighboring tile cells,
+            # keeping ray cost independent of total map obstacle count.
+            for oy_cell in range(ty - 1, ty + 2):
+                for ox_cell in range(tx - 1, tx + 2):
+                    for bx, by, radius in blocker_cells.get(
+                            (ox_cell, oy_cell), ()):
+                        if ((px - bx) * (px - bx) +
+                                (py - by) * (py - by) <= radius * radius):
+                            hit = True
+                            break
+                    if hit:
+                        break
+                if hit:
+                    break
+            if hit:
+                # Back up slightly from the sampled contact point so the
+                # visible beam terminates at the near face of the obstacle.
+                distance = max(0.0, next_distance - step * 0.35)
                 end_x = ox + rdx * distance
                 end_y = oy + rdy * distance
                 break

@@ -26,11 +26,10 @@ class VisualEnhancement:
         self._shade = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._shade_full = pygame.Surface((self.width, self.height),
                                           pygame.SRCALPHA)
+        # Broad spill is rendered at quarter resolution then smoothly
+        # upscaled; the focused core stays native-resolution and crisp.
         self._beam = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._beam_core = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
-        # Render the flashlight at native screen resolution so its edges and
-        # illuminated center stay crisp instead of being softened by the
-        # quarter-resolution ambient-light buffer.
         self._beam_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._beam_core_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
@@ -228,30 +227,37 @@ class VisualEnhancement:
                 previous = None
                 previous_core = None
                 fog_gain = 1.18 if fog_beam else 1.0
-                core_start = len(rays) // 3
-                core_end = len(rays) - core_start
+                center_x, center_y = ox / 4.0, oy / 4.0
+                mid_ray = (len(rays) - 1) * 0.5
                 for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
                     ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
                     current = (int(ex), int(ey))
                     if previous is not None:
-                        # The wide, low-intensity fringe gives the cone a
-                        # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(205 * lvl * strength * fog_gain)
+                        # Soft spill is drawn into a smaller buffer; smooth
+                        # upscaling feathers the cone boundary instead of
+                        # exposing a hard-edged polygon.
+                        edge_alpha = int(175 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
-                                self._beam_full, (0, 0, 0, edge_alpha),
+                                self._beam, (0, 0, 0, edge_alpha),
+                                [(int(center_x), int(center_y)),
+                                 (int(previous[0] / 4.0), int(previous[1] / 4.0)),
+                                 (int(current[0] / 4.0), int(current[1] / 4.0))])
+                        # Smooth Gaussian angular falloff avoids the abrupt
+                        # cutoff produced by a fixed-width inner fan.
+                        angular = (ray_index - mid_ray) / max(1.0, mid_ray)
+                        core_profile = math.exp(-5.0 * angular * angular)
+                        core_alpha = int(210 * lvl * strength *
+                                         core_profile * fog_gain)
+                        if core_alpha > 0:
+                            pygame.draw.polygon(
+                                self._beam_core_full,
+                                (0, 0, 0, core_alpha),
                                 [(int(ox), int(oy)), previous, current])
-                        # A narrower overlapping core concentrates the beam
-                        # toward the aim point, like a focused flashlight.
-                        if core_start < ray_index < core_end:
-                            core_alpha = int(255 * lvl * strength * fog_gain)
-                            if core_alpha > 0:
-                                pygame.draw.polygon(
-                                    self._beam_core_full,
-                                    (0, 0, 0, core_alpha),
-                                    [(int(ox), int(oy)), previous, current])
                     previous = current
+                pygame.transform.smoothscale(
+                    self._beam, (self.width, self.height), self._beam_full)
         else:
             self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
         # close-enemy glow: subtle cool light so pursuers read in the dark
