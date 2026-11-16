@@ -1262,8 +1262,16 @@ class AssetManager:
                                 bounds = idle_frame.get_bounding_rect()
                                 canvas = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
                                 if bounds.width > 0 and bounds.height > 0:
-                                    scale = min(run_visible_w / bounds.width,
-                                                run_visible_h / bounds.height)
+                                    # Idle poses tend to read a touch smaller because
+                                    # they are more upright and have less limb spread.
+                                    # Apply a subtle 4% visual-size lift, while keeping
+                                    # the sprite inside the same run-frame canvas.
+                                    scale = min(
+                                        (min(run_visible_w / bounds.width,
+                                             run_visible_h / bounds.height) * 1.04),
+                                        target_w / bounds.width,
+                                        idle_h / bounds.height,
+                                    )
                                     new_size = (max(1, round(bounds.width * scale)),
                                                 max(1, round(bounds.height * scale)))
                                     visible = idle_frame.subsurface(bounds).copy()
