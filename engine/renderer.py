@@ -166,41 +166,39 @@ class Renderer:
         return tuple(textures)
 
     def _update_clouds(self, dt: float, world) -> None:
-        """Create and drift independent cloud formations in world coordinates."""
+        """Simulate clouds as moving map entities, independent of the camera."""
         if world is None:
             return
         if self._cloud_world_id != id(world):
-            rng = random.Random()  # fresh cloud layout for each generated world
+            rng = random.Random()
             self._clouds = []
-            # Scatter a limited number of distinct formations across the
-            # map. Each one has its own speed and slight crosswind drift, but
-            # they share the prevailing wind direction like a real cloud deck.
-            count = max(14, min(24, int(world.W * world.H / 95)))
+            count = max(18, min(30, int(world.W * world.H / 75)))
             for _ in range(count):
+                # World-space velocity is deliberately strong enough to be
+                # visible while the camera tracks the player. It is not
+                # derived from screen position or camera movement.
+                angle = rng.uniform(-0.22, 0.22)
+                speed = rng.uniform(2.2, 3.8)  # map tiles per second
                 self._clouds.append([
                     rng.uniform(0.0, float(world.W)),
                     rng.uniform(0.0, float(world.H)),
-                    rng.uniform(4.5, 8.0),
-                    rng.uniform(0.75, 1.55),
-                    rng.uniform(0.48, 0.95),       # map tiles per second
-                    rng.uniform(-0.10, 0.10),      # gentle crosswind drift
+                    rng.uniform(5.0, 8.5),
+                    rng.uniform(0.70, 1.45),
+                    math.cos(angle) * speed,
+                    math.sin(angle) * speed,
                     rng.uniform(0.0, math.tau),
                     rng.randrange(len(self._cloud_textures)),
                 ])
             self._cloud_world_id = id(world)
 
-        # Move formations through the map, not with the camera or player.
-        # Their visible positions therefore slide across the world, leave the
-        # viewport, and later return from the opposite map edge. Wind direction
-        # can reverse over time, while individual speeds remain slightly varied.
-        wind = self.weather.wind * self.weather.wind_dir
+        # Advance each formation in map coordinates only. The camera is never
+        # read here; crossing a map edge wraps the cloud into the far side.
         world_w = max(1.0, float(world.W))
         world_h = max(1.0, float(world.H))
+        wind = self.weather.wind * self.weather.wind_dir
         for cloud in self._clouds:
-            cloud[0] = (cloud[0] +
-                        (cloud[4] * self.weather.wind_dir + wind * 0.10) * dt) % world_w
-            cloud[1] = (cloud[1] +
-                        (cloud[5] + wind * 0.035) * dt) % world_h
+            cloud[0] = (cloud[0] + (cloud[4] + wind * 0.12) * dt) % world_w
+            cloud[1] = (cloud[1] + (cloud[5] + wind * 0.025) * dt) % world_h
 
     def _draw_clouds(self, world) -> None:
         """Draw clouds as elevated world objects using the exact world camera.
