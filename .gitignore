@@ -34,3 +34,6 @@ graphics_screenshots/
 test_render_screenshot.png
 tools_smoke_test.py
 
+
+__pycache__/
+*.pyc
