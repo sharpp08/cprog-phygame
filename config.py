@@ -28,6 +28,7 @@ RESDIC = {
     "1920x1080": (1920, 1080),
 }
 FPS = 60
+MAX_RENDER_FPS = 120  # render cap; simulation remains fixed at 60 Hz
 WINDOW_TITLE = "CPROG PHYGAME - Isometric Zombie Survival"
 
 # Graphics quality levels:
