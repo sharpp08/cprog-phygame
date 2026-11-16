@@ -203,31 +203,40 @@ class Renderer:
                         (cloud[5] + wind * 0.035) * dt) % world_h
 
     def _draw_clouds(self, world) -> None:
-        """Draw drifting, procedurally generated clouds behind the canopy."""
+        """Draw map-seeded clouds on a distant parallax sky plane.
+
+        The clouds keep their own world-space positions and drift, but the
+        distant sky responds to only part of the camera movement. This makes
+        clouds visibly slide relative to nearby terrain instead of appearing
+        glued to the viewport or moving exactly like ground objects.
+        """
         if world is None or self.quality < 1:
             return
-        minx, miny, maxx, maxy = self._cull_bounds()
-        zoom = self.cam.zoom
+        cam = self.cam
+        zoom = cam.zoom
         rain = self.weather.rain_amount
+        # Distant clouds exhibit less parallax than ground-level objects.
+        # Crucially, this is still camera-relative projection of map-seeded
+        # cloud positions; it is not a fixed screen-space animation.
+        parallax = 0.34
+        camera_dx = (cam.fx - cam.fy) * parallax
+        camera_dy = (cam.fx + cam.fy) * parallax
         for wx, wy, height, size, _vx, _vy, phase, texture_index in self._clouds:
-            if wx < minx - 5 or wx > maxx + 5 or wy < miny - 5 or wy > maxy + 5:
-                continue
-            sx, sy = self.cam.iso_to_screen(wx, wy, height)
-            # `size` is a modest sprite multiplier, not a world-pixel size.
-            # Keep the cloud texture near its authored dimensions and let the
-            # camera zoom scale it; multiplying by 80-140 made it screen-filling.
+            sx = ((wx - wy - camera_dx) * config.SCALE_X * zoom
+                  + cam.sw / 2.0)
+            sy = ((wx + wy - camera_dy) * config.SCALE_Y * zoom
+                  - height * config.HEIGHT_SCALE * zoom + cam.sh / 2.0)
             texture = self._scale_sprite(
                 self._cloud_textures[texture_index], size * zoom)
-            if sx < -texture.get_width() or sx > self.W + texture.get_width():
-                continue
-            if sy < -texture.get_height() or sy > self.H + texture.get_height():
+            tw, th = texture.get_size()
+            if sx < -tw or sx > self.W + tw or sy < -th or sy > self.H + th:
                 continue
             # Overcast clouds become fuller and darker as rain builds.
             breathe = 0.94 + 0.06 * math.sin(self.time * 0.16 + phase)
             alpha = int((52 + 22 * rain) * breathe)
             texture.set_alpha(max(0, min(110, alpha)))
-            self.screen.blit(texture, (int(sx - texture.get_width() * 0.5),
-                                       int(sy - texture.get_height() * 0.5)))
+            self.screen.blit(texture, (int(sx - tw * 0.5),
+                                       int(sy - th * 0.5)))
 
     # ------------------------------------------------------------------
     def _cull_bounds(self) -> Tuple[int, int, int, int]:
