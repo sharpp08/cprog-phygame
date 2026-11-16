@@ -33,6 +33,7 @@ class Weather:
         self._lightning_timer = 12.0
         self._wind_timer = 0.0
         self._audio = None
+        self._thunder_delay = None
 
     # ------------------------------------------------------------------
     def set_audio(self, audio) -> None:
@@ -75,15 +76,21 @@ class Weather:
             self.wind_dir = self.rng.choice((-1.0, 1.0))
             self.wind = min(1.0, self.wind + self.rng.uniform(-0.25, 0.35))
             self.wind = max(0.05, self.wind)
-        # lightning (heavy rain only)
+        # Lightning arrives in irregular bursts during heavy rain. Thunder
+        # is delayed so the flash is seen before the sound reaches the player.
         if self.state == "heavy_rain":
             self._lightning_timer -= dt
             if self._lightning_timer <= 0:
-                self._lightning_timer = self.rng.uniform(8.0, 18.0)
-                self.lightning = 1.0
+                self._lightning_timer = self.rng.uniform(7.0, 16.0)
+                self.lightning = self.rng.uniform(0.82, 1.0)
+                self._thunder_delay = self.rng.uniform(0.45, 1.9)
                 event = "lightning"
+        if self._thunder_delay is not None:
+            self._thunder_delay -= dt
+            if self._thunder_delay <= 0:
                 if self._audio:
                     self._audio.play("thunder")
+                self._thunder_delay = None
         # double-click flash: a strike flickers then fades over ~0.45s
         if self.lightning > 0.0:
             self.lightning = max(0.0, self.lightning - dt * 2.4)
