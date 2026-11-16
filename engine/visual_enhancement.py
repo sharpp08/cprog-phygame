@@ -27,6 +27,7 @@ class VisualEnhancement:
         self._shade_full = pygame.Surface((self.width, self.height),
                                           pygame.SRCALPHA)
         self._beam = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
+        self._beam_core = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._fog_full = pygame.Surface((self.width, self.height),
                                         pygame.SRCALPHA)
@@ -202,8 +203,9 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                max_range = 19.5
+                max_range = 21.5
                 self._beam.fill((0, 0, 0, 0))
+                self._beam_core.fill((0, 0, 0, 0))
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
@@ -211,22 +213,34 @@ class VisualEnhancement:
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.38)
+                    half_spread=0.43)
                 ox, oy = sx / 4.0, sy / 4.0
                 previous = None
-                fog_gain = 1.08 if fog_beam else 1.0
-                for end_x, end_y, energy, _surface in rays:
+                previous_core = None
+                fog_gain = 1.12 if fog_beam else 1.0
+                core_start = len(rays) // 3
+                core_end = len(rays) - core_start
+                for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
                     ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
                     current = (int(ex / 4.0), int(ey / 4.0))
                     if previous is not None:
-                        # Per-wedge attenuation includes distance, surface
-                        # reflectance and the estimated terrain normal.
+                        # The wide, low-intensity fringe gives the cone a
+                        # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(176 * lvl * strength * fog_gain)
+                        edge_alpha = int(150 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
                                 [(int(ox), int(oy)), previous, current])
+                        # A narrower overlapping core concentrates the beam
+                        # toward the aim point, like a focused flashlight.
+                        if core_start < ray_index < core_end:
+                            core_alpha = int(78 * lvl * strength * fog_gain)
+                            if core_alpha > 0:
+                                pygame.draw.polygon(
+                                    self._beam_core,
+                                    (0, 0, 0, core_alpha),
+                                    [(int(ox), int(oy)), previous, current])
                     previous = current
         else:
             self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
@@ -242,7 +256,11 @@ class VisualEnhancement:
             self._shade.blit(radial, (int(lx - r), int(ly - r)),
                              special_flags=pygame.BLEND_RGBA_SUB)
         if player is not None and getattr(player, "flashlight_on", True):
+            # Composite the soft spill first, then the focused center so the
+            # beam reads clearly without washing out the surrounding scene.
             self._shade.blit(self._beam, (0, 0),
+                             special_flags=pygame.BLEND_RGBA_SUB)
+            self._shade.blit(self._beam_core, (0, 0),
                              special_flags=pygame.BLEND_RGBA_SUB)
         pygame.transform.scale(self._shade, (self.width, self.height),
                                self._shade_full)
