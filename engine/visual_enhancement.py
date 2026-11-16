@@ -148,10 +148,13 @@ class VisualEnhancement:
         quality_bias = (-2, 0, 2, 2)[max(0, min(3, int(quality)))]
         flashlight_enabled = bool(
             getattr(player, "flashlight_on", True)) if player is not None else True
-        # With the flashlight off, start from a fully opaque darkness mask;
-        # actual world lights can still carve out small visible areas.
-        alpha = (220 if not flashlight_enabled else
-                 max(0, min(252, int(224 + darkness * 32 + quality_bias))))
+        # The unlit scene should be darker than the lit scene. Previously
+        # this was accidentally reversed: enabling the flashlight raised the
+        # darkness alpha to ~252, making the whole environment darker.
+        # Keep ambient night visibility restrained while allowing the beam
+        # and nearby halo to reveal the world naturally.
+        alpha = (246 if not flashlight_enabled else
+                 max(0, min(232, int(190 + darkness * 24 + quality_bias))))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
@@ -172,7 +175,7 @@ class VisualEnhancement:
         if player is not None:
             psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
             halo_radius = 6.0 * 32.0 * zoom / 4.0
-            halo_strength = 0.20 if getattr(player, "flashlight_on", True) else 0.12
+            halo_strength = 0.30 if getattr(player, "flashlight_on", True) else 0.10
             lights.append((psx / 4.0, psy / 4.0,
                            halo_radius, halo_strength))
         if player is not None and getattr(player, "flashlight_on", True):
@@ -227,7 +230,7 @@ class VisualEnhancement:
                         # The wide, low-intensity fringe gives the cone a
                         # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(150 * lvl * strength * fog_gain)
+                        edge_alpha = int(190 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
@@ -235,7 +238,7 @@ class VisualEnhancement:
                         # A narrower overlapping core concentrates the beam
                         # toward the aim point, like a focused flashlight.
                         if core_start < ray_index < core_end:
-                            core_alpha = int(78 * lvl * strength * fog_gain)
+                            core_alpha = int(105 * lvl * strength * fog_gain)
                             if core_alpha > 0:
                                 pygame.draw.polygon(
                                     self._beam_core,
