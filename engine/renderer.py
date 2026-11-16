@@ -149,35 +149,40 @@ class Renderer:
         return tuple(textures)
 
     def _update_clouds(self, dt: float, world) -> None:
-        """Create fixed map-space cloud locations; never attach them to the camera."""
+        """Simulate slow cloud drift in map coordinates, independent of camera."""
         if world is None:
             return
-        if self._cloud_world_id == id(world):
-            return
-
-        # Use a deterministic map-wide layout. These coordinates are generated
-        # once per world and never offset by the player, camera, viewport, or
-        # weather wind. Camera projection in _draw_clouds makes them scroll
-        # naturally with the rest of the world.
-        rng = random.Random(81427 + world.W * 31 + world.H)
-        self._clouds = []
-        columns = max(3, min(7, int(math.ceil(world.W / 11.0))))
-        rows = max(3, min(7, int(math.ceil(world.H / 11.0))))
-        cell_w = float(world.W) / columns
-        cell_h = float(world.H) / rows
-        for row in range(rows):
-            for column in range(columns):
-                wx = (column + rng.uniform(0.22, 0.78)) * cell_w
-                wy = (row + rng.uniform(0.22, 0.78)) * cell_h
+        if self._cloud_world_id != id(world):
+            rng = random.Random(81427 + world.W * 31 + world.H)
+            self._clouds = []
+            # Scatter distinct cloud formations over the map rather than a
+            # screen-filling layer. Their world positions persist as the
+            # camera follows the player.
+            count = max(12, min(24, int(world.W * world.H / 90)))
+            for _ in range(count):
+                angle = rng.uniform(0.0, math.tau)
+                speed = rng.uniform(0.035, 0.075)
                 self._clouds.append([
-                    wx, wy,
+                    rng.uniform(0.0, float(world.W)),
+                    rng.uniform(0.0, float(world.H)),
                     rng.uniform(4.0, 7.0),
                     rng.uniform(0.85, 1.35),
-                    0.0, 0.0,
+                    math.cos(angle) * speed,
+                    math.sin(angle) * speed * 0.55,
                     rng.uniform(0.0, math.tau),
                     rng.randrange(len(self._cloud_textures)),
                 ])
-        self._cloud_world_id = id(world)
+            self._cloud_world_id = id(world)
+
+        # Advance each formation through the actual world. Wind gently bends
+        # the drift; it never uses player position, camera offset, or screen
+        # dimensions, so camera motion and cloud motion remain independent.
+        wind = self.weather.wind * self.weather.wind_dir
+        for cloud in self._clouds:
+            cloud[0] += (cloud[4] + wind * 0.006) * dt
+            cloud[1] += (cloud[5] + wind * 0.002) * dt
+            cloud[0] %= max(1.0, float(world.W))
+            cloud[1] %= max(1.0, float(world.H))
 
     def _draw_clouds(self, world) -> None:
         """Draw overhead clouds at fixed world coordinates, behind the canopy."""
