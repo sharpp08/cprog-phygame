@@ -203,7 +203,7 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                max_range = 21.5
+                max_range = 27.0
                 self._beam.fill((0, 0, 0, 0))
                 self._beam_core.fill((0, 0, 0, 0))
                 # Trace through the actual tile/obstacle layout. Each ray
@@ -213,11 +213,11 @@ class VisualEnhancement:
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.43)
+                    half_spread=0.46)
                 ox, oy = sx / 4.0, sy / 4.0
                 previous = None
                 previous_core = None
-                fog_gain = 1.12 if fog_beam else 1.0
+                fog_gain = 1.18 if fog_beam else 1.0
                 core_start = len(rays) // 3
                 core_end = len(rays) - core_start
                 for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
@@ -227,7 +227,7 @@ class VisualEnhancement:
                         # The wide, low-intensity fringe gives the cone a
                         # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        edge_alpha = int(190 * lvl * strength * fog_gain)
+                        edge_alpha = int(225 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
                                 self._beam, (0, 0, 0, edge_alpha),
@@ -235,7 +235,7 @@ class VisualEnhancement:
                         # A narrower overlapping core concentrates the beam
                         # toward the aim point, like a focused flashlight.
                         if core_start < ray_index < core_end:
-                            core_alpha = int(105 * lvl * strength * fog_gain)
+                            core_alpha = int(145 * lvl * strength * fog_gain)
                             if core_alpha > 0:
                                 pygame.draw.polygon(
                                     self._beam_core,
