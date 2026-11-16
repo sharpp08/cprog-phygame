@@ -24,6 +24,52 @@ import pygame
 import config
 
 
+def _remove_connected_light_background(surface: pygame.Surface) -> pygame.Surface:
+    """Make near-white sheet backgrounds transparent without erasing
+    isolated white details inside the character.
+
+    Only near-white pixels connected to a frame edge are treated as backdrop.
+    This is intentionally applied to each idle frame separately.
+    """
+    image = surface.convert_alpha()
+    width, height = image.get_size()
+    visited = bytearray(width * height)
+    stack = []
+
+    def is_backdrop(x: int, y: int) -> bool:
+        r, g, b, a = image.get_at((x, y))
+        return a > 0 and min(r, g, b) >= 210 and max(r, g, b) - min(r, g, b) <= 38
+
+    # Seed all four edges; flood fill prevents deleting enclosed white details.
+    for x in range(width):
+        stack.append((x, 0))
+        if height > 1:
+            stack.append((x, height - 1))
+    for y in range(1, max(1, height - 1)):
+        stack.append((0, y))
+        if width > 1:
+            stack.append((width - 1, y))
+
+    while stack:
+        x, y = stack.pop()
+        idx = y * width + x
+        if visited[idx]:
+            continue
+        visited[idx] = 1
+        if not is_backdrop(x, y):
+            continue
+        image.set_at((x, y), (0, 0, 0, 0))
+        if x > 0:
+            stack.append((x - 1, y))
+        if x + 1 < width:
+            stack.append((x + 1, y))
+        if y > 0:
+            stack.append((x, y - 1))
+        if y + 1 < height:
+            stack.append((x, y + 1))
+    return image
+
+
 def shade(color: Tuple[int, int, int], f: float) -> Tuple[int, int, int]:
     """Lighten (f>0) or darken (f<0) a colour toward white/black."""
     r, g, b = color
@@ -1131,6 +1177,10 @@ class AssetManager:
                                 col, row = fi % 4, fi // 4
                                 cell = idle_sheet.subsurface(col * icw, row * ich,
                                                              icw, ich).copy()
+                                # The authored idle sheet has a light matte
+                                # behind the character. Remove only edge-connected
+                                # near-white pixels so white clothing details survive.
+                                cell = _remove_connected_light_background(cell)
                                 idle_cells.append(cell)
                             # Same anchoring pipeline as the run sheet
                             idle_lowest = []
