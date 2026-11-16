@@ -163,10 +163,11 @@ class VisualEnhancement:
         # Ambient environment brightness is independent of flashlight
         # state. Toggling the flashlight only adds/removes its directional
         # beam; it must not darken or brighten the entire world.
-        # Restore deep environmental darkness. The radial player light and
-        # flashlight beam subtract from this mask to reveal only nearby areas.
-        # At NIGHT_DARKNESS=0.80 this produces a strong, gradual fade into black.
-        alpha = max(0, min(210, int(166 + darkness * 24 + quality_bias)))
+        # Push the unlit environment much closer to black. The radial player
+        # light and flashlight beam subtract from this stronger mask, preserving
+        # visibility only around nearby light sources.
+        # At NIGHT_DARKNESS=0.80 the overlay is approximately 225/255.
+        alpha = max(0, min(235, int(205 + darkness * 25 + quality_bias)))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
