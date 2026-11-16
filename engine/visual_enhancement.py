@@ -163,7 +163,9 @@ class VisualEnhancement:
         # Ambient environment brightness is independent of flashlight
         # state. Toggling the flashlight only adds/removes its directional
         # beam; it must not darken or brighten the entire world.
-        alpha = max(0, min(246, int(224 + darkness * 20 + quality_bias)))
+        # Keep the night visibly dim, but let terrain and silhouettes fade
+        # naturally into shadow instead of crushing the whole scene to black.
+        alpha = max(0, min(210, int(166 + darkness * 24 + quality_bias)))
         self._shade.fill((1, 2, 6, alpha))
         # The distant, unseen world loses detail gradually instead of ending
         # at a harsh black cutoff. The immediate player area stays crisp.
