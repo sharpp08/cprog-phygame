@@ -14,6 +14,7 @@ from engine.visual_enhancement import VisualEnhancement
 from graphics import quality_settings
 from graphics.post_processing import PostPipeline, ScreenShake
 from systems.weather import Weather
+from systems.clouds import CloudField
 
 import config
 from engine.collision import distance2
@@ -48,11 +49,10 @@ class Renderer:
         pygame.draw.ellipse(self._lightning_glow, (190, 220, 255, 255),
                             self._lightning_glow.get_rect())
         self._lightning_strike = None   # world-space (x, y), never screen-locked
-        # Clouds are persistent world objects: their positions and drift are
-        # stored in map coordinates, then projected through the camera.
+        # Clouds live in an unbounded world-space sky field, separate from
+        # map bounds and camera rendering.
         self._cloud_textures = self._build_cloud_textures()
-        self._clouds: list = []
-        self._cloud_world_id = None
+        self._cloud_field = CloudField()
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
@@ -166,74 +166,28 @@ class Renderer:
         return tuple(textures)
 
     def _update_clouds(self, dt: float, world) -> None:
-        """Simulate a continuous, wind-driven cloud deck in map-space."""
+        """Advance unbounded cloud positions independently of camera motion."""
         if world is None:
             return
-        if self._cloud_world_id != id(world):
-            rng = random.Random()
-            self._clouds = []
-            count = max(20, min(32, int(world.W * world.H / 68)))
-            for _ in range(count):
-                # A common prevailing wind keeps formations coherent, while
-                # small per-cloud variations prevent synchronized movement.
-                direction = rng.uniform(-0.16, 0.16)
-                speed = rng.uniform(1.15, 1.95)
-                self._clouds.append([
-                    rng.uniform(0.0, float(world.W)),
-                    rng.uniform(0.0, float(world.H)),
-                    rng.uniform(5.5, 9.0),
-                    rng.uniform(0.72, 1.5),
-                    math.cos(direction) * speed,
-                    math.sin(direction) * speed,
-                    rng.uniform(0.0, math.tau),
-                    rng.randrange(len(self._cloud_textures)),
-                    rng.uniform(0.85, 1.15),  # wind response
-                ])
-            self._cloud_world_id = id(world)
-
-        # Wind changes are smoothed so the whole cloud deck never snaps or
-        # reverses abruptly. Cloud coordinates remain independent of camera.
-        target_wind = self.weather.wind * self.weather.wind_dir
-        if not hasattr(self, "_cloud_wind"):
-            self._cloud_wind = target_wind
-        self._cloud_wind += (target_wind - self._cloud_wind) * min(1.0, dt * 0.12)
-        world_w = max(1.0, float(world.W))
-        world_h = max(1.0, float(world.H))
-        for cloud in self._clouds:
-            response = cloud[8]
-            cloud[0] = (cloud[0] +
-                        (cloud[4] + self._cloud_wind * 0.55 * response) * dt) % world_w
-            cloud[1] = (cloud[1] +
-                        (cloud[5] + self._cloud_wind * 0.12 * response) * dt) % world_h
+        self._cloud_field.update(
+            dt, self.cam.fx, self.cam.fy,
+            wind=self.weather.wind,
+            wind_dir=self.weather.wind_dir)
 
     def _draw_clouds(self, world) -> None:
-        """Render map-seeded clouds on a moving, elevated sky plane.
-
-        The sky has its own camera parallax: clouds move with the world and
-        wind, but not one-for-one with the player camera or as a HUD overlay.
-        """
+        """Draw clouds at their true world coordinates, with no camera parallax."""
         if world is None or self.quality < 1:
             return
         cam = self.cam
         rain = self.weather.rain_amount
-        # Near enough to the world camera to visibly travel across the scene,
-        # but offset enough to create depth against the terrain.
-        parallax = 0.78
-        camera_dx = (cam.fx - cam.fy) * parallax
-        camera_dy = (cam.fx + cam.fy) * parallax
-        for cloud in self._clouds:
-            wx, wy, height, size, _vx, _vy, phase, texture_index = cloud[:8]
-            sx = ((wx - wy - camera_dx) * config.SCALE_X * cam.zoom
-                  + cam.sw * 0.5)
-            sy = ((wx + wy - camera_dy) * config.SCALE_Y * cam.zoom
-                  - height * config.HEIGHT_SCALE * cam.zoom + cam.sh * 0.5)
+        for cloud in self._cloud_field.clouds:
+            sx, sy = cam.iso_to_screen(cloud.x, cloud.y, cloud.height)
             texture = self._scale_sprite(
-                self._cloud_textures[texture_index], size * cam.zoom)
+                self._cloud_textures[cloud.texture], cloud.scale * cam.zoom)
             tw, th = texture.get_size()
             if sx < -tw or sx > self.W + tw or sy < -th or sy > self.H + th:
                 continue
-            # Soft cloud density varies subtly; rain thickens the underside.
-            breathe = 0.97 + 0.03 * math.sin(self.time * 0.12 + phase)
+            breathe = 0.97 + 0.03 * math.sin(self.time * 0.12 + cloud.phase)
             alpha = int((40 + 26 * rain) * breathe)
             texture.set_alpha(max(0, min(76, alpha)))
             self.screen.blit(texture, (int(sx - tw * 0.5),
