@@ -40,7 +40,7 @@ class Game:
         self.settings = {
             "master": config.MASTER_VOL, "music": config.MUSIC_VOL,
             "sfx": config.SFX_VOL, "resolution": config.DEFAULT_RESOLUTION,
-            "fullscreen": config.FULLSCREEN, "quality": 1,
+            "fullscreen": config.FULLSCREEN, "quality": 2,
             "zoom": config.DEFAULT_ZOOM, "post_fx": False,
         }
         self.audio = AudioManager()
