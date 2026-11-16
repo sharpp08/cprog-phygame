@@ -1363,8 +1363,20 @@ class AssetManager:
                 size = (max(1, round(crop.get_width() * scale)),
                         max(1, round(crop.get_height() * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
+                # The authored crouch art is noticeably larger than the
+                # standing player sprites. Scale the character pixels down
+                # while keeping the shared 44x66 frame canvas unchanged, so
+                # every crouch pose stays aligned to the same planted-foot
+                # anchor and transitions do not shift the player position.
+                crouch_scale = 0.78
+                crouch_size = (
+                    max(1, round(size[0] * crouch_scale)),
+                    max(1, round(size[1] * crouch_scale)),
+                )
+                fitted = pygame.transform.smoothscale(fitted, crouch_size)
                 frame = pygame.Surface((44, 66), pygame.SRCALPHA)
-                frame.blit(fitted, ((44 - size[0]) // 2, 66 - size[1]))
+                frame.blit(fitted, ((44 - crouch_size[0]) // 2,
+                                    66 - crouch_size[1]))
                 frames_out.append(frame)
             return frames_out
 
