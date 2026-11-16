@@ -147,27 +147,29 @@ class Renderer:
         self.visual.draw_atmosphere(self.screen, self.cam, world,
                                     self.time, self.quality,
                                     fog_extra=self.weather.fog_density)
-        # Avoid a second full obstacle scan for the debug counter.
-        cam_x, cam_y = cam.fx, cam.fy
-        psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \\
-            if player is not None else (0.0, 0.0)
-        self._dbg_counts = {
-            "tiles_total": world.W * world.H,
-            "obstacles_total": len(world.obstacles),
-            "obstacles_visible": len(visible_obstacles),
-            "depth_items": len(items),
-            "drawn_items": len(items),
-            "zombies": len(zombies),
-            "pickups": len(pickups),
-            "bullets": len(bullets),
-            "cam_x": cam_x,
-            "cam_y": cam_y,
-            "cam_zoom": cam.zoom,
-            "player_x": player.x if player else 0.0,
-            "player_y": player.y if player else 0.0,
-            "player_sx": psx,
-            "player_sy": psy,
-        }
+        # Debug-only counters and camera projections are skipped during
+        # normal play to avoid per-frame allocations and extra transforms.
+        if self.show_debug:
+            cam_x, cam_y = cam.fx, cam.fy
+            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0) \\
+                if player is not None else (0.0, 0.0)
+            self._dbg_counts = {
+                "tiles_total": world.W * world.H,
+                "obstacles_total": len(world.obstacles),
+                "obstacles_visible": len(visible_obstacles),
+                "depth_items": len(items),
+                "drawn_items": len(items),
+                "zombies": len(zombies),
+                "pickups": len(pickups),
+                "bullets": len(bullets),
+                "cam_x": cam_x,
+                "cam_y": cam_y,
+                "cam_zoom": cam.zoom,
+                "player_x": player.x if player else 0.0,
+                "player_y": player.y if player else 0.0,
+                "player_sx": psx,
+                "player_sy": psy,
+            }
 
     # ------------------------------------------------------------------
     def _draw_ground(self, world, minx, miny, maxx, maxy) -> None:
