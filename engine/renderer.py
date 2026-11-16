@@ -43,6 +43,7 @@ class Renderer:
         self._splashes: list = []
         self._rain_layer = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._weather_tint = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        self._lightning_flash = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._shadow_cache: dict = {}
         self._scaled_cache: dict = {}
         self._tree_sway_cache: dict = {}
@@ -85,6 +86,7 @@ class Renderer:
         self.post.resize(self.W, self.H, quality=self.quality)
         self._rain_layer = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
         self._weather_tint = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        self._lightning_flash = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
 
     def _scale_sprite(self, spr: pygame.Surface, zoom=None):
         """Return a cached sprite scaled to the current isometric camera zoom."""
@@ -501,7 +503,9 @@ class Renderer:
         self.particles.set_wind(self.weather.wind * self.weather.wind_dir)
         if ev == "lightning":
             self.post.on_lightning(self.weather.lightning)
-            self.shake.add(5.0, 0.6)
+            # A nearby thunder strike should produce a short, weighty camera
+            # jolt rather than the barely perceptible default shake.
+            self.shake.add(9.0, 0.82)
         return ev
 
     # ------------------------------------------------------------------
@@ -511,7 +515,7 @@ class Renderer:
         self._battery = float(battery)
 
     # ------------------------------------------------------------------
-    def _draw_rain(self, dt: float) -> None:
+    def _draw_rain(self, dt: float, world=None) -> None:
         """Layered wind-driven rain with depth variation and ground splashes."""
         w = self.weather
         layer = self._rain_layer
@@ -522,7 +526,9 @@ class Renderer:
             return
 
         scale = quality_settings.particle_scale(self.quality)
-        target = int((95 + 185 * w.rain_amount) * scale)
+        # Dense layered sheets of rain: the heavier the storm, the more
+        # overlapping streaks fill the view.
+        target = int((150 + 300 * w.rain_amount) * scale)
         while len(self._rain) < target:
             depth = random.uniform(0.35, 1.0)
             self._rain.append([random.uniform(0, self.W),
@@ -534,9 +540,9 @@ class Renderer:
         slant = w.wind_dir * (0.24 + 0.72 * w.wind)
         for drop in self._rain:
             depth = drop[3]
-            speed = drop[2] * (0.55 + depth * 0.9)
-            drop[0] += slant * 360 * speed * dt
-            drop[1] += (390 + 240 * depth) * speed * dt
+            speed = drop[2] * (0.75 + depth * 1.05) * (0.9 + 0.45 * w.rain_amount)
+            drop[0] += slant * 420 * speed * dt
+            drop[1] += (470 + 300 * depth) * speed * dt
             if drop[1] > self.H + 12:
                 drop[1] = random.uniform(-30, -5)
                 drop[0] = random.uniform(0, self.W)
@@ -544,36 +550,57 @@ class Renderer:
                 drop[0] -= self.W + 24
             elif drop[0] < -12:
                 drop[0] += self.W + 24
-            length = int(5 + 13 * depth * speed)
+            length = int(8 + 19 * depth * speed)
             x, y = int(drop[0]), int(drop[1])
-            color = (112 + int(28 * depth), 132 + int(25 * depth),
-                     158 + int(25 * depth), int(48 + 105 * depth * w.rain_amount))
+            color = (135 + int(25 * depth), 158 + int(28 * depth),
+                     185 + int(25 * depth), int(72 + 125 * depth * w.rain_amount))
             pygame.draw.line(layer, color, (x, y),
                              (int(x + slant * length * 0.55), y + length),
                              1 if depth < 0.72 else 2)
 
-        # Tiny splash crowns and expanding puddle rings are concentrated
-        # toward the lower screen, where the ground plane is nearest.
-        if random.random() < dt * (18 + 42 * w.rain_amount):
-            self._splashes.append([
-                random.uniform(0, self.W),
-                random.uniform(self.H * 0.42, self.H * 0.98),
-                random.uniform(0.12, 0.30), 0.30,
-                random.uniform(1.5, 4.0)])
+        # Rain impacts are placed on actual visible ground tiles rather than
+        # arbitrary screen positions (which could put splashes in the void).
+        if world is not None and random.random() < dt * (55 + 115 * w.rain_amount):
+            for _ in range(10):
+                sx = random.uniform(0, self.W)
+                sy = random.uniform(self.H * 0.12, self.H * 0.99)
+                wx, wy = self.cam.screen_to_world(sx, sy, 0.0)
+                tx, ty = int(wx), int(wy)
+                if 0 <= tx < world.W and 0 <= ty < world.H:
+                    if world.tiles[ty][tx] != config.T_WATER:
+                        gx, gy = self.cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
+                        self._splashes.append([
+                            gx + random.uniform(-8, 8) * self.cam.zoom,
+                            gy + random.uniform(-4, 4) * self.cam.zoom,
+                            random.uniform(0.16, 0.34), 0.34,
+                            random.uniform(2.0, 5.5) * self.cam.zoom])
+                        break
         alive = []
         for x, y, life, duration, radius in self._splashes:
             life -= dt
             if life <= 0:
                 continue
             progress = 1.0 - life / duration
-            alpha = int(115 * (1.0 - progress))
-            rx = max(1, int(radius * (0.45 + progress * 1.8)))
-            pygame.draw.ellipse(layer, (155, 177, 195, alpha),
-                                (int(x - rx), int(y - max(1, rx * 0.28)),
-                                 rx * 2, max(2, int(rx * 0.55))), 1)
-            if progress < 0.18:
-                pygame.draw.circle(layer, (180, 198, 210, alpha),
-                                   (int(x), int(y)), 1)
+            alpha = int(175 * (1.0 - progress))
+            rx = max(1, int(radius * (0.35 + progress * 2.1)))
+            ry = max(1, int(rx * 0.28))
+            # Expanding ground ring plus a short-lived impact crown and
+            # two tiny outward droplets make each hit read as rain striking soil.
+            pygame.draw.ellipse(layer, (175, 199, 218, alpha),
+                                (int(x - rx), int(y - ry),
+                                 rx * 2, max(2, ry * 2)), 1)
+            if progress < 0.28:
+                crown = max(1, int(radius * (1.0 - progress)))
+                pygame.draw.arc(layer, (205, 220, 232, alpha),
+                                (int(x - crown), int(y - crown * 0.45),
+                                 crown * 2, max(2, int(crown * 0.9))),
+                                0.15, 2.95, 1)
+                pygame.draw.line(layer, (190, 212, 228, alpha),
+                                 (int(x - crown), int(y)),
+                                 (int(x - crown - 2), int(y - crown)), 1)
+                pygame.draw.line(layer, (190, 212, 228, alpha),
+                                 (int(x + crown), int(y)),
+                                 (int(x + crown + 2), int(y - crown)), 1)
             alive.append([x, y, life, duration, radius])
         self._splashes = alive
         self.screen.blit(layer, (0, 0))
@@ -627,7 +654,7 @@ class Renderer:
             self._fps = self._fps * 0.9 + (1.0 / dt) * 0.1
         self.screen.fill((30, 26, 20))
         self.draw_world(world, player, zombies, pickups, bullets)
-        self._draw_rain(dt)
+        self._draw_rain(dt, world)
         self._draw_weather_tint()
         # -- cinematic post-processing (before the HUD) ------------------
         if player is not None:
@@ -658,9 +685,11 @@ class Renderer:
         # but before the HUD, so UI text remains crisp and readable.
         flash = float(self.weather.lightning)
         if flash > 0.02:
-            flash_surface = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-            flash_surface.fill((188, 210, 238, int(105 * flash)))
-            self.screen.blit(flash_surface, (0, 0))
+            # Cold, near-white lightning briefly overexposes the forest.
+            # Reuse the cached surface so flashes do not allocate every frame.
+            flash_alpha = max(0, min(220, int(28 + 190 * flash)))
+            self._lightning_flash.fill((205, 222, 245, flash_alpha))
+            self.screen.blit(self._lightning_flash, (0, 0))
 
         if self.show_debug:
             self._draw_debug()
