@@ -116,8 +116,13 @@ class VisualEnhancement:
         cy = int(sy * self._bh / self.height)
         # Keep the full player sprite sharp, not just the feet/pivot.
         # The blur is only allowed to fade in well beyond the character.
-        inner = max(8, int(135 * self._bw / self.width))
-        outer = max(inner + 8, int(270 * self._bw / self.width))
+        # The projected player sprite can be substantially taller than
+        # its ground pivot, especially while running or crouching. Protect a
+        # generous screen-space radius around the pivot so the blur never
+        # washes over the character; only distant scenery is defocused.
+        zoom = max(0.4, float(getattr(cam, "zoom", 1.0)))
+        inner = max(24, int(240 * zoom * self._bw / self.width))
+        outer = max(inner + 12, int(430 * zoom * self._bw / self.width))
         # Blend strongly toward the low-resolution image at long range.
         # The 1/8-resolution copy provides the actual defocus; this alpha
         # controls how clearly that blur reads in the distant environment.
