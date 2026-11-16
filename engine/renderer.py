@@ -210,45 +210,40 @@ class Renderer:
     # ------------------------------------------------------------------
     def _draw_water(self, world, minx, miny, maxx, maxy) -> None:
         cam = self.cam
-        spr = self._scale_sprite(self.assets.tile("water"), self.cam.zoom * 1.025)
+        spr = self._scale_sprite(
+            self.assets.tile("water"), cam.zoom * 1.025)
         half = (spr.get_width() / 2, spr.get_height() / 2)
-        for (tx, ty) in world.water_tiles:
-            if tx > maxx or tx < minx or ty > maxy or ty < miny:
+        ripple = self.assets.spr.get("ripple")
+        if ripple is not None and world.water_tiles:
+            ripple = self._scale_sprite(ripple)
+        phase = int(self.time * 1.7)
+        t = self.time
+        z = cam.zoom
+
+        # Water tiles were previously traversed separately for the base,
+        # shimmer and ripples, with repeated bounds checks and projections.
+        # Process each visible water tile once and reuse its screen position.
+        for i, (tx, ty) in enumerate(world.water_tiles):
+            if tx < minx or tx > maxx or ty < miny or ty > maxy:
                 continue
             if world.tiles[ty][tx] != config.T_WATER:
                 continue
             x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
             if x < -40 or x > self.W + 40 or y < -40 or y > self.H + 40:
                 continue
+
             self.screen.blit(spr, (x - half[0], y - half[1]))
-        # animated shimmer highlights
-        t = self.time
-        for i, (tx, ty) in enumerate(world.water_tiles):
-            if tx > maxx or tx < minx or ty > maxy or ty < miny:
-                continue
-            if (tx * 7 + ty * 13 + i) % 4:
-                continue
-            x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
-            a = int(28 + 20 * math.sin(t * 2.2 + i))
-            z = self.cam.zoom
-            pygame.draw.ellipse(self.screen,
-                                (150, 188, 205, a),
-                                (int(x - 12 * z), int(y - 5 * z),
-                                 max(2, int(24 * z)),
-                                 max(2, int(9 * z))), 0)
-        # A few larger, translucent ripple rings sell the water movement.
-        ripple = self.assets.spr.get("ripple")
-        if ripple is not None and world.water_tiles:
-            ripple = self._scale_sprite(ripple)
-            phase = int(self.time * 1.7)
-            for i, (tx, ty) in enumerate(world.water_tiles):
-                if (i + phase * 3) % 13:
-                    continue
-                if tx < minx or tx > maxx or ty < miny or ty > maxy:
-                    continue
-                x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
-                ripple.set_alpha(42 + int(24 * (0.5 + 0.5 *
-                                                math.sin(self.time * 2 + i))))
+            if (tx * 7 + ty * 13 + i) % 4 == 0:
+                alpha = int(28 + 20 * math.sin(t * 2.2 + i))
+                pygame.draw.ellipse(
+                    self.screen, (150, 188, 205, alpha),
+                    (int(x - 12 * z), int(y - 5 * z),
+                     max(2, int(24 * z)), max(2, int(9 * z))), 0)
+
+            if ripple is not None and (i + phase * 3) % 13 == 0:
+                ripple.set_alpha(
+                    42 + int(24 * (0.5 + 0.5 *
+                                   math.sin(t * 2.0 + i))))
                 self.screen.blit(ripple, (x - 20, y - 12))
 
     # ------------------------------------------------------------------
