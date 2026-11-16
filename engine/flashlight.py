@@ -82,8 +82,8 @@ def trace_flashlight_beam(
             continue
         kind = getattr(obstacle, "kind", "")
         radius = {
-            "tree": 0.48, "shrine": 0.62, "waterfall": 0.52,
-            "ruin": 0.55, "rock": 0.38, "bush": 0.24,
+            "tree": 0.76, "shrine": 0.78, "waterfall": 0.68,
+            "ruin": 0.70, "rock": 0.52, "bush": 0.30,
         }.get(kind, 0.32)
         bx, by = float(obstacle.x), float(obstacle.y)
         blocker_cells.setdefault((int(math.floor(bx)),
@@ -95,7 +95,7 @@ def trace_flashlight_beam(
     max_range = max(0.5, float(max_range))
     half_spread = max(0.05, min(1.1, float(half_spread)))
     # Short ray steps reduce light leaks around thin obstacles and tile edges.
-    step = 0.12
+    step = 0.09
     rays: List[Tuple[float, float, float, int]] = []
 
     for index in range(count):
@@ -147,9 +147,9 @@ def trace_flashlight_beam(
         normal = _normal_response(world, end_x, end_y, rdx, rdy)
         # Physically-inspired distance falloff: exponential medium loss
         # combined with a softened inverse-square term to retain useful range.
-        attenuation = math.exp(-0.014 * distance - absorption)
-        inverse_square = 1.0 / (1.0 + 0.018 * distance +
-                                0.0012 * distance * distance)
+        attenuation = math.exp(-0.010 * distance - absorption)
+        inverse_square = 1.0 / (1.0 + 0.012 * distance +
+                                0.0007 * distance * distance)
         energy = max(0.0, min(1.0,
             attenuation * inverse_square * material * normal * edge))
         rays.append((end_x, end_y, energy, last_surface))
