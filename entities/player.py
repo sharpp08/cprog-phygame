@@ -197,18 +197,21 @@ class Player(Entity):
         facing_blend = 1.0 - math.exp(-config.PLAYER_TURN_SMOOTH * max(0.0, dt))
         self.facing += (self._facing_target - self.facing) * facing_blend
 
-        # Animation state machine: prioritise hurt > reload > shoot > move.
-        if self.damage_timer > 0:
+        # Crouching takes priority over weapon and movement animations.
+        # Otherwise a held fire/reload state can keep selecting the standing
+        # sprite set while the crouch key is down.
+        if self.crouching:
+            next_anim_state = (
+                self.anim_state
+                if self.anim_state in ("crouch_down", "crouch_idle")
+                else "crouch_down"
+            )
+        elif self.damage_timer > 0:
             next_anim_state = "hit"
         elif self.weapon.reloading:
             next_anim_state = "reload"
         elif self._shoot_flash > 0:
             next_anim_state = "shoot"
-        elif self.crouching:
-            next_anim_state = (
-                self.anim_state if self.anim_state in ("crouch_down", "crouch_idle")
-                else "crouch_down"
-            )
         elif self.anim_state in ("crouch_down", "crouch_idle", "crouch_up"):
             next_anim_state = "crouch_up"
         elif self.running:
