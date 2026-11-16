@@ -76,7 +76,7 @@ def trace_flashlight_beam(
     # Treat obstacles as small world-space footprints rather than
     # dimensionless tile points. Tall trees and large rocks therefore cast
     # wider, more convincing shadows that match their ground contact area.
-    blockers = []
+    blocker_cells = {}
     for obstacle in getattr(world, "obstacles", ()):
         if not bool(getattr(obstacle, "solid", True)):
             continue
@@ -85,7 +85,10 @@ def trace_flashlight_beam(
             "tree": 0.48, "shrine": 0.62, "waterfall": 0.52,
             "ruin": 0.55, "rock": 0.38, "bush": 0.24,
         }.get(kind, 0.32)
-        blockers.append((float(obstacle.x), float(obstacle.y), radius))
+        bx, by = float(obstacle.x), float(obstacle.y)
+        blocker_cells.setdefault((int(math.floor(bx)),
+                                  int(math.floor(by))), []).append(
+                                      (bx, by, radius))
     count = max(3, int(ray_count))
     if count % 2 == 0:
         count += 1
@@ -114,9 +117,19 @@ def trace_flashlight_beam(
             py = oy + rdy * next_distance
             tx, ty = int(math.floor(px)), int(math.floor(py))
             hit = False
-            for bx, by, radius in blockers:
-                if (px - bx) * (px - bx) + (py - by) * (py - by) <= radius * radius:
-                    hit = True
+            # Spatial hash: only inspect blockers in neighboring tile cells,
+            # keeping ray cost independent of total map obstacle count.
+            for oy_cell in range(ty - 1, ty + 2):
+                for ox_cell in range(tx - 1, tx + 2):
+                    for bx, by, radius in blocker_cells.get(
+                            (ox_cell, oy_cell), ()):
+                        if ((px - bx) * (px - bx) +
+                                (py - by) * (py - by) <= radius * radius):
+                            hit = True
+                            break
+                    if hit:
+                        break
+                if hit:
                     break
             if hit:
                 # Back up slightly from the sampled contact point so the
