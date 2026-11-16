@@ -73,29 +73,17 @@ def trace_flashlight_beam(
         dx, dy, aim_len = 1.0, 0.0, 1.0
     dx, dy = dx / aim_len, dy / aim_len
 
-    # Treat obstacles as small world-space footprints rather than
-    # dimensionless tile points. Tall trees and large rocks therefore cast
-    # wider, more convincing shadows that match their ground contact area.
-    blocker_cells = {}
-    for obstacle in getattr(world, "obstacles", ()):
-        if not bool(getattr(obstacle, "solid", True)):
-            continue
-        kind = getattr(obstacle, "kind", "")
-        radius = {
-            "tree": 0.48, "shrine": 0.62, "waterfall": 0.52,
-            "ruin": 0.55, "rock": 0.38, "bush": 0.24,
-        }.get(kind, 0.32)
-        bx, by = float(obstacle.x), float(obstacle.y)
-        blocker_cells.setdefault((int(math.floor(bx)),
-                                  int(math.floor(by))), []).append(
-                                      (bx, by, radius))
+    blockers = {
+        (int(o.x), int(o.y))
+        for o in getattr(world, "obstacles", ())
+        if bool(getattr(o, "solid", True))
+    }
     count = max(3, int(ray_count))
     if count % 2 == 0:
         count += 1
     max_range = max(0.5, float(max_range))
     half_spread = max(0.05, min(1.1, float(half_spread)))
-    # Short ray steps reduce light leaks around thin obstacles and tile edges.
-    step = 0.12
+    step = 0.16
     rays: List[Tuple[float, float, float, int]] = []
 
     for index in range(count):
@@ -105,7 +93,7 @@ def trace_flashlight_beam(
         rdx = dx * ca - dy * sa
         rdy = dx * sa + dy * ca
         edge = max(0.0, math.cos(
-            angle / half_spread * math.pi * 0.5)) ** 1.8
+            angle / half_spread * math.pi * 0.5)) ** 1.35
 
         distance = 0.0
         absorption = 0.0
@@ -116,25 +104,8 @@ def trace_flashlight_beam(
             px = ox + rdx * next_distance
             py = oy + rdy * next_distance
             tx, ty = int(math.floor(px)), int(math.floor(py))
-            hit = False
-            # Spatial hash: only inspect blockers in neighboring tile cells,
-            # keeping ray cost independent of total map obstacle count.
-            for oy_cell in range(ty - 1, ty + 2):
-                for ox_cell in range(tx - 1, tx + 2):
-                    for bx, by, radius in blocker_cells.get(
-                            (ox_cell, oy_cell), ()):
-                        if ((px - bx) * (px - bx) +
-                                (py - by) * (py - by) <= radius * radius):
-                            hit = True
-                            break
-                    if hit:
-                        break
-                if hit:
-                    break
-            if hit:
-                # Back up slightly from the sampled contact point so the
-                # visible beam terminates at the near face of the obstacle.
-                distance = max(0.0, next_distance - step * 0.35)
+            if (tx, ty) in blockers:
+                distance = max(0.0, next_distance - step * 0.55)
                 end_x = ox + rdx * distance
                 end_y = oy + rdy * distance
                 break
@@ -145,11 +116,8 @@ def trace_flashlight_beam(
 
         material = _SURFACE_RESPONSE.get(last_surface, 0.76)
         normal = _normal_response(world, end_x, end_y, rdx, rdy)
-        # Physically-inspired distance falloff: exponential medium loss
-        # combined with a softened inverse-square term to retain useful range.
-        attenuation = math.exp(-0.014 * distance - absorption)
-        inverse_square = 1.0 / (1.0 + 0.018 * distance +
-                                0.0012 * distance * distance)
+        attenuation = math.exp(-0.018 * distance - absorption)
+        inverse_square = 1.0 / (1.0 + 0.025 * distance)
         energy = max(0.0, min(1.0,
             attenuation * inverse_square * material * normal * edge))
         rays.append((end_x, end_y, energy, last_surface))
