@@ -198,7 +198,7 @@ WAVE_GROWTH = 1.7
 # ---------------------------------------------------------------------------
 SUN_DIR = (0.55, 0.35)       # shadow direction (world offset per height)
 SHADOW_LENGTH = 0.55
-NIGHT_DARKNESS = 0.98        # near-total darkness; visibility depends on dynamic light sources
+NIGHT_DARKNESS = 0.995       # near-total darkness; flashlight is essential for clear visibility
 LIGHT_RADIUS_PLAYER = 7.5
 LIGHT_RADIUS_SHRINE = 10.0
 PARTICLE_LIMIT = 520
