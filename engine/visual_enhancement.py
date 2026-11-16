@@ -26,10 +26,11 @@ class VisualEnhancement:
         self._shade = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._shade_full = pygame.Surface((self.width, self.height),
                                           pygame.SRCALPHA)
-        # Broad spill is rendered at quarter resolution then smoothly
-        # upscaled; the focused core stays native-resolution and crisp.
         self._beam = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
         self._beam_core = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
+        # Render the flashlight at native screen resolution so its edges and
+        # illuminated center stay crisp instead of being softened by the
+        # quarter-resolution ambient-light buffer.
         self._beam_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._beam_core_full = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._fog = pygame.Surface((self._lw, self._lh), pygame.SRCALPHA)
@@ -91,7 +92,7 @@ class VisualEnhancement:
         size = radius * 2
         yy, xx = np.mgrid[0:size, 0:size]
         dist = np.sqrt((xx - radius) ** 2 + (yy - radius) ** 2)
-        falloff = np.clip(1.0 - dist / radius, 0.0, 1.0) ** 1.9
+        falloff = np.clip(1.0 - dist / radius, 0.0, 1.0) ** 1.65
         rgba = np.zeros((size, size, 4), dtype=np.uint8)
         rgba[..., 3] = (falloff * 210).astype(np.uint8)
         radial = pygame.image.frombuffer(rgba.tobytes(), (size, size),
@@ -210,7 +211,7 @@ class VisualEnhancement:
                 dy = (aim_x + aim_y) * config.SCALE_Y
                 length = math.hypot(dx, dy) or 1.0
                 dx, dy = dx / length, dy / length
-                max_range = 30.0
+                max_range = 27.0
                 self._beam.fill((0, 0, 0, 0))
                 self._beam_core.fill((0, 0, 0, 0))
                 self._beam_full.fill((0, 0, 0, 0))
@@ -218,46 +219,39 @@ class VisualEnhancement:
                 # Trace through the actual tile/obstacle layout. Each ray
                 # stops at the first solid object, so trees and rocks cast
                 # angular shadows instead of being lit through.
-                ray_count = (65, 97, 129, 161)[max(0, min(3, int(quality)))]
+                ray_count = (49, 65, 81, 97)[max(0, min(3, int(quality)))]
                 rays = trace_flashlight_beam(
                     world, (player.x, player.y), (aim_x, aim_y),
                     max_range=max_range, ray_count=ray_count,
-                    half_spread=0.31)
+                    half_spread=0.34)
                 ox, oy = sx, sy
                 previous = None
                 previous_core = None
                 fog_gain = 1.18 if fog_beam else 1.0
-                center_x, center_y = ox / 4.0, oy / 4.0
-                mid_ray = (len(rays) - 1) * 0.5
+                core_start = len(rays) // 3
+                core_end = len(rays) - core_start
                 for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
                     ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
                     current = (int(ex), int(ey))
                     if previous is not None:
+                        # The wide, low-intensity fringe gives the cone a
+                        # feathered edge instead of a hard triangular cutoff.
                         strength = max(0.0, min(1.0, energy))
-                        # Soft spill is drawn into a smaller buffer; smooth
-                        # upscaling feathers the cone boundary instead of
-                        # exposing a hard-edged polygon.
-                        edge_alpha = int(175 * lvl * strength * fog_gain)
+                        edge_alpha = int(225 * lvl * strength * fog_gain)
                         if edge_alpha > 0:
                             pygame.draw.polygon(
-                                self._beam, (0, 0, 0, edge_alpha),
-                                [(int(center_x), int(center_y)),
-                                 (int(previous[0] / 4.0), int(previous[1] / 4.0)),
-                                 (int(current[0] / 4.0), int(current[1] / 4.0))])
-                        # Smooth Gaussian angular falloff avoids the abrupt
-                        # cutoff produced by a fixed-width inner fan.
-                        angular = (ray_index - mid_ray) / max(1.0, mid_ray)
-                        core_profile = math.exp(-5.0 * angular * angular)
-                        core_alpha = int(210 * lvl * strength *
-                                         core_profile * fog_gain)
-                        if core_alpha > 0:
-                            pygame.draw.polygon(
-                                self._beam_core_full,
-                                (0, 0, 0, core_alpha),
+                                self._beam_full, (0, 0, 0, edge_alpha),
                                 [(int(ox), int(oy)), previous, current])
+                        # A narrower overlapping core concentrates the beam
+                        # toward the aim point, like a focused flashlight.
+                        if core_start < ray_index < core_end:
+                            core_alpha = int(245 * lvl * strength * fog_gain)
+                            if core_alpha > 0:
+                                pygame.draw.polygon(
+                                    self._beam_core_full,
+                                    (0, 0, 0, core_alpha),
+                                    [(int(ox), int(oy)), previous, current])
                     previous = current
-                pygame.transform.smoothscale(
-                    self._beam, (self.width, self.height), self._beam_full)
         else:
             self._fl_level = getattr(self, "_fl_level", 0.0) * 0.8
         # close-enemy glow: subtle cool light so pursuers read in the dark
