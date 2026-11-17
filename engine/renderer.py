@@ -414,12 +414,6 @@ class Renderer:
         self._shadow(p.x, p.y, 34, 90)
 
         def frame_for(state, frame_index):
-            # Pick the reload sequence for the currently equipped weapon.
-            if state == "reload":
-                weapon_kind = getattr(getattr(p, "weapon", None), "kind", "pistol")
-                specific = f"reload_{weapon_kind}"
-                if specific in self.assets.frames.get("player", {}):
-                    state = specific
             frames = self.assets.player_frames(state)
             frame = self._scale_sprite(frames[frame_index % len(frames)])
             if p.facing < 0:
