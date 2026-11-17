@@ -160,7 +160,9 @@ class Player(Entity):
 
     # ------------------------------------------------------------------
     def mark_shoot(self) -> None:
-        self._shoot_flash = 0.12
+        # Keep the firing pose visible long enough for the state crossfade
+        # to finish, even while the player is moving.
+        self._shoot_flash = 0.24
         self.anim_timer = 0.0
 
     def _set_anim_state(self, state: str) -> None:
