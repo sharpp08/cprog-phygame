@@ -591,8 +591,7 @@ class AssetManager:
     def _humanoid(self, kind: str, pose: str, leg: int = 0,
                   reach: float = 0.0, crouch: float = 0.0,
                   flash: bool = False, phase: float = 0.0,
-                  fall: int = 0, gait: float = 1.0,
-                  reload_style: int = 0):
+                  fall: int = 0, gait: float = 1.0):
         """Build one articulated character pose from a continuous gait phase.
 
         Run and walk frames share the same phase convention so state changes
@@ -875,22 +874,9 @@ class AssetManager:
         left_hand = (hx + left_shoulder_offset - 8 * sc + arm_swing,
                      arm_y + 10 * sc - arm_swing * 0.34)
         if kind == "player" and pose == "reload":
-            # Each weapon has a distinct support-hand action.
-            if reload_style == 1:  # shotgun: feed shells into the loading port
-                left_elbow = (hx + 2 * sc, arm_y + 7 * sc)
-                left_hand = (hx + 8 * sc + math.sin(cycle * 1.5) * 1.8,
-                             arm_y + 11 * sc - abs(math.sin(cycle)) * 2.0)
-            elif reload_style == 2:  # rifle: seat magazine, then reach charging handle
-                if phase < 0.62:
-                    left_elbow = (hx + 1 * sc, arm_y + 5 * sc)
-                    left_hand = (hx + 7 * sc, arm_y + 10 * sc)
-                else:
-                    left_elbow = (hx + 5 * sc, arm_y + 1 * sc)
-                    left_hand = (hx + 12 * sc, arm_y - 1 * sc)
-            else:  # pistol: release and replace the magazine
-                left_elbow = (hx - 1 * sc, arm_y + 4 * sc)
-                left_hand = (hx + 5 * sc + math.sin(cycle) * 1.2,
-                             arm_y + 8 * sc + math.cos(cycle))
+            left_elbow = (hx - 1 * sc, arm_y + 4 * sc)
+            left_hand = (hx + 5 * sc + math.sin(cycle) * 1.2,
+                         arm_y + 8 * sc + math.cos(cycle))
         arm_col = shade(top, -0.18)
         pygame.draw.line(s, arm_col, left_shoulder, left_elbow,
                          max(3, int(4 * sc)))
@@ -1066,20 +1052,9 @@ class AssetManager:
             "run": [self._humanoid("player", "run", phase=k / 8.0,
                                    gait=1.55)
                     for k in range(8)],
-            "shoot": [self._humanoid("player", "shoot", flash=(k == 1),
-                                     phase=k / 3.0, reach=0.28)
-                      for k in range(3)],
+            "shoot": [self._humanoid("player", "shoot", flash=True)],
             "reload": [self._humanoid("player", "reload", phase=k / 4.0)
                        for k in range(4)],
-            "reload_pistol": [
-                self._humanoid("player", "reload", phase=k / 4.0,
-                               reload_style=0) for k in range(4)],
-            "reload_shotgun": [
-                self._humanoid("player", "reload", phase=k / 4.0,
-                               reload_style=1) for k in range(4)],
-            "reload_rifle": [
-                self._humanoid("player", "reload", phase=k / 4.0,
-                               reload_style=2) for k in range(4)],
             "hit": [self._humanoid("player", "hit", reach=0.2, crouch=0.3)],
             "dead": [self._humanoid("player", "dead", fall=k % 3)
                      for k in range(3)],
@@ -1185,8 +1160,8 @@ class AssetManager:
                     # animation sheet during idle/run transitions.
                     pl["run"] = padded
                     pl["walk"] = padded
-                    # Keep the procedural weapon-action poses; mapping these
-                    # states to run-sheet cells made firing/reloading look like running.
+                    pl["shoot"] = [padded[0]]
+                    pl["reload"] = [padded[k % 8] for k in range(4)]
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Bring the running character up to the current authored
@@ -1219,7 +1194,8 @@ class AssetManager:
                     pl["walk"] = padded
                     # Action states reuse the run frames so the character
                     # model stays consistent during every gameplay action.
-                    # Preserve the dedicated procedural shoot/reload poses.
+                    pl["shoot"] = [padded[0]]
+                    pl["reload"] = [padded[k % 8] for k in range(4)]
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Load the dedicated idle sheet if available; it provides
