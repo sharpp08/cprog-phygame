@@ -31,6 +31,7 @@ from ui.main_menu import MainMenu
 from ui.pause_menu import PauseMenu
 from ui.settings_menu import SettingsMenu
 from ui.widgets import FontSet
+from ui.loading_screen import LoadingScreen
 
 
 class Game:
@@ -66,6 +67,7 @@ class Game:
         # menus
         self.main_menu = MainMenu(config.WINDOW_W, config.WINDOW_H,
                                   self.save_manager.has_save())
+        self.loading_screen = LoadingScreen(config.WINDOW_W, config.WINDOW_H)
         self.pause_menu: Optional[PauseMenu] = None
         self.settings_menu: Optional[SettingsMenu] = None
         self.game_over: Optional[GameOver] = None
@@ -122,6 +124,7 @@ class Game:
 
     # ------------------------------------------------------------------
     def start_new(self) -> None:
+        self._show_loading_screen("GENERATING A NEW WORLD")
         self._init_world()
         self.player = Player(float(self.wm.world.start[0]),
                              float(self.wm.world.start[1]))
@@ -153,6 +156,26 @@ class Game:
         self.audio.play_music("ambient")
         self.progression.notify("Find the ancient shrine. Follow the path.")
         self._print_world_diagnostics()
+
+    def _show_loading_screen(self, message: str) -> None:
+        """Present a short animated forest interstitial before world setup."""
+        if not self.running:
+            return
+        clock = pygame.time.Clock()
+        started = pygame.time.get_ticks()
+        duration = 1050
+        while self.running and pygame.time.get_ticks() - started < duration:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    return
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_F4 and (pygame.key.get_mods() & pygame.KMOD_ALT):
+                    self.running = False
+                    return
+            elapsed = (pygame.time.get_ticks() - started) / 1000.0
+            self.loading_screen.draw(self.screen, elapsed, message)
+            pygame.display.flip()
+            clock.tick(45)
 
     def _init_world(self) -> None:
         from systems.world_manager import WorldManager
@@ -195,6 +218,7 @@ class Game:
 
     # ------------------------------------------------------------------
     def load_game(self) -> bool:
+        self._show_loading_screen("RESTORING YOUR LAST JOURNEY")
         data = self.save_manager.load()
         if data is None:
             self.start_new()
