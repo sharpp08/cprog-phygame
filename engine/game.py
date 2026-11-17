@@ -346,6 +346,7 @@ class Game:
         self.audio.play_music("menu")
         while self.running:
             self._frame()
+        self._save_user_settings()
         if self.shaders is not None:
             self.shaders.release()
         pygame.quit()
