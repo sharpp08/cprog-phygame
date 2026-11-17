@@ -1,7 +1,7 @@
 """The game: owns state, the loop, menus and ties every system together."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 import json
 import os
 
@@ -17,9 +17,7 @@ from engine.renderer import Renderer
 from entities.player import Player
 from entities.weapon import Weapon
 from systems.combat import CombatSystem
-from systems.enemy_ai import ZombieController
 from systems.inventory import apply_pickup
-from systems.navigation import Navigation
 from systems.progression import Progression
 from systems.horror_director import HorrorDirector
 from systems.horde_director import HordeDirector
@@ -34,6 +32,11 @@ from ui.pause_menu import PauseMenu
 from ui.settings_menu import SettingsMenu
 from ui.widgets import FontSet
 from ui.loading_screen import LoadingScreen
+
+
+def _ease(t: float) -> float:
+    t = max(0.0, min(1.0, t))
+    return t * t * (3.0 - 2.0 * t)
 
 
 class Game:
@@ -67,6 +70,7 @@ class Game:
         self.dt = 1.0 / config.TARGET_FPS
         self._fixed_dt = 1.0 / config.TARGET_FPS
         self._sim_accumulator = 0.0
+        self._menu_time = 0.0
 
         # menus
         self.main_menu = MainMenu(*self.screen.get_size(),
@@ -174,7 +178,65 @@ class Game:
         self.hud = HUD(w, h)
 
     # ------------------------------------------------------------------
+    # Transitions
+    # ------------------------------------------------------------------
+    def _pump_transition_events(self) -> bool:
+        """Handle quit/alt-f4 while a transition holds the loop; True=alive."""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return False
+            if event.type == pygame.KEYDOWN and                     event.key == pygame.K_F4 and                     (pygame.key.get_mods() & pygame.KMOD_ALT):
+                self.running = False
+                return False
+        return True
+
+    def _crossfade(self, render_new: Callable[[], None],
+                   duration: float = 0.7) -> None:
+        """Blend smoothly from the current frame to render_new()'s frame.
+
+        Eliminates black-screen flashes and abrupt scene changes between
+        the menu, loading screen, gameplay and settings.
+        """
+        if not self.running:
+            return
+        prev = self.screen.copy()
+        render_new()
+        nxt = self.screen.copy()
+        clock = pygame.time.Clock()
+        started = pygame.time.get_ticks()
+        ms = max(1, int(duration * 1000))
+        while self.running:
+            if not self._pump_transition_events():
+                return
+            k = min(1.0, (pygame.time.get_ticks() - started) / ms)
+            e = _ease(k)
+            self.screen.blit(prev, (0, 0))
+            nxt.set_alpha(int(255 * e))
+            self.screen.blit(nxt, (0, 0))
+            nxt.set_alpha(255)
+            pygame.display.flip()
+            if k >= 1.0:
+                break
+            clock.tick(60)
+        self.screen.blit(nxt, (0, 0))
+        pygame.display.flip()
+
+    def _present(self) -> None:
+        """Immediately draw and show the current state (post mode change)."""
+        self._render()
+        pygame.display.flip()
+
+    def _draw_menu_scene(self) -> None:
+        self.main_menu.draw(self.screen, self.fonts,
+                            self.dt if self.dt > 0 else 1.0 / 60.0)
+
+    # ------------------------------------------------------------------
     def start_new(self) -> None:
+        # Fade out of whatever screen we are on into the loading interstitial
+        # so world generation never starts from a black or stale frame.
+        self._crossfade(lambda: self.loading_screen.draw(
+            self.screen, 0.0, "GENERATING A NEW WORLD"), duration=0.45)
         self._show_loading_screen("GENERATING A NEW WORLD")
         self._init_world()
         self.player = Player(float(self.wm.world.start[0]),
@@ -206,6 +268,9 @@ class Game:
         self.save_manager.delete()
         self.audio.play_music("ambient")
         self.progression.notify("Find the ancient shrine. Follow the path.")
+        # Ease into the first gameplay frame instead of popping.
+        self._present()
+        self._crossfade(self._render, duration=0.6)
         self._print_world_diagnostics()
 
     def _show_loading_screen(self, message: str) -> None:
@@ -269,6 +334,8 @@ class Game:
 
     # ------------------------------------------------------------------
     def load_game(self) -> bool:
+        self._crossfade(lambda: self.loading_screen.draw(
+            self.screen, 0.0, "RESTORING YOUR LAST JOURNEY"), duration=0.45)
         self._show_loading_screen("RESTORING YOUR LAST JOURNEY")
         data = self.save_manager.load()
         if data is None:
@@ -307,7 +374,7 @@ class Game:
         self.progression.shrine_reached = pg.get("shrine_reached", False)
         if self.progression.phase == "shrine":
             self.progression.objective = "Survive the final waves at the shrine"
-        self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
+        self.cam = Camera(*self.screen.get_size(),
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
@@ -328,12 +395,14 @@ class Game:
         self.settings.update({k: v for k, v in
                               data.get("settings", {}).items()
                               if k in self.settings})
+        self._present()
+        self._crossfade(self._render, duration=0.6)
         return True
 
     # ------------------------------------------------------------------
     def _enter_gameover(self) -> None:
         self.state = "gameover"
-        self.game_over = GameOver(config.WINDOW_W, config.WINDOW_H)
+        self.game_over = GameOver(*self.screen.get_size())
         if self.progression.state == "won" and self.story is not None:
             self.game_over.ending_title, self.game_over.ending_subtitle = self.story.ending()
         self.audio.stop_music()
@@ -342,6 +411,10 @@ class Game:
         else:
             self.save_manager.save(self.player, self.progression,
                                    self.settings, self.story, self.survival)
+        # Present the game-over screen through the shared renderer first so
+        # the crossfade starts from the live world frame, not a stale menu.
+        self._present()
+        self._crossfade(self._render, duration=0.55)
 
     # ------------------------------------------------------------------
     def _transition_loading_to_menu(self) -> None:
@@ -349,20 +422,17 @@ class Game:
         if not self.running:
             return
         menu_frame = pygame.Surface(self.screen.get_size()).convert()
-        self._draw_menu_bg()
-        self.main_menu.draw(self.screen, self.fonts)
+        self._draw_menu_scene()
         menu_frame.blit(self.screen, (0, 0))
         clock = pygame.time.Clock()
         started = pygame.time.get_ticks()
-        duration = 1100
+        duration = 1400
         while self.running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                    return
+            if not self._pump_transition_events():
+                return
             elapsed = (pygame.time.get_ticks() - started) / 1000.0
             t = min(1.0, elapsed / (duration / 1000.0))
-            eased = t * t * (3.0 - 2.0 * t)
+            eased = _ease(t)
             self.loading_screen.draw(
                 self.screen, elapsed, "ENTERING THE FOREST")
             menu_frame.set_alpha(int(255 * eased))
@@ -406,6 +476,9 @@ class Game:
             self._update(self._fixed_dt)
             self._sim_accumulator -= self._fixed_dt
             steps += 1
+        if self.state == "menu":
+            # Menu animations run on real frame time, not the fixed step.
+            self.dt = max(frame_dt, 1e-4)
         self._render()
         self.clock.tick(config.MAX_RENDER_FPS)
         pygame.display.flip()
@@ -477,6 +550,9 @@ class Game:
                     self.apply_settings(True)
                     self.state = self._settings_return
                     self.settings_menu = None
+                    # Re-present immediately so a resolution/fullscreen
+                    # change never leaves a black or stale frame visible.
+                    self._present()
         elif self.state == "gameover":
             if self.game_over:
                 res = self.game_over.handle(event, self.audio)
@@ -503,14 +579,19 @@ class Game:
             camera=self.cam, on_apply=lambda: self.apply_settings(False))
         self.settings_menu.set_back_target(return_state)
         self.state = "settings"
+        # Fade into the settings page over the preserved background.
+        self._crossfade(self._render, duration=0.35)
 
     def _open_pause(self) -> None:
-        self.pause_menu = PauseMenu(config.WINDOW_W, config.WINDOW_H)
+        self.pause_menu = PauseMenu(*self.screen.get_size())
         self.state = "paused"
+        self._crossfade(self._render, duration=0.3)
 
     def _handle_pause_result(self, res) -> None:
         if res == "resume":
             self.state = "playing"
+            self._present()
+            self._crossfade(self._render, duration=0.3)
         elif res == "settings":
             self._open_settings("paused")
         elif res == "restart":
@@ -525,14 +606,15 @@ class Game:
                 and self.progression.state == "playing":
             self.save_manager.save(self.player, self.progression,
                                    self.settings, self.story, self.survival)
+        self.audio.stop_rain()
         self.state = "menu"
         self.settings_menu = None
         self.pause_menu = None
         self.main_menu = MainMenu(*self.screen.get_size(),
                                   self.save_manager.has_save())
         self.audio.play_music("menu")
-
-
+        # Crossfade from the live world/settings frame back to the menu.
+        self._crossfade(self._draw_menu_scene, duration=0.8)
 
     # ------------------------------------------------------------------
     def _update(self, dt: float) -> None:
@@ -714,16 +796,15 @@ class Game:
             self.hud.draw(self.screen, self.player, self.progression,
                           self.survival, self.story, self.dt,
                           horror=self.horror)
+            if self.state == "paused" and self.pause_menu is not None:
+                self.pause_menu.draw(self.screen, self.fonts)
+            elif self.state == "settings" and self.settings_menu is not None:
+                self.settings_menu.draw(self.screen, self.fonts)
         elif self.state not in ("playing", "paused", "settings"):
             self.audio.stop_rain()
         if self.state == "menu":
             self._draw_menu_bg()
-            self.main_menu.draw(self.screen, self.fonts)
-        elif self.state == "paused":
-            self.pause_menu.draw(self.screen, self.fonts)
-        elif self.state == "settings" and self.settings_menu is not None:
-            self._draw_menu_bg()
-            self.settings_menu.draw(self.screen, self.fonts)
+            self._draw_menu_scene()
         elif self.state == "gameover" and self.game_over is not None:
             won = self.progression.state == "won"
             self.game_over.draw(self.screen, self.fonts, won,
@@ -731,12 +812,6 @@ class Game:
                                 self.progression.time)
 
     def _draw_menu_bg(self) -> None:
-        self.screen.fill((26, 22, 18))
-        w, h = self.screen.get_size()
-        glow = pygame.Surface((w, 220), pygame.SRCALPHA)
-        for y in range(220):
-            a = int(55 * (1 - y / 220))
-            pygame.draw.line(glow, (70, 60, 40, a), (0, y), (w, y))
-        self.screen.blit(glow, (0, 0))
-
-
+        # The cinematic menu scene is fully painted by MainMenu itself;
+        # this hook only clears leftovers when returning from other states.
+        self.screen.fill((5, 10, 11))
