@@ -22,8 +22,10 @@ def apply_pickup(player: Player, pickup: Pickup, audio=None, survival=None) -> N
         target.add_reserve(pickup.value)
     elif ptype == "battery" and survival is not None:
         survival.add_battery_cells(pickup.value)
-    elif ptype == "medkit":
-        player.hp = min(player.max_hp, player.hp + pickup.value)
+    elif ptype == "medkit" and survival is not None:
+        survival.medkits = min(9, survival.medkits + 1)
+    elif ptype == "grenade" and survival is not None:
+        survival.add_grenades(pickup.value)
     elif ptype.startswith("weapon"):
         kind = ptype.split("_", 1)[1]
         if not player.has_weapon(kind):
