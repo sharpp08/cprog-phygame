@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from typing import Optional
+import json
+import os
 
 import pygame
 
@@ -44,6 +46,8 @@ class Game:
             "fullscreen": config.FULLSCREEN, "quality": 2,
             "zoom": config.DEFAULT_ZOOM, "post_fx": False,
         }
+        self._settings_path = os.path.join(config.SAVE_DIR, "settings.json")
+        self._load_user_settings()
         self.audio = AudioManager()
         self.assets = AssetManager()
         self.particles = ParticleSystem()
@@ -65,7 +69,7 @@ class Game:
         self._sim_accumulator = 0.0
 
         # menus
-        self.main_menu = MainMenu(config.WINDOW_W, config.WINDOW_H,
+        self.main_menu = MainMenu(*self.screen.get_size(),
                                   self.save_manager.has_save())
         self.loading_screen = LoadingScreen(config.WINDOW_W, config.WINDOW_H)
         self.pause_menu: Optional[PauseMenu] = None
@@ -91,6 +95,40 @@ class Game:
         self._last = pygame.time.get_ticks()
 
     # ------------------------------------------------------------------
+    def _load_user_settings(self) -> None:
+        """Load validated user preferences independently of the game save."""
+        try:
+            with open(self._settings_path, "r", encoding="utf-8") as handle:
+                saved = json.load(handle)
+            if not isinstance(saved, dict):
+                return
+            for key in ("master", "music", "sfx"):
+                if key in saved:
+                    self.settings[key] = max(0.0, min(1.0, float(saved[key])))
+            if "resolution" in saved:
+                self.settings["resolution"] = max(0, min(
+                    len(config.RESOLUTIONS) - 1, int(saved["resolution"])))
+            if "fullscreen" in saved:
+                self.settings["fullscreen"] = bool(saved["fullscreen"])
+            if "quality" in saved:
+                self.settings["quality"] = max(0, min(3, int(saved["quality"])))
+            if "zoom" in saved:
+                self.settings["zoom"] = max(config.ZOOM_MIN, min(
+                    config.ZOOM_MAX, float(saved["zoom"])))
+            if saved.get("post_fx") in (None, True, False):
+                self.settings["post_fx"] = saved.get("post_fx")
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+
+    def _save_user_settings(self) -> None:
+        """Persist preferences even when the player has no active save."""
+        try:
+            os.makedirs(os.path.dirname(self._settings_path), exist_ok=True)
+            with open(self._settings_path, "w", encoding="utf-8") as handle:
+                json.dump(self.settings, handle, indent=2)
+        except OSError as exc:
+            print(f"[Settings] Could not save preferences: {exc}")
+
     def _init_audio(self) -> None:
         self.audio.init()
         self.audio.set_volumes(self.settings["master"], self.settings["music"],
@@ -99,6 +137,8 @@ class Game:
     # ------------------------------------------------------------------
     def apply_settings(self, apply_window: bool = True) -> None:
         self.assets.set_quality(int(self.settings["quality"]))
+        if self.cam is not None:
+            self.cam.set_zoom(float(self.settings["zoom"]))
         if self.renderer is not None:
             self.renderer._apply_quality(int(self.settings["quality"]))
             self.renderer.set_post_fx(self.settings.get("post_fx"))
@@ -108,9 +148,16 @@ class Game:
             self.screen = self.window.screen
             self.assets.build()
             self._rebind_game()
+            w, h = self.screen.get_size()
+            self.main_menu = MainMenu(w, h, self.save_manager.has_save())
+            if self.pause_menu is not None:
+                self.pause_menu = PauseMenu(w, h)
+            if self.game_over is not None:
+                self.game_over = GameOver(w, h)
         self.audio.set_volumes(self.settings["master"],
                               self.settings["music"],
                               self.settings["sfx"])
+        self._save_user_settings()
 
     def _rebind_game(self) -> None:
         w, h = self.screen.get_size()
@@ -136,7 +183,7 @@ class Game:
         self.story = StorySystem(self.wm.world)
         self.horror = HorrorDirector()
         self.hordes = HordeDirector()
-        self.cam = Camera(config.WINDOW_W, config.WINDOW_H,
+        self.cam = Camera(*self.screen.get_size(),
                           zoom=self.settings["zoom"])
         self.cam.set_target(self.player.x, self.player.y)
         self.cam.clamp(0, 0, self.wm.world.W, self.wm.world.H)
@@ -411,7 +458,7 @@ class Game:
 
     def _open_settings(self, return_state: str) -> None:
         self._settings_return = return_state
-        self.settings_menu = SettingsMenu(config.WINDOW_W, config.WINDOW_H,
+        self.settings_menu = SettingsMenu(*self.screen.get_size(),
                                           self.settings, self.audio)
         self.settings_menu.set_back_target(return_state)
         self.state = "settings"
@@ -440,7 +487,7 @@ class Game:
         self.state = "menu"
         self.settings_menu = None
         self.pause_menu = None
-        self.main_menu = MainMenu(config.WINDOW_W, config.WINDOW_H,
+        self.main_menu = MainMenu(*self.screen.get_size(),
                                   self.save_manager.has_save())
         self.audio.play_music("menu")
 
