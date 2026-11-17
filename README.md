@@ -3,367 +3,248 @@
 
 > The forest remembers. The dead awaken. Survival is only the beginning.
 
-**WHEN THE WOODS BLEED** is an in-development single-player isometric 2.5D zombie survival shooter built with Python and Pygame-ce. The project is being developed as a new game from scratch, with a modular architecture for its rendering, world, entities, gameplay systems, interface, and audio.
+**WHEN THE WOODS BLEED** is an in-development, single-player isometric survival-horror shooter built with Python and Pygame-ce. Explore a hostile forest, manage scarce supplies, fight different infected, and survive the waves around an ancient shrine.
 
-> **Development status:** In development. This README describes the project vision and intended features. Items below are not claims that every feature is already implemented.
+> **Development status:** Active development. Features documented here reflect the current project implementation; balance, assets, and controls may change as development continues.
 
 ---
 
 ## Table of Contents
 
-- [About](#about)
 - [Game Overview](#game-overview)
-- [World and Visual Direction](#world-and-visual-direction)
-- [Gameplay](#gameplay)
-- [Technical Design](#technical-design)
-- [Planned Project Structure](#planned-project-structure)
-- [Technology Stack](#technology-stack)
-- [Setup and Installation](#setup-and-installation)
+- [World and Visual Design](#world-and-visual-design)
+- [Gameplay Features](#gameplay-features)
 - [Controls](#controls)
-- [Performance Goals](#performance-goals)
-- [Testing](#testing)
-- [Development Roadmap](#development-roadmap)
-- [Development Guidelines](#development-guidelines)
-- [Packaging](#packaging)
+- [Weapons, Equipment, and Survival](#weapons-equipment-and-survival)
+- [Character Animations](#character-animations)
+- [Menus and Settings](#menus-and-settings)
+- [Atmosphere and Rendering](#atmosphere-and-rendering)
+- [Technology and Project Structure](#technology-and-project-structure)
+- [Setup and Installation](#setup-and-installation)
+- [Testing and Development](#testing-and-development)
 - [Assets and Licensing](#assets-and-licensing)
-- [Repository](#repository)
-
-## About
-
-The game takes place in a mysterious forest filled with hostile infected creatures, abandoned structures, hidden locations, and an ancient shrine. Players explore the environment, collect supplies, manage ammunition, fight or evade enemies, and work toward reaching the shrine.
-
-The project uses an isometric projection to create the appearance of a three-dimensional world while retaining a 2D rendering workflow. The goal is to combine responsive action gameplay with an atmospheric environment, readable combat, and a maintainable codebase.
 
 ## Game Overview
 
-| Category | Description |
+| Category | Details |
 |---|---|
 | Title | WHEN THE WOODS BLEED |
-| Genre | Zombie Survival / Action / Shooter |
+| Genre | Survival horror / zombie action shooter |
 | Perspective | Isometric 2.5D |
 | Language | Python |
 | Framework | Pygame-ce |
-| Optional library | NumPy |
+| Rendering | Software-rendered 2D with optional shader support |
 | Target platform | Windows 10/11 |
-| Intended mode | Single-player |
-| Performance goal | 60 FPS target, subject to profiling |
+| Game mode | Single-player |
+| Simulation target | 60 updates per second; rendering is capped separately |
 | Status | In development |
 
-## World and Visual Direction
+## World and Visual Design
 
-The primary environment is a mysterious forest guided by the saved **Isometric Forest Shrine Map** reference. The reference informs the environment's composition, palette, atmosphere, and landmarks; it is not intended to be used as a flat game background.
+The game is set in an overgrown forest surrounding an isolated shrine. Its visual identity uses a dark, moonlit palette with muted greens, deep blue-green shadows, weathered earth, and restrained amber light.
 
-### Planned landmarks
+### Forest-shrine environment
 
-- **Ancient shrine:** A wooden shrine with a distinctive red roof and a major exploration landmark.
-- **Forest clearing:** An open area for traversal and combat.
-- **Sacred pond:** Green water with pink lily pads and surrounding vegetation.
-- **Stone bridge and paths:** Routes connecting areas of the forest.
-- **Waterfall:** A natural landmark with water and mist effects.
-- **Dense forest:** Trees, bushes, rocks, and layered vegetation.
-- **Hidden areas:** Optional locations for supplies and discoveries.
+The environment is built from procedural and cached game assets rather than using a static screenshot as the playable background. Its landmarks and visual elements include:
 
-### Planned environmental systems
+- **Ancient wooden shrine:** A small shrine with a distinctive red roof, serving as a focal point in the forest.
+- **Forest clearing:** An open, overgrown space framed by dense trees and vegetation.
+- **Sacred pond:** Green water, lily pads, reflective highlights, and a surrounding natural edge.
+- **Stone routes and bridge areas:** Paths that connect the forest spaces and landmarks.
+- **Waterfall and water features:** Animated water details, ripples, and mist.
+- **Dense woodland:** Layered trees, rocks, bushes, roots, grass, and natural obstacles.
 
-- Isometric terrain and ground surfaces.
-- Trees, rocks, bushes, and natural obstacles.
-- Layered foreground and background objects.
-- Depth sorting and environmental occlusion.
-- Atmospheric lighting, shadows, and fog.
-- Animated water, foliage, and particles where performance permits.
+### Main menu atmosphere
 
-### Implemented graphical foundation
+The main menu now uses a forest scene that reflects the actual game setting: a moonlit clearing, layered tree silhouettes and trunks, a shrine landmark, a pond, a worn trail, drifting ground fog, and subtle cloud movement. The information panel presents a survival status for the Shrine Sector and the objective to survive the waves. The menu retains **New Game**, **Continue**, **Settings**, and **Exit**.
 
-The current renderer now includes a procedural, cached art pipeline and an atmospheric presentation layer:
+## Gameplay Features
 
-- Seven tree silhouettes, including leafy, pine, dead, and twisted variants.
-- More detailed ground tiles with clipped surface variation, roots, bark grain, foliage highlights, and weathered shrine details.
-- Zoom-consistent terrain, character, obstacle, particle, and shadow sizing to preserve isometric alignment.
-- Cool night ambience, cached radial light falloff, a directional flashlight beam, and a subtle screen vignette.
-- Layered ground mist, high-quality film grain, fireflies, animated water ripples, waterfall mist, and gentle tree sway.
-- Reusable shadow and sprite-scale caches to reduce per-frame surface creation.
-- Low, Medium, High, and Ultra quality presets remain available in
-  Settings; atmospheric detail scales with the selected preset. A
-  Post-FX toggle (Auto / On / Off) lets integrated GPUs disable the
-  cinematic chain without changing the quality preset.
+### Movement and combat
 
-The procedural assets are generated at startup and cached; the playable map is still composed from world tiles and objects, not a screenshot background. Headless render validation captures review scenes for the forest, player/vegetation, zombie encounters, shrine/pond, and flashlight lighting.
+- Isometric player movement using WASD or the arrow keys.
+- Mouse-directed aiming and left-click shooting.
+- Walking, sprinting, and crouching, with movement easing and collision-aware animation.
+- Weapon selection, ammunition management, and reloading.
+- Projectile collision with enemies and solid world obstacles.
+- Melee attacks and throwable grenades.
+- Health, damage feedback, and survival resources.
 
-### Cinematic post-processing pipeline (graphics upgrade)
+### Infected and horror systems
 
-The world renders to the scene surface, then the cinematic chain runs
-before the HUD is drawn (the HUD always stays perfectly readable):
+The game includes multiple infected archetypes with different movement and combat characteristics, including regular infected, Runners, Brutes/Tanks, Crawlers, Exploders, Stalkers, Screamers, and Armored infected.
 
-- **Color grade** - dark, desaturated environment, cool blue-green
-  shadows, warm lantern highlights, controlled contrast (256-entry
-  LUT + strength mix).
-- **Dynamic vignette** - cinematic edge darkening that reacts to the
-  horror director's tension, horror events, and a low-HP heartbeat.
-- **Film grain** - animated, rotating noise tiles; stronger under
-  tension and supernatural events.
-- **Chromatic aberration** - restrained RGB edge split on damage,
-  lightning and high tension; eases back to normal.
-- **Bloom** - threshold + double 3x3 box blur (HDR-style glow around
-  the flashlight pool, embers and muzzle flashes).
-- **Screen distortion** - heat-warp style sine field, eased in/out
-  for horror events.
-- **Camera shake** - exponential-decay shake with per-event intensity
-  (damage, lightning, horror events, restrained recoil).
+Current enemy and horror behaviors include:
 
-All passes run at a downscaled effect resolution (8x/4x/2x depending on
-the quality preset) so the cost is small on integrated graphics. The
-NumPy pipeline is the reference implementation and keeps the game fully
-playable with no GPU; the GLSL sources in `shaders/` mirror the same
-passes and are compile-validated with ModernGL (optional dependency,
-`pip install -e .[gl]`) when a GL context is available.
+- Detection and pursuit, with solid geometry blocking line of sight.
+- Player visibility and noise affected by crouching, flashlight use, and weather.
+- Investigation of sound and alerts shared between nearby infected.
+- Gunfire-attracted horde pressure and managed spawn pacing.
+- Different enemy durability, speed, and special behaviors.
+- An adaptive horror director that responds to nearby threats, player condition, ammunition pressure, noise, and survival time.
+- Environmental audio cues and tension/recovery pacing.
 
-### Weather, particles and audio-reactive effects
+### Exploration and progression
 
-- Dynamic weather: clear -> mist -> light rain -> heavy rain, with wind
-  gusts, pooled screen-space rain streaks and lightning (a blue-white
-  flash + synthesized thunder + camera shake).
-- Ambient particle population: drifting leaves, dust motes and shrine
-  embers, all wind-aware and quality-scaled.
-- Rain ambience loops under the music; the flashlight beam gains a
-  volumetric-style boost during rain and flickers smoothly when the
-  battery is critically low (the survival battery mechanics are
-  unchanged).
-- Horror events from the director spike the vignette, grain and
-  distortion, and give the camera a gentle shake.
-- Close pursuing enemies cast a subtle cool glow so threats read in the
-  dark without revealing distant positions.
+- Search the forest for pickups and supplies.
+- Investigate discoverable clues at landmarks.
+- Collect scrap from defeated enemies.
+- Craft and use medical supplies.
+- Maintain flashlight charge and replace depleted cells.
+- Save/load support for player progress and survival resources.
+- Shrine-related story outcomes influenced by discovered clues.
 
+## Controls
 
-## Gameplay
-
-### Core objective
-
-**Survive the forest and reach the ancient shrine.**
-
-The intended gameplay loop is:
-
-1. Explore the forest and discover routes.
-2. Search for ammunition, medical supplies, and other resources.
-3. Encounter hostile zombies.
-4. Fight or evade enemies.
-5. Manage health and ammunition.
-6. Progress toward the shrine.
-7. Complete the final objective.
-
-### Player
-
-Planned player capabilities include:
-
-- Eight-directional movement.
-- Walking and running.
-- Directional animations.
-- Collision with world obstacles.
-- Health and damage states.
-- Weapon aiming and firing.
-- Reloading and weapon switching.
-- Interacting with objects and collecting supplies.
-
-### Weapons
-
-The initial weapon lineup is planned as:
-
-| Weapon | Fire mode | Intended role |
-|---|---|---|
-| Pistol | Semi-automatic | General-purpose sidearm |
-| Shotgun | Semi-automatic | High close-range damage |
-| Assault rifle | Automatic | Sustained ranged combat |
-
-The weapon system is intended to support configurable damage, fire rate, range, magazine size, ammunition, recoil, muzzle flashes, projectile or hit detection, and weapon-specific audio.
-
-### Enemies
-
-Planned enemy archetypes:
-
-- **Regular Zombie:** Average speed and health; pursues and attacks at close range.
-- **Fast Zombie:** High movement speed and lower health; pressures the player.
-- **Tank Zombie:** Slow, durable, and capable of heavy attacks.
-
-Enemy AI is intended to include detection, pursuit, navigation, obstacle avoidance, attacks, damage reactions, death behavior, and spawn management.
-
-### Survival resources
-
-Planned pickups include ammunition, medical supplies, weapons, and other survival items. Player status is expected to include health, current weapon, ammunition, inventory, and survival state.
-
-
-## Character animation update
-
-Player and all eight infected archetypes now have dedicated eight-pose running cycles with articulated leg motion, foot lift, counter-swinging arms, forward sprint lean, and movement-synchronized footstep timing. Enemy run cycles retain individual movement styles, from fast infected to heavy brutes and low crawlers.
-
-## Implemented horror and survival systems
-
-The current `main` branch integrates the following playable systems with the existing Pygame architecture:
-
-- **Adaptive horror director:** tracks nearby threats, player health, ammunition pressure, noise, and survival time. Four tension levels pace scares, while recovery windows prevent constant attacks.
-- **Smarter zombie perception:** solid geometry blocks sight; flashlight use, crouching, and heavy rain modify detection range. Zombies investigate noise, remember the last known player position, and share alerts.
-- **Sound-attracted hordes:** sustained gunfire can draw delayed groups from distant spawn lanes. Spawn distance, group spacing, cooldowns, and an active-population cap prevent unfair spawns and uncontrolled entity growth.
-- **Special infected:** Runners, Brutes/Tanks, Crawlers, Exploders, silent Stalkers, Screamers, and Armored zombies use different stat profiles. Chasing infected accelerate gradually; Stalkers shadow the last known position while remaining quiet. Screamers alert nearby enemies; Armored zombies resist incoming damage.
-- **Finite flashlight cells:** press **F** to toggle the flashlight. It drains while on and does not recharge while off. Press **B** to install a spare cell; collectible cells are placed in the forest and spare-cell inventory is saved.
-- **Stealth:** hold **Left Ctrl** to crouch, move more slowly, make less noise, and reduce zombie sight range. A dedicated crouch animation is generated with the existing procedural sprite system.
-- **Stamina:** sprinting consumes stamina and resting restores it. Sprinting is temporarily disabled when stamina is depleted.
-- **Audio feedback:** nearby zombie groans use stereo positioning and distance attenuation. Screamers have a distinct synthesized call; low health and exhaustion trigger restrained heartbeat and breathing cues.
-- **Crafting:** defeated zombies yield scrap; press **C** to craft a 35-HP field dressing for 3 scrap.
-- **Safe zone and environmental clues:** the starting camp briefly protects the player from pursuit. Press **E** near discoverable journal/stone clues at forest landmarks.
-- **Psychological atmosphere and endings:** distant sounds, footsteps, bells, and unnatural quiet messages are paced by the horror director. The shrine encounter produces one of three story outcomes based on discovered clues.
-- **Save support:** discovered clues, stamina, scrap, flashlight charge/state, and spare battery cells persist through the existing save system.
-
-### Controls
+The following are the current keyboard and mouse controls.
 
 | Input | Action |
 |---|---|
-| F | Toggle flashlight |
-| B | Replace flashlight cell |
-| Left Ctrl | Crouch / reduce noise and visibility |
-| E | Investigate a nearby clue |
-| C | Craft a medkit (3 scrap) |
-| Shift | Sprint (uses stamina) |
-| R | Reload |
+| **W / A / S / D** or **Arrow keys** | Move |
+| **Mouse movement** | Aim |
+| **Left mouse button** | Fire current weapon |
+| **Left Shift / Right Shift** | Sprint (consumes stamina) |
+| **Left Ctrl / Right Ctrl** | Crouch (slower movement, reduced noise and visibility) |
+| **1 / 2 / 3** | Select weapon slot |
+| **R** | Reload |
+| **F** | Toggle flashlight |
+| **B** | Replace flashlight cell |
+| **Q** | Melee attack |
+| **G** | Throw grenade |
+| **H** | Use a medkit (restores up to 40 HP) |
+| **C** | Craft a medkit (costs 3 scrap) |
+| **E** | Investigate a nearby story clue |
+| **Esc / P** | Pause or open the pause menu |
+| **F1** | Toggle debug display |
 
-The systems are modular under `systems/` and include headless unit tests under `tests/`. The GitHub Actions workflow in `.github/workflows/tests.yml` compiles the Python sources and runs `python -m unittest discover -v` on pushes to `main`.
+Some actions require the relevant item or resource. For example, battery replacement requires a spare cell, grenade throwing requires a grenade, and medkit use requires a stored medkit and missing health.
 
-## Technical Design
+## Weapons, Equipment, and Survival
 
-### Isometric projection
+### Weapons
 
-The renderer will use a centralized transformation between world coordinates and screen coordinates. A basic diamond projection can be expressed as:
+The player can switch between available weapon slots with **1**, **2**, and **3**. The weapon set includes a pistol, shotgun, and assault rifle. Each weapon has its own firing characteristics, ammunition, reload behavior, and audio feedback.
 
-```python
-screen_x = (world_x - world_y) * scale_x
-screen_y = (world_x + world_y) * scale_y - world_z * height_scale
-```
+### Equipment
 
-The exact implementation may be adapted to the chosen coordinate system and rendering architecture.
+| Equipment | Key | Current behavior |
+|---|---|---|
+| Knife / melee | **Q** | Close-range directional strike with a cooldown; the equipped firearm remains selected |
+| Grenade | **G** | Throws toward the current aim direction; detonates after a short fuse and damages nearby infected |
+| Medkit | **H** | Consumes a stored medkit to restore up to 40 HP |
+| Craft medkit | **C** | Uses 3 scrap to craft and store a medkit |
+| Flashlight | **F** | Illuminates the surroundings and consumes battery charge while active |
+| Spare flashlight cell | **B** | Replaces the depleted/low cell when a spare is available |
 
-World-space and screen-space coordinates must remain separate. Collision, navigation, and gameplay calculations should use world coordinates; rendering and UI placement should use the appropriate screen-space coordinates.
+Equipment counts and survival information are shown in the HUD. Pickups and saved game data preserve supported inventory and resource state.
 
-### Camera
+### Survival mechanics
 
-Planned camera features:
+- **Health:** Damage reduces player health; temporary invulnerability prevents consecutive hits from registering instantly.
+- **Stamina:** Sprinting consumes stamina. Resting allows it to recover; sprinting is restricted when exhausted.
+- **Stealth:** Crouching slows movement, reduces footstep noise, and makes the player harder for infected to detect.
+- **Flashlight battery:** The flashlight drains while active. Turning it off conserves charge; spare cells can be collected and installed.
+- **Scrap and crafting:** Scrap collected from defeated enemies can be spent to craft a medkit.
 
-- Smooth player tracking.
-- Configurable zoom.
-- World and viewport boundaries.
-- Stable interpolation.
-- World-to-screen and screen-to-world conversion.
+## Character Animations
 
-### Rendering and depth
+Player animation states are separated so actions do not incorrectly reuse locomotion frames:
 
-The rendering system is intended to handle terrain, environment objects, characters, effects, and screen-space UI in a consistent order. Depth sorting should allow characters to pass behind trees and structures where appropriate. Tall objects should distinguish their ground position from their visual height.
+- **Idle:** Dedicated idle animation.
+- **Walking:** Dedicated movement cycle.
+- **Running:** Dedicated sprint cycle.
+- **Crouching:** Separate crouch-down transition, crouch-idle loop, and crouch-up transition.
+- **Firing:** Dedicated firing sprite animation while shooting.
+- **Reloading:** Dedicated reload sprite animation while reloading.
+- **Damage and death:** Separate reaction states.
 
-### Lighting and atmosphere
+The player animation system blends between states and uses actual collision-resolved movement to drive locomotion, helping prevent foot sliding when blocked by obstacles. Crouch animation uses a smaller fitted sprite scale so it remains visually consistent with the other player poses.
 
-Planned visual effects include ambient and directional lighting, character and environmental shadows, contact shadows, fog, particles, waterfall mist, animated water, and subtle foliage movement. Effects should be introduced incrementally and profiled rather than added at the expense of stable gameplay.
+The infected also have distinct movement cycles and animation styles suited to their archetypes.
 
-### Audio
+## Menus and Settings
 
-A centralized audio manager is planned for menu music, exploration ambience, combat music, footsteps, weapons, enemy sounds, environmental audio, and UI feedback. Music and sound-effect volumes should be independently configurable.
+### Main menu
 
-### Interface
+- **New Game** starts a new run.
+- **Continue** loads an available save; it is disabled when no save is present.
+- **Settings** opens the configuration screen.
+- **Exit** closes the game.
 
-Planned screens and interface elements:
+A loading screen is shown during world initialization, followed by a transition into the menu/game presentation.
 
-- Main menu: New Game, Continue, Settings, Exit.
-- HUD: health, weapon, ammunition, and objective.
-- Pause menu: Resume, Settings, Restart, Main Menu.
-- Settings: audio levels, resolution, fullscreen, graphics quality, camera zoom, and controls.
+### Settings
 
-UI elements must remain in screen space and must not be transformed by the isometric camera.
+The settings interface is organized into **Sound & Camera** and **Display & Graphics** sections.
 
-### Save system
+| Setting | Behavior |
+|---|---|
+| Master volume | Adjusts overall audio level |
+| Music volume | Adjusts music independently |
+| SFX volume | Adjusts sound effects independently |
+| Camera zoom | Changes camera zoom within the supported range |
+| Resolution | Cycles through supported display resolutions |
+| Fullscreen | Toggles fullscreen mode |
+| Graphics quality | Selects Low, Medium, High, or Ultra |
+| Post processing | Auto / On / Off |
 
-A save system is planned for progression, player status, current weapon, inventory, objective progress, and settings. Loading should validate save data and handle missing or corrupted files safely.
+Settings are saved separately from the game save in `saves/settings.json` and loaded on startup. Audio and camera changes apply as they are adjusted; display and graphics changes are applied through the settings workflow.
 
-## Planned Project Structure
+## Atmosphere and Rendering
 
-The following is the intended modular organization. The actual repository may evolve as implementation progresses.
+The renderer combines cached procedural assets with atmospheric effects designed for the forest setting.
 
-```text
-cprog-phygame/
-├── main.py
-├── config.py
-├── requirements.txt
-├── README.md
-├── engine/
-│   ├── game.py
-│   ├── camera.py
-│   ├── iso_projection.py
-│   ├── renderer.py
-│   ├── asset_manager.py
-│   ├── audio_manager.py
-│   ├── input_manager.py
-│   ├── collision.py
-│   ├── lighting.py
-│   └── particles.py
-├── entities/
-│   ├── entity_base.py
-│   ├── player.py
-│   ├── zombie.py
-│   ├── bullet.py
-│   ├── weapon.py
-│   └── pickup.py
-├── systems/
-│   ├── combat.py
-│   ├── enemy_ai.py
-│   ├── navigation.py
-│   ├── inventory.py
-│   ├── progression.py
-│   ├── world_manager.py
-│   └── save_manager.py
-├── world/
-│   ├── map_generator.py
-│   ├── terrain.py
-│   ├── environment.py
-│   ├── obstacles.py
-│   └── map_data.py
-├── ui/
-│   ├── main_menu.py
-│   ├── hud.py
-│   ├── pause_menu.py
-│   ├── settings_menu.py
-│   └── game_over.py
-├── assets/
-│   ├── references/
-│   ├── sprites/
-│   ├── characters/
-│   ├── enemies/
-│   ├── environment/
-│   ├── weapons/
-│   ├── effects/
-│   ├── audio/
-│   ├── fonts/
-│   └── ui/
-├── tests/
-│   ├── test_camera.py
-│   ├── test_projection.py
-│   ├── test_combat.py
-│   ├── test_collision.py
-│   └── test_enemy_ai.py
-└── build/
-```
+- Layered forest silhouettes and detailed environmental objects.
+- Isometric terrain, depth sorting, and camera-aware visibility.
+- Nighttime color grading, ambient darkness, and a directional flashlight.
+- Fog and ground mist, fireflies, film grain, vignette, and restrained post-processing.
+- Animated water ripples, waterfall mist, leaves, dust, embers, and foliage movement.
+- Dynamic weather including mist, rain, wind gusts, lightning, and synthesized thunder.
+- Camera shake and visual/audio tension effects during horror events.
+- Quality presets that scale visual effects for different hardware.
+- Optional shader support with a software/NumPy fallback.
 
-## Technology Stack
+The HUD is rendered after the cinematic scene effects so that gameplay information remains readable.
+
+## Technology and Project Structure
+
+### Technology stack
 
 | Technology | Purpose |
 |---|---|
-| Python | Primary programming language |
-| Pygame-ce | Window, input, 2D rendering, and audio |
-| NumPy | Numerical operations and optional rendering optimization |
-| OpenGL | Optional hardware acceleration if justified |
-| PyInstaller | Windows executable packaging |
+| Python 3.12 | Primary language used for development |
+| Pygame-ce | Window, input, rendering, and audio |
+| NumPy | Numerical and image-processing operations |
+| ModernGL | Optional shader validation/acceleration support |
 | Git / GitHub | Version control and source hosting |
+
+### Main directories
+
+```text
+cprog-phygame/
+├── main.py                 # Application entry point
+├── config.py               # Shared configuration and tuning
+├── engine/                 # Game loop, camera, renderer, assets, audio, input
+├── entities/               # Player, enemies, weapons, bullets, pickups
+├── systems/                # Combat, AI, inventory, survival, story, saves
+├── world/                  # Map, terrain, environment, obstacles
+├── ui/                     # Menus, HUD, settings, loading screen
+├── graphics/               # Shader and post-processing support
+├── assets/                 # Sprites, references, audio, and other assets
+├── tests/                  # Automated tests
+└── .github/workflows/      # CI workflows
+```
+
+The codebase is organized by responsibility so that gameplay systems, world simulation, rendering, and interface code can be maintained independently.
 
 ## Setup and Installation
 
 ### Requirements
 
 - Windows 10 or Windows 11.
-- Python 3.12 or another version supported by the project's dependencies.
+- Python 3.12 (recommended for the current development environment).
+- Git.
 - pip.
-- Git (optional).
 
 ### 1. Clone the repository
 
@@ -372,150 +253,68 @@ git clone https://github.com/sharpp08/cprog-phygame.git
 cd cprog-phygame
 ```
 
-### 2. Create a virtual environment
-
-```bash
-python -m venv .venv
-```
-
-### 3. Activate it
+### 2. Create and activate a virtual environment
 
 PowerShell:
 
 ```powershell
-.venv\Scripts\Activate.ps1
+python -m venv .venv
+.venv\\Scripts\\Activate.ps1
 ```
 
 Command Prompt:
 
 ```cmd
-.venv\Scripts\activate.bat
+python -m venv .venv
+.venv\\Scripts\\activate.bat
 ```
 
-### 4. Install dependencies
-
-If a `requirements.txt` file is present:
+### 3. Install dependencies
 
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-If the dependency file has not yet been created, install the framework required by the current implementation and generate a pinned requirements file as part of setup. Do not assume optional libraries are required.
-
-### 5. Run the game
-
-When `main.py` is the configured entry point:
+### 4. Launch the game
 
 ```bash
 python main.py
 ```
 
-> **Note:** The commands above describe the intended setup. Keep this section synchronized with the actual entry point and dependency list as the project develops.
+If PowerShell blocks virtual-environment activation, use the appropriate execution policy for your machine or activate the environment through Command Prompt.
 
-## Controls
+## Testing and Development
 
-Intended default controls:
-
-| Input | Action |
-|---|---|
-| W / A / S / D | Move |
-| Shift | Run |
-| Mouse movement | Aim |
-| Left mouse button | Shoot |
-| R | Reload |
-| 1 / 2 / 3 | Select weapon |
-| E | Interact / collect |
-| Esc | Pause |
-
-Controls may be customized through settings once that system is implemented.
-
-## Performance Goals
-
-The project targets a stable 60 FPS on reasonably capable systems, including integrated graphics. This is a target, not a verified performance claim.
-
-Optimization priorities:
-
-- Camera-based object culling.
-- Efficient sprite rendering and depth sorting.
-- Reusable rendering resources.
-- Efficient collision and navigation queries.
-- Controlled particle counts.
-- Delta-time-based movement and animation.
-- Efficient asset loading and audio management.
-- Configurable graphics quality.
-
-Profile representative scenes before optimizing. Do not disable visual features blindly or claim performance improvements without measurements.
-
-## Testing
-
-The project should add automated tests for:
-
-- Isometric projection and inverse projection.
-- Camera tracking and boundaries.
-- Player movement and diagonal normalization.
-- Mouse aiming and projectile direction.
-- Collision detection.
-- Enemy navigation.
-- Weapon reload and ammunition.
-- Health and damage.
-- Resource pickups.
-- Save and load validation.
-
-Manual testing should verify that the game starts, initializes a visible world, renders the player and environment, supports movement and combat, handles UI interactions, and remains stable during gameplay.
-
-A window opening successfully is not sufficient evidence that the game is playable. Capture and inspect actual gameplay output during visual validation.
-
-## Development Roadmap
-
-| Phase | Goal | Status |
-|---|---|---|
-| 1 | Project foundation and architecture | In development |
-| 2 | Isometric projection and camera | Planned / verify |
-| 3 | Ground and terrain rendering | Planned / verify |
-| 4 | Player movement and animation | Planned / verify |
-| 5 | Forest and shrine environment | Planned / verify |
-| 6 | Zombie AI and navigation | Planned / verify |
-| 7 | Weapons and combat | Planned / verify |
-| 8 | Survival mechanics and progression | Planned / verify |
-| 9 | Lighting and visual effects | Planned / verify |
-| 10 | UI and audio | Planned / verify |
-| 11 | Save system | Planned / verify |
-| 12 | Optimization and testing | Planned / verify |
-| 13 | Windows executable release | Planned / verify |
-
-Update statuses only after each feature has been implemented and tested.
-
-## Development Guidelines
-
-1. Keep systems modular and maintainable.
-2. Centralize coordinate transformations.
-3. Keep gameplay and collision calculations in world space.
-4. Reuse assets where appropriate and verify licenses.
-5. Avoid unnecessary dependencies and unrelated changes.
-6. Optimize based on profiling.
-7. Keep the game playable at each major milestone.
-8. Test each system before expanding it.
-9. Document significant architectural changes.
-10. Verify asset references before deleting files.
-11. Do not mark unfinished features as complete.
-
-## Packaging
-
-The intended Windows packaging tool is PyInstaller. A basic starting command is:
+Run the automated test suite from the repository root:
 
 ```bash
-pip install pyinstaller
-pyinstaller --noconfirm --clean --windowed --name WhenTheWoodsBleed main.py
+python -m unittest discover -v
 ```
 
-The final build configuration must bundle required assets, fonts, audio, and runtime dependencies. Test the packaged executable on a machine or environment that does not rely on the development virtual environment.
+Compile-check the Python source files:
+
+```bash
+python -m compileall -q .
+```
+
+The repository includes a GitHub Actions workflow for automated checks. A successful code update should still be tested in the actual game, particularly for rendering, animation transitions, settings changes, and combat interactions. Performance depends on the user's hardware and scene complexity; no universal FPS guarantee is made.
+
+### Development guidelines
+
+1. Keep gameplay calculations in world space and rendering/UI placement in the appropriate coordinate space.
+2. Keep systems modular and avoid unnecessary dependencies.
+3. Preserve the separation between idle, locomotion, firing, and reload animations.
+4. Profile performance before removing visual features or adding costly effects.
+5. Verify third-party asset licenses before redistribution.
+6. Update this README when controls or implemented features change.
+7. Do not describe planned or untested behavior as verified.
 
 ## Assets and Licensing
 
 Use original, properly licensed, or public-domain assets. Verify redistribution rights for sprites, textures, audio, fonts, and other third-party resources before including them in public releases. Keep source references and license information with the project where appropriate.
 
-The Isometric Forest Shrine Map is a visual design reference. The playable environment should be constructed from game assets and world objects rather than using the reference image as a static background.
+The forest-shrine reference is a visual guide. The playable world is assembled from game terrain, objects, and procedural assets rather than using the reference image as a flat background.
 
 ## Repository
 
