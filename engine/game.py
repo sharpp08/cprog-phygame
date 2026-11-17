@@ -149,6 +149,9 @@ class Game:
             self.assets.build()
             self._rebind_game()
             w, h = self.screen.get_size()
+            self.loading_screen = LoadingScreen(w, h)
+            if self.renderer is not None:
+                self.renderer.set_post_fx(self.settings.get("post_fx"))
             self.main_menu = MainMenu(w, h, self.save_manager.has_save())
             if self.pause_menu is not None:
                 self.pause_menu = PauseMenu(w, h)
