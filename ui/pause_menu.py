@@ -45,9 +45,13 @@ class PauseMenu:
 
     def draw(self, screen, fonts: FontSet) -> None:
         overlay = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        overlay.fill((10, 8, 6, 170))
+        overlay.fill((3, 8, 8, 205))
         screen.blit(overlay, (0, 0))
-        text(screen, fonts, "Paused", self.W // 2, self.H // 4, 64,
-             (240, 220, 160), "center", True)
+        panel = pygame.Rect(self.W//2 - 205, self.H//2 - 205, 410, 420)
+        pygame.draw.rect(screen, (8, 16, 15), panel, border_radius=8)
+        pygame.draw.rect(screen, (85, 105, 85), panel, 1, border_radius=8)
+        pygame.draw.line(screen, (177, 145, 91), (panel.x + 28, panel.y + 72), (panel.right - 28, panel.y + 72), 2)
+        text(screen, fonts, "FIELD PAUSED", self.W // 2, panel.y + 38, 38, (224, 211, 174), "center", True)
+        text(screen, fonts, "Take a breath. The forest is still out there.", self.W // 2, panel.y + 94, 16, (145, 164, 145), "center")
         for _, b in self.buttons:
             b.draw(screen, fonts)
