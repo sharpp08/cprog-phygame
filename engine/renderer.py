@@ -126,7 +126,7 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def draw_world(self, world, player, zombies: Sequence, pickups: Sequence,
-                   bullets: Sequence) -> None:
+                   bullets: Sequence, grenades: Sequence = ()) -> None:
         cam = self.cam
         bounds = self._cull_bounds()
         minx, miny, maxx, maxy = bounds
@@ -143,6 +143,7 @@ class Renderer:
         for it in items:
             self._draw_item(it)
         self._draw_bullets(bullets)
+        self._draw_grenades(grenades)
         self._draw_particles()
         self._apply_lighting(world, player, zombies)
         self.visual.draw_grain(self.screen, self.quality)
@@ -534,6 +535,16 @@ class Renderer:
                 p = self._scale_sprite(self.assets.spr["pellet"])
                 self.screen.blit(p, (x - 3 * cam.zoom, y - 3 * cam.zoom))
 
+    def _draw_grenades(self, grenades) -> None:
+        for grenade in grenades:
+            x, y = self.cam.iso_to_screen(grenade["x"], grenade["y"], 0.18)
+            radius = max(3, int(5 * self.cam.zoom))
+            pygame.draw.circle(self.screen, (45, 52, 42), (int(x), int(y)), radius + 2)
+            pygame.draw.circle(self.screen, (125, 145, 95), (int(x), int(y)), radius)
+            pygame.draw.circle(self.screen, (220, 190, 115),
+                               (int(x - radius * 0.35), int(y - radius * 0.35)),
+                               max(1, radius // 3))
+
     def _draw_particles(self) -> None:
         self.particles.draw(self.screen, self.cam, self.quality)
 
@@ -739,7 +750,8 @@ class Renderer:
 
     # ------------------------------------------------------------------
     def render_frame(self, world, player, zombies, pickups, bullets,
-                     dt: float, tension: float = 0.0) -> None:
+                     dt: float, tension: float = 0.0,
+                     grenades: Sequence = ()) -> None:
         """Render one full frame: world -> rain -> lighting ->
         cinematic post-processing.  The HUD is drawn by the caller on top
         of the result, so UI stays perfectly readable."""
@@ -747,7 +759,7 @@ class Renderer:
         if dt > 0:
             self._fps = self._fps * 0.9 + (1.0 / dt) * 0.1
         self.screen.fill((30, 26, 20))
-        self.draw_world(world, player, zombies, pickups, bullets)
+        self.draw_world(world, player, zombies, pickups, bullets, grenades)
         self._draw_rain(dt, world)
         self._draw_weather_tint()
         # -- cinematic post-processing (before the HUD) ------------------
