@@ -414,6 +414,12 @@ class Renderer:
         self._shadow(p.x, p.y, 34, 90)
 
         def frame_for(state, frame_index):
+            # Weapon actions deliberately use the dedicated idle pose. Do not
+            # trust action-state frame lists: older asset-loading paths could
+            # alias them to the authored running sheet.
+            if state in ("shoot", "reload"):
+                state = "idle"
+                frame_index = 0
             frames = self.assets.player_frames(state)
             frame = self._scale_sprite(frames[frame_index % len(frames)])
             if p.facing < 0:
@@ -431,7 +437,8 @@ class Renderer:
         # linear alpha crossfade, with no visible double-exposure ghost.
         eased = blend * blend * (3.0 - 2.0 * blend)
         anchor_y = cy - 0 + 10 * cam.zoom
-        if eased < 1.0 and p.prev_anim_state != p.anim_state:
+        if (eased < 1.0 and p.prev_anim_state != p.anim_state
+                and p.anim_state not in ("shoot", "reload")):
             previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
             previous.set_alpha(int(255 * (1.0 - eased)))
             # Align both frames on the same ground anchor so the planted feet
