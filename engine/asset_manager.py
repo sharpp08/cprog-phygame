@@ -1408,6 +1408,62 @@ class AssetManager:
                 print(f"[AssetManager] WARNING: {filename} failed ({exc}); "
                       "using crouch fallback for this state")
         pl["crouch"] = pl["crouch_idle"]
+
+        # Optional dedicated weapon-action sheets. They may be placed in the
+        # repository root (as requested) or assets/sprites. The sheet headings
+        # and captions are excluded; only the authored character poses are
+        # cropped. Missing files retain the neutral procedural fallback.
+        project_dir = Path(__file__).resolve().parent.parent
+
+        def load_weapon_action_sheet(filenames, frame_count, crop_top, crop_bottom):
+            path = next((folder / filename
+                         for folder in (project_dir, sprite_dir)
+                         for filename in filenames
+                         if (folder / filename).is_file()), None)
+            if path is None:
+                return None
+            sheet = pygame.image.load(str(path)).convert_alpha()
+            cell_w = sheet.get_width() / float(frame_count)
+            frames_out = []
+            for index in range(frame_count):
+                x0 = int(round(index * cell_w))
+                x1 = int(round((index + 1) * cell_w))
+                region = sheet.subsurface((
+                    x0, crop_top, max(1, x1 - x0),
+                    min(crop_bottom, sheet.get_height()) - crop_top
+                )).copy()
+                bounds = region.get_bounding_rect(min_alpha=16)
+                if bounds.width <= 1 or bounds.height <= 1:
+                    raise ValueError(
+                        f"{path.name}: frame {index + 1} has no visible character")
+                crop = region.subsurface(bounds).copy()
+                scale = min(44.0 / crop.get_width(), 66.0 / crop.get_height())
+                size = (max(1, round(crop.get_width() * scale)),
+                        max(1, round(crop.get_height() * scale)))
+                fitted = pygame.transform.smoothscale(crop, size)
+                frame = pygame.Surface((44, 66), pygame.SRCALPHA)
+                frame.blit(fitted, ((44 - size[0]) // 2, 66 - size[1]))
+                frames_out.append(frame)
+            print(f"[AssetManager] Loaded {path.name} ({frame_count} action frames)")
+            return frames_out
+
+        try:
+            pl["reload_action"] = load_weapon_action_sheet(
+                ("Reloading Sheet.png", "reloading_sheet.png",
+                 "player_reload_sheet.png"), 9, 105, 378) or list(pl["idle"])
+        except (OSError, ValueError, pygame.error) as exc:
+            print(f"[AssetManager] WARNING: reload sheet failed ({exc}); "
+                  "using idle fallback")
+            pl["reload_action"] = list(pl["idle"])
+        try:
+            pl["fire_action"] = load_weapon_action_sheet(
+                ("Shooter Firing.png", "shooter_firing.png",
+                 "player_firing_sheet.png"), 8, 88, 350) or list(pl["idle"])
+        except (OSError, ValueError, pygame.error) as exc:
+            print(f"[AssetManager] WARNING: firing sheet failed ({exc}); "
+                  "using idle fallback")
+            pl["fire_action"] = list(pl["idle"])
+
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
