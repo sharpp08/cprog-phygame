@@ -1437,11 +1437,10 @@ class AssetManager:
                     raise ValueError(
                         f"{path.name}: frame {index + 1} has no visible character")
                 crop = region.subsurface(bounds).copy()
-                # Weapon-action artwork is visually larger than the regular
-                # locomotion frames. Fit it to 80% of the standard player
+                # Fit weapon-action artwork to 95% of the standard player
                 # footprint while preserving the shared 44x66 canvas and
                 # bottom/feet anchor for seamless transitions.
-                action_w, action_h = 37.4, 56.1
+                action_w, action_h = 41.8, 62.7
                 scale = min(action_w / crop.get_width(),
                             action_h / crop.get_height())
                 size = (max(1, round(crop.get_width() * scale)),
