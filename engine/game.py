@@ -334,7 +334,7 @@ class Game:
                     self.progression.notify("No spare cell or battery is already full", 2.0)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
                 if self.survival and self.survival.craft_medkit(self.player):
-                    self.progression.notify("Field dressing crafted (+35 HP)", 2.5)
+                    self.progression.notify("Medkit crafted and stored", 2.5)
                     self.audio.play("pickup")
                 elif self.survival:
                     self.progression.notify("Need 3 scrap and missing health to craft", 2.0)
