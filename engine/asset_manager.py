@@ -1066,7 +1066,9 @@ class AssetManager:
             "run": [self._humanoid("player", "run", phase=k / 8.0,
                                    gait=1.55)
                     for k in range(8)],
-            "shoot": [self._humanoid("player", "shoot", flash=True)],
+            "shoot": [self._humanoid("player", "shoot", flash=(k == 1),
+                                     phase=k / 3.0, reach=0.28)
+                      for k in range(3)],
             "reload": [self._humanoid("player", "reload", phase=k / 4.0)
                        for k in range(4)],
             "reload_pistol": [
@@ -1183,8 +1185,8 @@ class AssetManager:
                     # animation sheet during idle/run transitions.
                     pl["run"] = padded
                     pl["walk"] = padded
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
+                    # Keep the procedural weapon-action poses; mapping these
+                    # states to run-sheet cells made firing/reloading look like running.
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Bring the running character up to the current authored
@@ -1217,8 +1219,7 @@ class AssetManager:
                     pl["walk"] = padded
                     # Action states reuse the run frames so the character
                     # model stays consistent during every gameplay action.
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
+                    # Preserve the dedicated procedural shoot/reload poses.
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Load the dedicated idle sheet if available; it provides
