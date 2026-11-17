@@ -52,14 +52,27 @@ class Button:
             pass
 
     def draw(self, screen, fonts: FontSet) -> None:
-        hovered = self.rect.collidepoint(pygame.mouse.get_pos()) \
-            and self.enabled
-        col = (46, 42, 34) if hovered else (30, 27, 22)
-        border = (190, 170, 110) if hovered else (70, 64, 54)
-        pygame.draw.rect(screen, col, self.rect, border_radius=8)
-        pygame.draw.rect(screen, border, self.rect, 2, border_radius=8)
-        text(screen, fonts, self.label, self.rect.centerx,
-             self.rect.centery, 24, (240, 235, 220), "center", True)
+        hovered = self.rect.collidepoint(pygame.mouse.get_pos()) and self.enabled
+        if not self.enabled:
+            fill, edge, ink = (15, 20, 19), (38, 48, 43), (82, 94, 84)
+        elif hovered:
+            fill, edge, ink = (49, 54, 43), (205, 177, 116), (250, 237, 207)
+        else:
+            fill, edge, ink = (18, 27, 25), (86, 104, 88), (218, 219, 194)
+        pygame.draw.rect(screen, (3, 7, 7), self.rect.move(0, 3), border_radius=5)
+        pygame.draw.rect(screen, fill, self.rect, border_radius=5)
+        pygame.draw.rect(screen, edge, self.rect, 1, border_radius=5)
+        accent_h = self.rect.h - 16 if hovered else self.rect.h - 24
+        pygame.draw.line(screen, (176, 143, 88) if hovered else (88, 103, 83),
+                         (self.rect.x + 10, self.rect.centery - accent_h//2),
+                         (self.rect.x + 10, self.rect.centery + accent_h//2), 2)
+        text(screen, fonts, self.label, self.rect.centerx + 4,
+             self.rect.centery, 22, ink, "center", True)
+        if hovered:
+            pygame.draw.line(screen, (191, 161, 105),
+                             (self.rect.x + 20, self.rect.bottom - 4),
+                             (self.rect.right - 12, self.rect.bottom - 4), 2)
+
 
 
 class Slider:
