@@ -146,7 +146,8 @@ class Game:
             self.window.set_mode(self.settings["resolution"],
                                 self.settings["fullscreen"])
             self.screen = self.window.screen
-            self.assets.build()
+            # Asset generation is deferred until the startup loading scene is
+            # already visible; a display change does not require rebuilding it.
             self._rebind_game()
             w, h = self.screen.get_size()
             self.loading_screen = LoadingScreen(w, h)
