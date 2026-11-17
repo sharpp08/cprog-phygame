@@ -1409,12 +1409,11 @@ class AssetManager:
                       "using crouch fallback for this state")
         pl["crouch"] = pl["crouch_idle"]
 
-        # Optional dedicated weapon-action sheets live in the assets folder.
-        # Also accept assets/sprites for consistency with the other player sheets.
+        # Dedicated weapon-action sheets are stored alongside the other
+        # player sprite sheets in assets/sprites.
         # Sheet headings and captions are excluded; only character poses are
         # cropped. Missing files retain the neutral procedural fallback.
-        project_dir = Path(__file__).resolve().parent.parent
-        weapon_asset_dirs = (project_dir / "assets", sprite_dir)
+        weapon_asset_dirs = (sprite_dir,)
 
         def load_weapon_action_sheet(filenames, frame_count, crop_top, crop_bottom):
             path = next((folder / filename
