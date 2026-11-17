@@ -413,11 +413,19 @@ class Renderer:
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
 
+        # Read the live weapon/action flags as well as anim_state. Input is
+        # processed after Player.update(), so anim_state can still be "run"
+        # for the frame in which fire/reload begins.
+        weapon_action = (
+            not p.crouching and
+            (bool(getattr(p.weapon, "reloading", False)) or
+             float(getattr(p, "_shoot_flash", 0.0)) > 0.0)
+        )
+
         def frame_for(state, frame_index):
-            # Weapon actions deliberately use the dedicated idle pose. Do not
-            # trust action-state frame lists: older asset-loading paths could
-            # alias them to the authored running sheet.
-            if state in ("shoot", "reload"):
+            # Weapon actions always use the neutral idle pose. This is based
+            # on the live action flags, not only the possibly stale anim_state.
+            if weapon_action or state in ("shoot", "reload"):
                 state = "idle"
                 frame_index = 0
             frames = self.assets.player_frames(state)
@@ -436,8 +444,13 @@ class Renderer:
         # and the new pose settles in smoothly -- a smoother morph than a flat
         # linear alpha crossfade, with no visible double-exposure ghost.
         eased = blend * blend * (3.0 - 2.0 * blend)
+        if weapon_action:
+            # Do not let the outgoing locomotion pose show through or fade
+            # the neutral action pose during the input/update ordering gap.
+            eased = 1.0
         anchor_y = cy - 0 + 10 * cam.zoom
-        if (eased < 1.0 and p.prev_anim_state != p.anim_state
+        if (not weapon_action and eased < 1.0
+                and p.prev_anim_state != p.anim_state
                 and p.anim_state not in ("shoot", "reload")):
             previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
             previous.set_alpha(int(255 * (1.0 - eased)))
