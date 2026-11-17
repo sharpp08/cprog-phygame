@@ -21,7 +21,7 @@ def main() -> int:
     window = Window()
     window.create()
     game = Game(window)
-    # honour any persisted settings would go here; defaults for now
+    # Apply saved user preferences loaded by Game before entering the loop.
     game.apply_settings(apply_window=True)
     try:
         game.run()
