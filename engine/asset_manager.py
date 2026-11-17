@@ -1437,7 +1437,13 @@ class AssetManager:
                     raise ValueError(
                         f"{path.name}: frame {index + 1} has no visible character")
                 crop = region.subsurface(bounds).copy()
-                scale = min(44.0 / crop.get_width(), 66.0 / crop.get_height())
+                # Weapon-action artwork is visually larger than the regular
+                # locomotion frames. Fit it to 80% of the standard player
+                # footprint while preserving the shared 44x66 canvas and
+                # bottom/feet anchor for seamless transitions.
+                action_w, action_h = 35.2, 52.8
+                scale = min(action_w / crop.get_width(),
+                            action_h / crop.get_height())
                 size = (max(1, round(crop.get_width() * scale)),
                         max(1, round(crop.get_height() * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
