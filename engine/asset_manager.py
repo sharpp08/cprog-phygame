@@ -1160,8 +1160,6 @@ class AssetManager:
                     # animation sheet during idle/run transitions.
                     pl["run"] = padded
                     pl["walk"] = padded
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Bring the running character up to the current authored
@@ -1192,10 +1190,7 @@ class AssetManager:
                     padded = run_size_matched
                     pl["run"] = padded
                     pl["walk"] = padded
-                    # Action states reuse the run frames so the character
-                    # model stays consistent during every gameplay action.
-                    pl["shoot"] = [padded[0]]
-                    pl["reload"] = [padded[k % 8] for k in range(4)]
+                    # Fire and reload remain static neutral poses.
                     pl["hit"] = [padded[4]]
                     pl["crouch"] = [padded[k % 8] for k in range(8)]
                     # Load the dedicated idle sheet if available; it provides
@@ -1332,6 +1327,11 @@ class AssetManager:
                             pygame.draw.rect(breathe, (0, 0, 0, 0),
                                              (0, 0, target_w, 1))
                         pl["idle"] = [idle_frame, breathe]
+                    # Keep weapon actions static and neutral. Never source
+                    # these states from the authored run sheet.
+                    neutral = pl["idle"][0]
+                    pl["shoot"] = [neutral]
+                    pl["reload"] = [neutral]
                     print(f"[AssetManager] Loaded authored player sheets "
                           f"({sheet.get_width()}x{sheet.get_height()}, "
                           f"8 frames -> all states, "
