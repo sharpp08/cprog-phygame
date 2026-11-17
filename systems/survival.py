@@ -11,6 +11,8 @@ class SurvivalSystem:
         self.low_battery_warned = False
         self.battery_cells = 2
         self.scrap = 0
+        self.medkits = 1
+        self.grenades = 2
         # Hysteresis prevents sprint from flickering at empty stamina.
         self._sprint_locked = False
 
@@ -63,8 +65,18 @@ class SurvivalSystem:
         if self.scrap < cost or player.hp >= player.max_hp:
             return False
         self.scrap -= cost
+        self.medkits = min(9, self.medkits + 1)
+        return True
+
+    def use_medkit(self, player, healing: float = 40.0) -> bool:
+        if self.medkits <= 0 or player.hp >= player.max_hp:
+            return False
+        self.medkits -= 1
         player.hp = min(player.max_hp, player.hp + healing)
         return True
+
+    def add_grenades(self, amount: int = 1) -> None:
+        self.grenades = max(0, min(9, self.grenades + int(amount)))
 
     @property
     def battery_percent(self) -> int:
