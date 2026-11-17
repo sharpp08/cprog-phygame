@@ -1278,26 +1278,18 @@ class AssetManager:
                                         idle_padded.append(ns)
                                     else:
                                         idle_padded.append(f)
-                            # Match the visible idle character to the visible
-                            # running character, not merely the transparent canvas.
-                            # Use the largest opaque run-frame bounds as the size
-                            # reference, then scale each idle pose proportionally
-                            # and keep its feet on the same bottom anchor.
-                            run_bounds = [frame.get_bounding_rect() for frame in padded]
-                            run_visible_w = max((b.width for b in run_bounds), default=target_w)
-                            run_visible_h = max((b.height for b in run_bounds), default=idle_h)
+                            # Match idle character sizing to the dedicated firing
+                            # and reload poses (73% of the standard 44x66 frame),
+                            # keeping every pose bottom/feet-aligned.
+                            action_w, action_h = 32.12, 48.18
                             size_matched_idle = []
                             for idle_frame in idle_padded:
                                 bounds = idle_frame.get_bounding_rect()
                                 canvas = pygame.Surface((target_w, idle_h), pygame.SRCALPHA)
                                 if bounds.width > 0 and bounds.height > 0:
-                                    # Match the idle sprite to the enlarged run
-                                    # frames without applying a second size boost.
                                     scale = min(
-                                        run_visible_w / bounds.width,
-                                        run_visible_h / bounds.height,
-                                        target_w / bounds.width,
-                                        idle_h / bounds.height,
+                                        action_w / bounds.width,
+                                        action_h / bounds.height,
                                     )
                                     new_size = (max(1, round(bounds.width * scale)),
                                                 max(1, round(bounds.height * scale)))
