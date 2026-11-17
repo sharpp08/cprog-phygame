@@ -118,8 +118,14 @@ class SettingsMenu:
 
     # ------------------------------------------------------------------
     def draw(self, screen, fonts: FontSet) -> None:
-        text(screen, fonts, "Settings", self.W // 2, 70, 48,
-             (240, 220, 160), "center", True)
+        shade = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
+        shade.fill((3, 8, 8, 190))
+        screen.blit(shade, (0, 0))
+        panel = pygame.Rect(34, 34, self.W - 68, self.H - 68)
+        pygame.draw.rect(screen, (8, 17, 16), panel, border_radius=8)
+        pygame.draw.rect(screen, (76, 98, 81), panel, 1, border_radius=8)
+        text(screen, fonts, "FIELD SETTINGS", self.W // 2, 78, 38, (224, 211, 174), "center", True)
+        text(screen, fonts, "AUDIO  /  DISPLAY  /  CONTROLS", self.W // 2, 111, 15, (139, 158, 139), "center")
         for s in self.sliders:
             s.draw(screen, fonts)
         for b in (self.res_button, self.fs_button, self.q_button,
