@@ -73,7 +73,7 @@ class MainMenu:
             text(screen, fonts, "NO FIELD RECORD", r.right - 14,
                  r.centery, 10, (91, 105, 91), "right", True)
         else:
-            text(screen, " " if False else fonts, "›", r.right - 22,
+            text(screen, fonts, "›", r.right - 22,
                  r.centery - 1, 26, ink, "center", True)
         if hovered:
             pygame.draw.line(screen, (195, 163, 105),
