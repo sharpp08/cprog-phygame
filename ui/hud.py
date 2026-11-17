@@ -79,8 +79,10 @@ class HUD:
         # weapon + ammo (bottom-left)
         w = player.weapon
         wx, wy = 24, self.H - 64
-        pygame.draw.rect(screen, (30, 26, 22, 200),
-                         (wx - 8, wy - 8, 300, 56), border_radius=8)
+        pygame.draw.rect(screen, (8, 15, 14, 205),
+                         (wx - 8, wy - 8, 310, 56), border_radius=6)
+        pygame.draw.rect(screen, (68, 83, 68),
+                         (wx - 8, wy - 8, 310, 56), 1, border_radius=6)
         text(screen, f, w.name, wx, wy + 6, 24, (240, 230, 210), "left",
              True)
         col = (240, 200, 120) if w.mag > 0 else (200, 90, 70)
@@ -143,12 +145,20 @@ class HUD:
             text(screen, f, f"CLUES {len(story.discovered)}/{len(story.clues)}  [E] INVESTIGATE{clue_hint}",
                  self.W // 2, self.H - 24, 17, (205, 190, 155), "center")
 
-        # objective (top-centre)
-        text(screen, f, progression.objective, self.W // 2, 30, 22,
-             (235, 225, 200), "center")
+        # Objective sits in a restrained translucent field plate.
+        objective_panel = pygame.Surface((min(520, int(self.W * 0.48)), 42), pygame.SRCALPHA)
+        objective_panel.fill((7, 13, 12, 174))
+        ox = (self.W - objective_panel.get_width()) // 2
+        screen.blit(objective_panel, (ox, 8))
+        pygame.draw.line(screen, (116, 103, 72), (ox + 14, 9), (ox + objective_panel.get_width() - 14, 9), 1)
+        text(screen, f, progression.objective, self.W // 2, 29, 19,
+             (224, 218, 190), "center", True)
 
         # score / wave / time (top-right)
         rx = self.W - 24
+        stats_panel = pygame.Surface((190, 86), pygame.SRCALPHA)
+        stats_panel.fill((7, 13, 12, 150))
+        screen.blit(stats_panel, (self.W - 202, 8))
         text(screen, f, f"Wave {progression.wave}" if progression.phase ==
              "shrine" else f"Kills {progression.kills}", rx, 30, 22,
              (240, 210, 120), "right", True)
