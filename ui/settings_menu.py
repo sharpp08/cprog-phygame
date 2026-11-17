@@ -12,10 +12,12 @@ class SettingsMenu:
     RES_NAMES = [f"{w}x{h}" for (w, h) in config.RESOLUTIONS]
     QUAL_NAMES = list(config.QUALITY)
 
-    def __init__(self, w: int, h: int, settings: dict, audio=None) -> None:
+    def __init__(self, w: int, h: int, settings: dict, audio=None, camera=None, on_apply=None) -> None:
         self.W, self.H = w, h
         self.settings = settings
         self.audio = audio
+        self.camera = camera
+        self.on_apply = on_apply
         self.fonts = FontSet()
         self._back_target = "main_menu"
         self._layout()
@@ -99,6 +101,8 @@ class SettingsMenu:
 
     def _on_zoom(self, v):
         self.settings["zoom"] = v
+        if self.camera is not None:
+            self.camera.set_zoom(v)
 
     def _apply_audio(self) -> None:
         if self.audio:
@@ -121,13 +125,19 @@ class SettingsMenu:
             elif self.q_button.rect.collidepoint(event.pos):
                 self.settings["quality"] = (self.settings.get("quality", 1) + 1) % len(self.QUAL_NAMES)
                 self._refresh_labels()
+                self._apply_live()
             elif self.pf_button.rect.collidepoint(event.pos):
                 cur = self.settings.get("post_fx")
-                self.settings["post_fx"] = None if cur is None else not cur
+                self.settings["post_fx"] = True if cur is None else (False if cur else None)
                 self._refresh_labels()
+                self._apply_live()
             elif self.back.rect.collidepoint(event.pos):
                 return "back"
         return None
+
+    def _apply_live(self) -> None:
+        if self.on_apply is not None:
+            self.on_apply()
 
     def _refresh_labels(self) -> None:
         self.res_button.label = "RESOLUTION   " + self.RES_NAMES[self.settings.get("resolution", 1)]
