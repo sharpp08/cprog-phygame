@@ -38,23 +38,27 @@ class GameOver:
     def draw(self, screen, fonts: FontSet, won: bool, score: int,
              kills: int, time_s: int) -> None:
         overlay = pygame.Surface((self.W, self.H), pygame.SRCALPHA)
-        overlay.fill((8, 6, 4, 200))
+        overlay.fill((3, 7, 7, 220))
         screen.blit(overlay, (0, 0))
+        panel = pygame.Rect(self.W//2 - 310, self.H//2 - 205, 620, 440)
+        pygame.draw.rect(screen, (8, 17, 15), panel, border_radius=8)
+        pygame.draw.rect(screen, (83, 102, 80), panel, 1, border_radius=8)
+        pygame.draw.line(screen, (177, 145, 91), (panel.x + 36, panel.y + 82), (panel.right - 36, panel.y + 82), 2)
         f = self.fonts
         if won:
             title = self.ending_title or "You Escaped"
-            text(screen, f, title, self.W // 2, self.H // 4, 58,
+            text(screen, f, title, self.W // 2, panel.y + 48, 48,
                  (180, 220, 120), "center", True)
             sub = self.ending_subtitle or "The forest falls silent behind you."
         else:
-            text(screen, f, "You Died", self.W // 2, self.H // 4, 72,
-                 (200, 70, 50), "center", True)
+            text(screen, f, "YOU DIED", self.W // 2, panel.y + 48, 58,
+                 (200, 83, 62), "center", True)
             sub = "The forest reclaims another soul."
-        text(screen, f, sub, self.W // 2, self.H // 4 + 50, 26,
+        text(screen, f, sub, self.W // 2, panel.y + 112, 21,
              (200, 190, 170), "center")
         text(screen, f, f"Score {score}    Kills {kills}    "
              f"Time {int(time_s // 60)}:{int(time_s % 60):02d}",
-             self.W // 2, self.H // 2 + 20, 24, (230, 220, 200), "center",
+             self.W // 2, panel.y + 208, 22, (230, 220, 200), "center",
              True)
         for _, b in self.buttons:
             b.draw(screen, fonts)
