@@ -784,8 +784,8 @@ class Game:
 
     # ------------------------------------------------------------------
     def _render(self) -> None:
-        if self.state in ("playing", "paused", "settings") and \
-                self.renderer is not None:
+        has_world = self.renderer is not None and self.wm is not None
+        if self.state in ("playing", "paused", "settings") and has_world:
             tension = self.horror.tension if self.horror is not None else 0.0
             self.renderer.render_frame(self.wm.world, self.player,
                                        self.wm.controller.zombies,
@@ -800,7 +800,15 @@ class Game:
                 self.pause_menu.draw(self.screen, self.fonts)
             elif self.state == "settings" and self.settings_menu is not None:
                 self.settings_menu.draw(self.screen, self.fonts)
-        elif self.state not in ("playing", "paused", "settings"):
+        elif self.state == "settings":
+            # Settings can be opened directly from the main menu, before a
+            # world/renderer exists. Keep the cinematic menu visible beneath
+            # the settings overlay instead of leaving the display black.
+            self.audio.stop_rain()
+            self._draw_menu_scene()
+            if self.settings_menu is not None:
+                self.settings_menu.draw(self.screen, self.fonts)
+        elif self.state not in ("playing", "paused"):
             self.audio.stop_rain()
         if self.state == "menu":
             self._draw_menu_bg()
