@@ -459,7 +459,38 @@ class Renderer:
             px = cx - (previous.get_width() // 2)
             py = anchor_y - previous.get_height()
             self.screen.blit(previous, (px, py))
-        spr = frame_for(p.anim_state, p.frame_index)
+        # Dedicated weapon sheets override locomotion only while the
+        # corresponding action is active. Their frame counts also distinguish
+        # a loaded sheet from the short neutral fallback used when absent.
+        action_frames = None
+        action_index = 0
+        if not p.crouching and bool(getattr(p.weapon, "reloading", False)):
+            reload_frames = self.assets.player_frames("reload_action")
+            if len(reload_frames) >= 9:
+                action_frames = reload_frames
+                progress = max(0.0, min(
+                    1.0, float(getattr(p.weapon, "reload_progress", 0.0))))
+                action_index = min(8, int(progress * 9.0))
+        elif not p.crouching and float(getattr(p, "_shoot_flash", 0.0)) > 0.0:
+            fire_frames = self.assets.player_frames("fire_action")
+            if len(fire_frames) >= 8:
+                action_frames = fire_frames
+                elapsed = max(0.0, 0.24 - float(p._shoot_flash))
+                action_index = min(7, int(elapsed / 0.03))
+
+        if action_frames is not None:
+            spr = self._scale_sprite(action_frames[action_index])
+            if p.facing < 0:
+                key = id(spr)
+                flipped = self._flip_cache.get(key)
+                if flipped is None:
+                    flipped = pygame.transform.flip(spr, True, False)
+                    self._flip_cache[key] = flipped
+                spr = flipped
+            eased = 1.0
+        else:
+            spr = frame_for(p.anim_state, p.frame_index)
+
         # Crouch poses are already authored in the correct lowered/leaning
         # posture. Do not rotate them again; that distorts the provided art.
         if eased < 1.0:
