@@ -220,6 +220,8 @@ class Game:
         self.survival.flashlight_battery = float(sd.get("flashlight_battery", 100.0))
         self.survival.battery_cells = int(sd.get("battery_cells", 2))
         self.survival.flashlight_on = bool(sd.get("flashlight_on", True))
+        self.survival.medkits = max(0, min(9, int(sd.get("medkits", 1))))
+        self.survival.grenades = max(0, min(9, int(sd.get("grenades", 2))))
         self.player.flashlight_on = self.survival.flashlight_on
         self.progression.phase = pg.get("phase", "explore")
         self.progression.state = "playing"
@@ -336,6 +338,22 @@ class Game:
                     self.audio.play("pickup")
                 elif self.survival:
                     self.progression.notify("Need 3 scrap and missing health to craft", 2.0)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
+                if self.combat is not None:
+                    self.combat.request_melee(self.player)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
+                if self.survival and self.survival.grenades > 0 and self.combat:
+                    if self.combat.throw_grenade(self.player, self.player.aim):
+                        self.survival.grenades -= 1
+                        self.wm.controller.emit_noise(self.player.x, self.player.y, 15.0, 1.0)
+                elif self.survival:
+                    self.progression.notify("No grenades available", 1.5)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_h:
+                if self.survival and self.survival.use_medkit(self.player):
+                    self.progression.notify("Medkit used (+40 HP)", 1.8)
+                    self.audio.play("pickup")
+                elif self.survival:
+                    self.progression.notify("No medkit or health is already full", 1.8)
             if InputManager.pause_pressed():
                 self._open_pause()
         elif self.state == "paused":
@@ -579,7 +597,8 @@ class Game:
                                        self.wm.controller.zombies,
                                        self.wm.active_pickups(),
                                        self.combat.bullets, self.dt,
-                                       tension=tension)
+                                       tension=tension,
+                                       grenades=self.combat.grenades)
             self.hud.draw(self.screen, self.player, self.progression,
                           self.survival, self.story, self.dt,
                           horror=self.horror)
