@@ -1449,16 +1449,16 @@ class AssetManager:
 
         try:
             pl["reload_action"] = load_weapon_action_sheet(
-                ("Reloading Sheet.png", "reloading_sheet.png",
-                 "player_reload_sheet.png"), 9, 105, 378) or list(pl["idle"])
+                ("Reloading Sheet.png", "Reloading Sheet(1).png",
+                 "reloading_sheet.png", "player_reload_sheet.png"), 9, 105, 378) or list(pl["idle"])
         except (OSError, ValueError, pygame.error) as exc:
             print(f"[AssetManager] WARNING: reload sheet failed ({exc}); "
                   "using idle fallback")
             pl["reload_action"] = list(pl["idle"])
         try:
             pl["fire_action"] = load_weapon_action_sheet(
-                ("Shooter Firing.png", "shooter_firing.png",
-                 "player_firing_sheet.png"), 8, 88, 350) or list(pl["idle"])
+                ("Shooter Firing.png", "Shooter Firing(1).png",
+                 "shooter_firing.png", "player_firing_sheet.png"), 8, 88, 350) or list(pl["idle"])
         except (OSError, ValueError, pygame.error) as exc:
             print(f"[AssetManager] WARNING: firing sheet failed ({exc}); "
                   "using idle fallback")
