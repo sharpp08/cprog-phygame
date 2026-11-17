@@ -458,8 +458,9 @@ class Game:
 
     def _open_settings(self, return_state: str) -> None:
         self._settings_return = return_state
-        self.settings_menu = SettingsMenu(*self.screen.get_size(),
-                                          self.settings, self.audio)
+        self.settings_menu = SettingsMenu(
+            *self.screen.get_size(), self.settings, self.audio,
+            camera=self.cam, on_apply=lambda: self.apply_settings(False))
         self.settings_menu.set_back_target(return_state)
         self.state = "settings"
 
