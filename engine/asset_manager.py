@@ -1357,9 +1357,10 @@ class AssetManager:
                 size = (max(1, round(crop.get_width() * scale)),
                         max(1, round(crop.get_height() * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
-                # Match crouch poses to the same 73% visible footprint
-                # used by idle, running, firing, and reloading sprites.
-                crouch_scale = min(32.12 / size[0], 48.18 / size[1])
+                # Keep crouch poses slightly smaller at 70% of the
+                # standard player footprint, preserving the shared canvas
+                # and planted-foot anchor.
+                crouch_scale = min(30.8 / size[0], 46.2 / size[1])
                 crouch_size = (
                     max(1, round(size[0] * crouch_scale)),
                     max(1, round(size[1] * crouch_scale)),
