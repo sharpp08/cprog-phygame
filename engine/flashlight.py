@@ -27,7 +27,7 @@ def _blockers_for(world):
             radius = {
                 "tree": 0.76, "shrine": 0.78, "waterfall": 0.68,
                 "ruin": 0.70, "rock": 0.52, "bush": 0.30,
-            }.get(kind, 0.32)
+            }.get(kind, 0.64)
             bx, by = float(obstacle.x), float(obstacle.y)
             blocker_cells.setdefault((int(math.floor(bx)),
                                       int(math.floor(by))), []).append(

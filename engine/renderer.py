@@ -413,7 +413,21 @@ class Renderer:
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
         self._shadow(p.x, p.y, 34, 90)
 
+        # Read the live weapon/action flags as well as anim_state. Input is
+        # processed after Player.update(), so anim_state can still be "run"
+        # for the frame in which fire/reload begins.
+        weapon_action = (
+            not p.crouching and
+            (bool(getattr(p.weapon, "reloading", False)) or
+             float(getattr(p, "_shoot_flash", 0.0)) > 0.0)
+        )
+
         def frame_for(state, frame_index):
+            # Weapon actions always use the neutral idle pose. This is based
+            # on the live action flags, not only the possibly stale anim_state.
+            if weapon_action or state in ("shoot", "reload"):
+                state = "idle"
+                frame_index = 0
             frames = self.assets.player_frames(state)
             frame = self._scale_sprite(frames[frame_index % len(frames)])
             if p.facing < 0:
@@ -430,8 +444,14 @@ class Renderer:
         # and the new pose settles in smoothly -- a smoother morph than a flat
         # linear alpha crossfade, with no visible double-exposure ghost.
         eased = blend * blend * (3.0 - 2.0 * blend)
+        if weapon_action:
+            # Do not let the outgoing locomotion pose show through or fade
+            # the neutral action pose during the input/update ordering gap.
+            eased = 1.0
         anchor_y = cy - 0 + 10 * cam.zoom
-        if eased < 1.0 and p.prev_anim_state != p.anim_state:
+        if (not weapon_action and eased < 1.0
+                and p.prev_anim_state != p.anim_state
+                and p.anim_state not in ("shoot", "reload")):
             previous = frame_for(p.prev_anim_state, p.prev_frame_index).copy()
             previous.set_alpha(int(255 * (1.0 - eased)))
             # Align both frames on the same ground anchor so the planted feet
@@ -439,7 +459,38 @@ class Renderer:
             px = cx - (previous.get_width() // 2)
             py = anchor_y - previous.get_height()
             self.screen.blit(previous, (px, py))
-        spr = frame_for(p.anim_state, p.frame_index)
+        # Dedicated weapon sheets override locomotion only while the
+        # corresponding action is active. Their frame counts also distinguish
+        # a loaded sheet from the short neutral fallback used when absent.
+        action_frames = None
+        action_index = 0
+        if not p.crouching and bool(getattr(p.weapon, "reloading", False)):
+            reload_frames = self.assets.player_frames("reload_action")
+            if len(reload_frames) >= 9:
+                action_frames = reload_frames
+                progress = max(0.0, min(
+                    1.0, float(getattr(p.weapon, "reload_progress", 0.0))))
+                action_index = min(8, int(progress * 9.0))
+        elif not p.crouching and float(getattr(p, "_shoot_flash", 0.0)) > 0.0:
+            fire_frames = self.assets.player_frames("fire_action")
+            if len(fire_frames) >= 8:
+                action_frames = fire_frames
+                elapsed = max(0.0, 0.24 - float(p._shoot_flash))
+                action_index = min(7, int(elapsed / 0.03))
+
+        if action_frames is not None:
+            spr = self._scale_sprite(action_frames[action_index])
+            if p.facing < 0:
+                key = id(spr)
+                flipped = self._flip_cache.get(key)
+                if flipped is None:
+                    flipped = pygame.transform.flip(spr, True, False)
+                    self._flip_cache[key] = flipped
+                spr = flipped
+            eased = 1.0
+        else:
+            spr = frame_for(p.anim_state, p.frame_index)
+
         # Crouch poses are already authored in the correct lowered/leaning
         # posture. Do not rotate them again; that distorts the provided art.
         if eased < 1.0:
