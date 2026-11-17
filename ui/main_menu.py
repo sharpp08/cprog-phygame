@@ -85,51 +85,112 @@ class MainMenu:
         t = pygame.time.get_ticks() * .001
         screen.fill((5, 10, 11))
 
-        # Cold twilight gradient with a warm horizon line.
-        for y in range(0, h, 3):
+        # Layered twilight sky with a distant amber horizon.
+        for y in range(0, h, 2):
             q = y / max(1, h)
-            col = (int(7 + 10*q), int(13 + 12*q), int(18 + 8*q))
-            pygame.draw.rect(screen, col, (0, y, w, 3))
+            col = (int(5 + 17*q), int(11 + 14*q), int(17 + 7*q))
+            pygame.draw.line(screen, col, (0, y), (w, y))
 
-        # Distant moon, halo and subtle star field.
-        moon = (int(w * .77), int(h * .255))
-        halo = pygame.Surface((360, 360), pygame.SRCALPHA)
-        for radius, alpha in ((174, 4), (135, 7), (96, 12), (62, 18)):
-            pygame.draw.circle(halo, (168, 187, 157, alpha),
-                               (180, 180), radius)
-        screen.blit(halo, (moon[0] - 180, moon[1] - 180))
-        for x, y, speed in self._stars:
-            pulse = 105 + int(90 * abs(math.sin(t * speed + x * .03)))
-            screen.set_at((x, y), (pulse, pulse, max(0, pulse - 18)))
-        pygame.draw.circle(screen, (173, 184, 157), moon, max(20, h // 28))
-        pygame.draw.circle(screen, (198, 201, 174), (moon[0] - 5, moon[1] - 6),
-                           max(14, h // 38))
+        # Broken cloud bands soften the moonlight instead of a clean flat moon.
+        cloud = pygame.Surface((w, h), pygame.SRCALPHA)
+        for i in range(11):
+            cx = int((i * 227 + t * (5 + i % 3)) % (w + 280)) - 140
+            cy = int(h * (.13 + (i % 4) * .075))
+            pygame.draw.ellipse(cloud, (105, 125, 121, 13),
+                                (cx - 120, cy - 13, 240, 27))
+        screen.blit(cloud, (0, 0))
 
-        # Three drifting forest layers create depth and parallax.
-        for layer, count in ((0, 13), (1, 19), (2, 26)):
-            base = int(h * (0.70 + layer * .085))
-            color = ((21, 38, 34), (11, 23, 21), (4, 10, 11))[layer]
+        # Moon behind broken cloud: diffuse halo and restrained reflected light.
+        moon = (int(w * .78), int(h * .24))
+        halo = pygame.Surface((int(h * .72), int(h * .72)), pygame.SRCALPHA)
+        hc = halo.get_width() // 2
+        for radius, alpha in ((hc, 4), (int(hc*.76), 7),
+                              (int(hc*.52), 11), (int(hc*.30), 17)):
+            pygame.draw.circle(halo, (167, 184, 157, alpha), (hc, hc), radius)
+        screen.blit(halo, (moon[0]-hc, moon[1]-hc))
+        pygame.draw.circle(screen, (151, 165, 145), moon, max(18, h//34))
+        pygame.draw.circle(screen, (184, 190, 165),
+                           (moon[0]-4, moon[1]-5), max(13, h//43))
+
+        # Deep forest silhouettes: irregular trunks, branches and layered canopies.
+        for layer, count in ((0, 18), (1, 24), (2, 30)):
+            base = int(h * (.66 + layer * .105))
+            color = ((25, 42, 34), (12, 26, 23), (5, 12, 12))[layer]
             for i in range(count):
-                seed = i * 97 + layer * 31
-                drift = t * (2.2 + layer * 3.0)
-                x = int((seed * 43 + drift * (1 if i % 2 else -1)) % (w + 110)) - 55
-                tw = 30 + seed % 38
-                th = int(h * (.19 + (seed % 17) / 100 + layer * .025))
-                pygame.draw.rect(screen, color,
-                                 (x - 3, base - th // 3, 6, th // 3 + 5))
-                pygame.draw.polygon(screen, color,
-                    [(x, base-th), (x-tw//2, base-th//3),
-                     (x-tw//4, base-th//3), (x-tw//2, base),
-                     (x+tw//2, base), (x+tw//4, base-th//3),
-                     (x+tw//2, base-th//3)])
+                seed = i * 83 + layer * 47
+                x = int((seed * 37 + t * (1.2 + layer*1.5) *
+                         (1 if i % 2 else -1)) % (w + 150)) - 75
+                trunk_h = int(h * (.17 + (seed % 19) * .012))
+                trunk_w = max(4, 10 - layer*2)
+                pygame.draw.polygon(screen, color, [
+                    (x-trunk_w, base), (x-trunk_w//2, base-trunk_h*.72),
+                    (x-2, base-trunk_h), (x+3, base-trunk_h*.96),
+                    (x+trunk_w//2, base-trunk_h*.68), (x+trunk_w, base)])
+                for branch in (-1, 1):
+                    pygame.draw.line(screen, color,
+                        (x, base-trunk_h*.65),
+                        (x+branch*(12+seed%18), base-trunk_h*.83),
+                        max(2, trunk_w//2))
 
-        # Low rolling mist.
+        # Game-world clearing: an isometric shrine approach, pond and stone path.
+        ground_y = int(h * .83)
+        clearing = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.ellipse(clearing, (37, 48, 34, 210),
+                            (int(w*.38), int(h*.57), int(w*.72), int(h*.55)))
+        pygame.draw.ellipse(clearing, (23, 45, 43, 205),
+                            (int(w*.69), int(h*.64), int(w*.25), int(h*.12)))
+        # Moonlit pond rim and small water reflections.
+        pygame.draw.ellipse(clearing, (73, 91, 69, 130),
+                            (int(w*.69), int(h*.64), int(w*.25), int(h*.12)), 3)
+        for i in range(8):
+            rx = int(w*.72 + (i*31) % max(1,int(w*.18)))
+            ry = int(h*(.69 + (i%3)*.018))
+            pygame.draw.line(clearing, (119, 155, 151, 42),
+                             (rx, ry), (rx+14, ry-2), 1)
+
+        # Worn dirt trail leads toward the shrine clearing.
+        path_pts = [
+            (int(w*.62), ground_y), (int(w*.66), int(h*.75)),
+            (int(w*.61), int(h*.69)), (int(w*.55), int(h*.65)),
+            (int(w*.52), int(h*.60))]
+        pygame.draw.lines(clearing, (91, 72, 49, 185), False, path_pts,
+                          max(13, int(h*.025)))
+        pygame.draw.lines(clearing, (139, 111, 73, 75), False, path_pts,
+                          max(2, int(h*.004)))
+
+        # Small shrine landmark, matching the game's forest-shrine setting.
+        sx, sy = int(w*.59), int(h*.565)
+        pygame.draw.ellipse(clearing, (0, 0, 0, 115),
+                            (sx-42, sy+26, 90, 22))
+        pygame.draw.rect(clearing, (69, 47, 33, 255),
+                         (sx-27, sy-8, 54, 39))
+        pygame.draw.polygon(clearing, (116, 48, 34, 255),
+                            [(sx-37, sy-8), (sx, sy-34),
+                             (sx+37, sy-8), (sx+29, sy-2),
+                             (sx, sy-24), (sx-29, sy-2)])
+        pygame.draw.line(clearing, (173, 119, 67, 255),
+                         (sx-25, sy-6), (sx+25, sy-6), 2)
+        pygame.draw.rect(clearing, (22, 28, 22, 255),
+                         (sx-7, sy+8, 14, 23))
+        pygame.draw.circle(clearing, (220, 164, 83, 110),
+                           (sx, sy+3), 22, 2)
+
+        # Foreground grass, roots and dead branches frame the playable clearing.
+        for i in range(42):
+            seed = i * 59
+            gx = (seed * 29) % max(1, w)
+            gy = int(h*(.73 + (seed%23)/100))
+            col = (43, 65, 43, 110) if i%2 else (91, 103, 61, 90)
+            pygame.draw.line(clearing, col, (gx, gy), (gx-4, gy-10-(i%5)), 2)
+        screen.blit(clearing, (0, 0))
+
+        # Moving ground fog hugs the clearing and waterline.
         mist = pygame.Surface((w, h), pygame.SRCALPHA)
-        for i in range(5):
-            mx = int((t * (8 + i * 3) + i * w * .29) % (w + 440)) - 220
-            my = int(h * (.62 + i * .065))
-            pygame.draw.ellipse(mist, (145, 163, 143, 12),
-                                (mx - 220, my - 24, 440, 76))
+        for i in range(7):
+            mx = int((t*(7+i*2)+i*w*.23)%(w+420))-210
+            my = int(h*(.68+(i%4)*.055))
+            pygame.draw.ellipse(mist, (151, 170, 151, 13),
+                                (mx-210, my-18, 420, 58))
         screen.blit(mist, (0, 0))
 
         # Dark vignette makes the moonlit focal area and menu read clearly.
@@ -176,14 +237,14 @@ class MainMenu:
         screen.blit(report, (rx, report_y))
         pygame.draw.line(screen, (151, 124, 81), (rx, report_y),
                          (rx + report_w, report_y), 2)
-        text(screen, fonts, "FIELD REPORT  /  01",
+        text(screen, fonts, "SURVIVAL STATUS  /  01",
              rx + 14, report_y + 20, 13, (190, 158, 101), "left", True)
-        text(screen, fonts, "SIGNAL LOST",
-             rx + 14, report_y + 54, 24, (205, 133, 100), "left", True)
-        text(screen, fonts, "No response beyond the tree line.",
+        text(screen, fonts, "SHRINE SECTOR",
+             rx + 14, report_y + 54, 22, (218, 207, 170), "left", True)
+        text(screen, fonts, "The forest is overrun.",
              rx + 14, report_y + 83, 14, (164, 177, 157), "left")
-        text(screen, fonts, "Last transmission: 02:17 AM",
-             rx + 14, report_y + 106, 12, (119, 139, 122), "left")
+        text(screen, fonts, "OBJECTIVE: SURVIVE THE WAVES",
+             rx + 14, report_y + 106, 11, (190, 145, 103), "left", True)
 
         text(screen, fonts, "WASD MOVE   /   MOUSE AIM   /   ESC PAUSE",
              int(w * .055), h - 22, 12, (105, 126, 113), "left")
