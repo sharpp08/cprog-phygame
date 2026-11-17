@@ -1166,6 +1166,9 @@ class AssetManager:
                     # idle character's visual scale. Enlarge only opaque pixels,
                     # keep the feet on the same bottom anchor, and retain the
                     # shared canvas dimensions used by the renderer.
+                    # Keep running/walking poses at the same 73% visible
+                    # footprint as idle, firing, and reloading.
+                    action_w, action_h = 32.12, 48.18
                     run_size_matched = []
                     for run_frame in padded:
                         bounds = run_frame.get_bounding_rect()
@@ -1173,9 +1176,8 @@ class AssetManager:
                                                 pygame.SRCALPHA)
                         if bounds.width > 0 and bounds.height > 0:
                             scale = min(
-                                1.04,
-                                (target_w - 2) / bounds.width,
-                                (target_h_final - 1) / bounds.height,
+                                action_w / bounds.width,
+                                action_h / bounds.height,
                             )
                             new_size = (
                                 max(1, round(bounds.width * scale)),
@@ -1355,12 +1357,9 @@ class AssetManager:
                 size = (max(1, round(crop.get_width() * scale)),
                         max(1, round(crop.get_height() * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
-                # The authored crouch art is noticeably larger than the
-                # standing player sprites. Scale the character pixels down
-                # while keeping the shared 44x66 frame canvas unchanged, so
-                # every crouch pose stays aligned to the same planted-foot
-                # anchor and transitions do not shift the player position.
-                crouch_scale = 0.65
+                # Match crouch poses to the same 73% visible footprint
+                # used by idle, running, firing, and reloading sprites.
+                crouch_scale = min(32.12 / size[0], 48.18 / size[1])
                 crouch_size = (
                     max(1, round(size[0] * crouch_scale)),
                     max(1, round(size[1] * crouch_scale)),
