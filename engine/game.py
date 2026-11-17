@@ -55,7 +55,7 @@ class Game:
         # shader work ever happens inside the gameplay loop.  The live
         # context is only used when ModernGL works on this machine; the
         # NumPy post pipeline stays the guaranteed fallback.
-        self.shaders = build_manager(live=True)
+        self.shaders = None
         self.input = InputManager()
         self.save_manager = SaveManager()
         self.fonts = FontSet()
@@ -343,10 +343,45 @@ class Game:
                                    self.settings, self.story, self.survival)
 
     # ------------------------------------------------------------------
+    def _transition_loading_to_menu(self) -> None:
+        """Crossfade the animated forest interstitial into the finished menu."""
+        if not self.running:
+            return
+        menu_frame = pygame.Surface(self.screen.get_size()).convert()
+        self._draw_menu_bg()
+        self.main_menu.draw(self.screen, self.fonts)
+        menu_frame.blit(self.screen, (0, 0))
+        clock = pygame.time.Clock()
+        started = pygame.time.get_ticks()
+        duration = 1100
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                    return
+            elapsed = (pygame.time.get_ticks() - started) / 1000.0
+            t = min(1.0, elapsed / (duration / 1000.0))
+            eased = t * t * (3.0 - 2.0 * t)
+            self.loading_screen.draw(
+                self.screen, elapsed, "ENTERING THE FOREST")
+            menu_frame.set_alpha(int(255 * eased))
+            self.screen.blit(menu_frame, (0, 0))
+            pygame.display.flip()
+            if t >= 1.0:
+                break
+            clock.tick(45)
+        menu_frame.set_alpha(255)
+        self.screen.blit(menu_frame, (0, 0))
+        pygame.display.flip()
+
     def run(self) -> None:
         self._init_audio()
+        self.loading_screen = LoadingScreen(*self.screen.get_size())
+        self._show_loading_screen("INITIALIZING THE FOREST")
+        self.shaders = build_manager(live=True)
         self.assets.build()
         self.audio.play_music("menu")
+        self._transition_loading_to_menu()
         while self.running:
             self._frame()
         self._save_user_settings()
