@@ -254,6 +254,9 @@ class Player(Entity):
         elif self.anim_state == "reload":
             self.anim_timer += dt
             self.frame_index = int(self.anim_timer * 3.0) % 4
+        elif self.anim_state == "shoot":
+            self.anim_timer += dt
+            self.frame_index = min(2, int(self.anim_timer * 18.0))
         else:
             self.frame_index = 0
 
