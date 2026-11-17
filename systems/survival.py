@@ -62,7 +62,7 @@ class SurvivalSystem:
 
     def craft_medkit(self, player, cost: int = 3, healing: float = 35.0) -> bool:
         """Craft a field dressing from scavenged zombie scrap."""
-        if self.scrap < cost or player.hp >= player.max_hp:
+        if self.scrap < cost or self.medkits >= 9:
             return False
         self.scrap -= cost
         self.medkits = min(9, self.medkits + 1)
