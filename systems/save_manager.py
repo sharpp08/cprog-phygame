@@ -1,11 +1,14 @@
-"""Save / load system.  Persists player, progression and settings as JSON and
-refuses to load files that are missing or malformed so a bad save can never
-crash the game.
+"""Atomic, validated save/load for player progress.
+
+Save data lives in the per-user writable data directory configured by
+``config.SAVE_DIR`` so packaged/read-only installations do not lose progress.
 """
 from __future__ import annotations
 
 import json
+import math
 import os
+import tempfile
 from typing import Optional
 
 import config
@@ -16,13 +19,13 @@ SAVE_FILE = "save.json"
 
 class SaveManager:
     def __init__(self, save_dir: str = config.SAVE_DIR) -> None:
-        self.save_dir = save_dir
-        os.makedirs(save_dir, exist_ok=True)
-        self.path = os.path.join(save_dir, SAVE_FILE)
+        self.save_dir = os.path.abspath(os.path.expanduser(save_dir))
+        os.makedirs(self.save_dir, exist_ok=True)
+        self.path = os.path.join(self.save_dir, SAVE_FILE)
 
-    # ------------------------------------------------------------------
     def save(self, player, progression, settings: dict,
              story=None, survival=None) -> bool:
+        """Write a complete snapshot atomically; never leave a partial save."""
         data = {
             "version": SAVE_VERSION,
             "player": player.to_dict(),
@@ -45,38 +48,68 @@ class SaveManager:
                 "medkits": survival.medkits if survival else 1,
                 "grenades": survival.grenades if survival else 2,
             },
-            "settings": settings,
+            "settings": settings if isinstance(settings, dict) else {},
         }
+        temp_path = None
         try:
-            with open(self.path, "w") as f:
-                json.dump(data, f, indent=2)
+            os.makedirs(self.save_dir, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8", dir=self.save_dir,
+                    prefix=".save-", suffix=".tmp", delete=False) as handle:
+                temp_path = handle.name
+                json.dump(data, handle, indent=2, allow_nan=False)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, self.path)
             return True
-        except Exception:
+        except (OSError, TypeError, ValueError):
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
             return False
 
     def has_save(self) -> bool:
-        return os.path.exists(self.path)
+        return os.path.isfile(self.path)
 
     def delete(self) -> None:
-        if os.path.exists(self.path):
+        try:
             os.remove(self.path)
+        except FileNotFoundError:
+            pass
 
-    # ------------------------------------------------------------------
     def load(self) -> Optional[dict]:
-        """Return a validated save dict, or None if missing / corrupt."""
-        if not os.path.exists(self.path):
+        """Return a structurally valid, resumable save or ``None``."""
+        if not os.path.isfile(self.path):
             return None
         try:
-            with open(self.path) as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError):
+            with open(self.path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return None
         if not isinstance(data, dict) or data.get("version") != SAVE_VERSION:
             return None
-        if "player" not in data or "progression" not in data:
+        player = data.get("player")
+        progression = data.get("progression")
+        if not isinstance(player, dict) or not isinstance(progression, dict):
             return None
-        p = data["player"]
-        if not all(k in p for k in ("x", "y", "hp", "weapons")):
+        if not all(key in player for key in ("x", "y", "hp", "weapons")):
+            return None
+        if not isinstance(player.get("weapons"), list):
+            return None
+        try:
+            x, y, hp = (float(player[key]) for key in ("x", "y", "hp"))
+            if not all(math.isfinite(value) for value in (x, y, hp)):
+                return None
+            if hp <= 0:
+                return None
+        except (TypeError, ValueError):
             return None
         data["settings"] = data.get("settings", {})
+        if not isinstance(data["settings"], dict):
+            data["settings"] = {}
+        data["survival"] = data.get("survival", {})
+        if not isinstance(data["survival"], dict):
+            data["survival"] = {}
         return data

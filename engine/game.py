@@ -406,11 +406,10 @@ class Game:
         if self.progression.state == "won" and self.story is not None:
             self.game_over.ending_title, self.game_over.ending_subtitle = self.story.ending()
         self.audio.stop_music()
-        if self.progression.state == "won":
-            self.save_manager.delete()
-        else:
-            self.save_manager.save(self.player, self.progression,
-                                   self.settings, self.story, self.survival)
+        # A lost run must not be offered as a resumable Continue save with
+        # zero HP. Progress is saved only when the player deliberately
+        # returns to the main menu while still alive.
+        self.save_manager.delete()
         # Present the game-over screen through the shared renderer first so
         # the crossfade starts from the live world frame, not a stale menu.
         self._present()

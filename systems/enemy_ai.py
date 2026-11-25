@@ -63,6 +63,9 @@ class ZombieController:
         z._repath_cd = random.uniform(0.4, 0.8)
         z._tx = self._player.x if self._player else x
         z._ty = self._player.y if self._player else y
+        # Alternate approach lanes so a group spreads around the survivor.
+        z._flank_offset = -0.58 if len(self.zombies) % 2 else 0.58
+        z._flank_radius = 0.86 + (len(self.zombies) % 3) * 0.14
         if style is None:
             style = self._pick_emerge_style(x, y)
         if emerge:
@@ -288,9 +291,11 @@ class ZombieController:
             z.repath_timer -= dt
             if z.state == "pursue":
                 # Different approach lanes reduce enemy stacking.
-                angle = math.atan2(z.y - p.y, z.x - p.x)
-                target = (p.x + math.cos(angle) * 0.75,
-                          p.y + math.sin(angle) * 0.75)
+                angle = (math.atan2(z.y - p.y, z.x - p.x)
+                         + getattr(z, "_flank_offset", 0.0))
+                radius = getattr(z, "_flank_radius", 0.9)
+                target = (p.x + math.cos(angle) * radius,
+                          p.y + math.sin(angle) * radius)
             elif z.state == "investigating" and noise_target is not None:
                 target = noise_target
             else:

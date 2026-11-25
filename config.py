@@ -11,7 +11,22 @@ import os
 # Paths
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-SAVE_DIR = os.path.join(PROJECT_ROOT, "saves")
+
+def _user_data_dir() -> str:
+    """Return a writable per-user data directory (safe for packaged builds)."""
+    override = os.environ.get("CPROG_PHYGAME_DATA_DIR")
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.join(
+            os.path.expanduser("~"), "AppData", "Roaming")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(
+            os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "CPROG-PhyGame")
+
+DATA_DIR = _user_data_dir()
+SAVE_DIR = DATA_DIR
 ASSET_DIR = os.path.join(PROJECT_ROOT, "assets")
 
 # ---------------------------------------------------------------------------
