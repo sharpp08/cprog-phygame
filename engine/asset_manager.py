@@ -1496,7 +1496,7 @@ class AssetManager:
         for state in ("idle", "walk", "run", "shoot", "reload", "hit",
                       "fire_action", "reload_action"):
             if state in pl:
-                factor = 0.97 if state in slightly_smaller_states else 1.0
+                factor = 0.99 if state in slightly_smaller_states else 1.0
                 pl[state] = normalize_upright_frames(pl[state], factor)
 
         frames["player"] = pl

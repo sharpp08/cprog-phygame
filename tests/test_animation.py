@@ -504,14 +504,14 @@ class TestFrameValidity(unittest.TestCase):
 
 
     def test_player_standing_actions_share_consistent_size_and_ground_anchor(self):
-        """Idle/reload retain baseline size; walk/run/fire are 3% smaller."""
+        """Idle/reload retain baseline size; walk/run/fire are 1% smaller."""
         player = self.assets.frames["player"]
         states = ("idle", "walk", "run", "shoot", "fire_action", "reload_action")
         smaller_states = {"walk", "run", "shoot", "fire_action"}
         for state in states:
             self.assertIn(state, player)
             self.assertTrue(player[state], f"{state} has no frames")
-            expected_height = 47 if state in smaller_states else 48
+            expected_height = 48  # 1% scaling rounds to the same whole-pixel height.
             for index, frame in enumerate(player[state]):
                 with self.subTest(state=state, frame=index):
                     self.assertEqual(frame.get_size(), (44, 66))
