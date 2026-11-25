@@ -1460,6 +1460,39 @@ class AssetManager:
                   "using idle fallback")
             pl["fire_action"] = list(pl["idle"])
 
+        # Normalize every upright player pose after all authored sheets have
+        # been loaded.  A common 44x66 canvas alone is not enough: transparent
+        # margins inside different sheets can make the visible character jump
+        # in size during idle/run/fire transitions.  Scale the opaque artwork
+        # to one shared visible height, preserve its aspect ratio, and pin the
+        # lowest visible pixel to the same ground row.
+        def normalize_upright_frames(frame_list):
+            normalized = []
+            for original in frame_list:
+                bounds = original.get_bounding_rect(min_alpha=8)
+                canvas = pygame.Surface((44, 66), pygame.SRCALPHA)
+                if bounds.width <= 0 or bounds.height <= 0:
+                    normalized.append(canvas)
+                    continue
+                crop = original.subsurface(bounds).copy()
+                # The visible character (feet to top of head) has one canonical
+                # height. Keep a small horizontal safety margin for weapon poses.
+                scale = min(48.0 / bounds.height, 42.0 / bounds.width)
+                size = (max(1, round(bounds.width * scale)),
+                        max(1, round(bounds.height * scale)))
+                fitted = pygame.transform.smoothscale(crop, size)
+                canvas.blit(fitted, ((44 - size[0]) // 2, 66 - size[1]))
+                normalized.append(canvas)
+            return normalized
+
+        # These are the states that represent the same standing character.
+        # Crouch/death/emergence are intentionally excluded because their
+        # different silhouettes are part of the animation, not a scale error.
+        for state in ("idle", "walk", "run", "shoot", "reload", "hit",
+                      "fire_action", "reload_action"):
+            if state in pl:
+                pl[state] = normalize_upright_frames(pl[state])
+
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):
             # Each infected type gets its own eight-pose run silhouette and
