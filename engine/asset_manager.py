@@ -1467,7 +1467,7 @@ class AssetManager:
         # in size during idle/run/fire transitions.  Scale the opaque artwork
         # to one shared visible height, preserve its aspect ratio, and pin the
         # lowest visible pixel to the same ground row.
-        def normalize_upright_frames(frame_list):
+        def normalize_upright_frames(frame_list, scale_factor=1.0):
             normalized = []
             for original in frame_list:
                 bounds = original.get_bounding_rect(min_alpha=8)
@@ -1479,6 +1479,7 @@ class AssetManager:
                 # The visible character (feet to top of head) has one canonical
                 # height. Keep a small horizontal safety margin for weapon poses.
                 scale = min(48.0 / bounds.height, 42.0 / bounds.width)
+                scale *= scale_factor
                 size = (max(1, round(bounds.width * scale)),
                         max(1, round(bounds.height * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
@@ -1489,10 +1490,14 @@ class AssetManager:
         # These are the states that represent the same standing character.
         # Crouch/death/emergence are intentionally excluded because their
         # different silhouettes are part of the animation, not a scale error.
+        # Slightly reduce only locomotion and firing poses so they feel
+        # less bulky without changing the idle/reload silhouette.
+        slightly_smaller_states = {"walk", "run", "shoot", "fire_action"}
         for state in ("idle", "walk", "run", "shoot", "reload", "hit",
                       "fire_action", "reload_action"):
             if state in pl:
-                pl[state] = normalize_upright_frames(pl[state])
+                factor = 0.97 if state in slightly_smaller_states else 1.0
+                pl[state] = normalize_upright_frames(pl[state], factor)
 
         frames["player"] = pl
         for zt in ("regular", "fast", "tank", "crawler", "exploder", "screamer", "armored", "stalker"):

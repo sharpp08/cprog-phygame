@@ -503,20 +503,22 @@ class TestFrameValidity(unittest.TestCase):
         self.assertGreater(player._gait, 0.0)
 
 
-    def test_player_standing_actions_share_one_visible_size_and_ground_anchor(self):
-        """Idle, locomotion and weapon actions must not pop between scales."""
+    def test_player_standing_actions_share_consistent_size_and_ground_anchor(self):
+        """Idle/reload retain baseline size; walk/run/fire are 3% smaller."""
         player = self.assets.frames["player"]
-        states = ("idle", "walk", "run", "fire_action", "reload_action")
+        states = ("idle", "walk", "run", "shoot", "fire_action", "reload_action")
+        smaller_states = {"walk", "run", "shoot", "fire_action"}
         for state in states:
             self.assertIn(state, player)
             self.assertTrue(player[state], f"{state} has no frames")
+            expected_height = 47 if state in smaller_states else 48
             for index, frame in enumerate(player[state]):
                 with self.subTest(state=state, frame=index):
                     self.assertEqual(frame.get_size(), (44, 66))
                     bounds = frame.get_bounding_rect(min_alpha=8)
-                    self.assertEqual(bounds.height, 48,
+                    self.assertEqual(bounds.height, expected_height,
                                      f"{state} frame {index} has visible height "
-                                     f"{bounds.height}px instead of 48px")
+                                     f"{bounds.height}px instead of {expected_height}px")
                     self.assertEqual(bounds.bottom, 66,
                                      f"{state} frame {index} is not ground-anchored")
 
