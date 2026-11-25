@@ -504,7 +504,7 @@ class TestFrameValidity(unittest.TestCase):
 
 
     def test_player_standing_actions_share_consistent_size_and_ground_anchor(self):
-        """Idle/reload retain baseline size; walk/run/fire are 1% smaller."""
+        """Idle, walk, run and fire poses use 1% reduction; reload stays baseline."""
         player = self.assets.frames["player"]
         states = ("idle", "walk", "run", "shoot", "fire_action", "reload_action")
         smaller_states = {"walk", "run", "shoot", "fire_action"}

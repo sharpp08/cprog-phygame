@@ -1490,9 +1490,9 @@ class AssetManager:
         # These are the states that represent the same standing character.
         # Crouch/death/emergence are intentionally excluded because their
         # different silhouettes are part of the animation, not a scale error.
-        # Slightly reduce only locomotion and firing poses so they feel
-        # less bulky without changing the idle/reload silhouette.
-        slightly_smaller_states = {"walk", "run", "shoot", "fire_action"}
+        # Slightly reduce the idle, locomotion and firing poses while keeping
+        # reload poses at their established baseline size.
+        slightly_smaller_states = {"idle", "walk", "run", "shoot", "fire_action"}
         for state in ("idle", "walk", "run", "shoot", "reload", "hit",
                       "fire_action", "reload_action"):
             if state in pl:
