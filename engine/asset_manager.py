@@ -1357,10 +1357,10 @@ class AssetManager:
                 size = (max(1, round(crop.get_width() * scale)),
                         max(1, round(crop.get_height() * scale)))
                 fitted = pygame.transform.smoothscale(crop, size)
-                # Crouch sprites should be about 65% of the standing
-                # sprite's visible 32x48 footprint, not 65% of the full canvas.
+                # Crouch sprites should be about 75% of the standing
+                # sprite's visible 32x48 footprint, not 75% of the full canvas.
                 # Preserve proportions and keep the feet on the shared ground line.
-                crouch_scale = min(20.8 / size[0], 31.2 / size[1])
+                crouch_scale = min(24.0 / size[0], 36.0 / size[1])
                 crouch_size = (
                     max(1, round(size[0] * crouch_scale)),
                     max(1, round(size[1] * crouch_scale)),

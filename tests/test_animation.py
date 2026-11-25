@@ -528,7 +528,7 @@ class TestFrameValidity(unittest.TestCase):
                 with self.subTest(state=state, frame=index):
                     self.assertEqual(frame.get_size(), (44, 66))
 
-    def test_crouch_sprites_are_about_65_percent_of_standing_size(self):
+    def test_crouch_sprites_are_about_75_percent_of_standing_size(self):
         player = self.assets.frames["player"]
         for state in ("crouch", "crouch_idle", "crouch_up", "crouch_down"):
             self.assertTrue(player[state], f"{state} has no frames")
@@ -536,8 +536,8 @@ class TestFrameValidity(unittest.TestCase):
                 with self.subTest(state=state, frame=index):
                     self.assertEqual(frame.get_size(), (44, 66))
                     bounds = frame.get_bounding_rect(min_alpha=8)
-                    self.assertLessEqual(bounds.width, 21)
-                    self.assertLessEqual(bounds.height, 32)
+                    self.assertLessEqual(bounds.width, 25)
+                    self.assertLessEqual(bounds.height, 37)
                     self.assertEqual(bounds.bottom, 66,
                                      "Crouch sprite must remain ground-anchored")
 
