@@ -111,7 +111,7 @@ class VisualEnhancement:
         pygame.transform.smoothscale(
             self._blur_small, (self.width, self.height), self._blur_full)
 
-        sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
+        sx, sy = cam.iso_to_screen(player.x, player.y, getattr(player, "z", 0.0))
         cx = int(sx * self._bw / self.width)
         cy = int(sy * self._bh / self.height)
         # Keep the full player sprite sharp, not just the feet/pivot.
@@ -179,7 +179,7 @@ class VisualEnhancement:
         lights = []
         for i, (wx, wy, radius, intensity) in enumerate(
                 getattr(world, "lights", ())):
-            sx, sy = cam.iso_to_screen(wx, wy, 0.0)
+            sx, sy = cam.iso_to_screen(wx, wy, world.height_at(wx, wy) * config.TERRAIN_HEIGHT_SCALE)
             # environmental lights breathe very slightly (fire flicker)
             breathe = 0.92 + 0.08 * math.sin(time_value * 4.2 + i * 1.7)
             lights.append((sx / 4.0, sy / 4.0,
@@ -189,7 +189,7 @@ class VisualEnhancement:
         # deliberately broad and low-intensity; the sharper directional
         # flashlight beam still follows the cursor and does the main lighting.
         if player is not None:
-            psx, psy = cam.iso_to_screen(player.x, player.y, 0.0)
+            psx, psy = cam.iso_to_screen(player.x, player.y, getattr(player, "z", 0.0))
             halo_radius = 6.0 * 32.0 * zoom / 4.0
             halo_strength = 0.24
             lights.append((psx / 4.0, psy / 4.0,
@@ -215,7 +215,7 @@ class VisualEnhancement:
                     * math.sin(time_value * 3.7 + 1.0))
             lvl *= flick
             self._fl_level = lvl
-            sx, sy = cam.iso_to_screen(player.x, player.y, 0.0)
+            sx, sy = cam.iso_to_screen(player.x, player.y, getattr(player, "z", 0.0))
             if lvl > 0.03:
                 aim_x, aim_y = getattr(player, "aim", (1.0, 0.0))
                 dx = (aim_x - aim_y) * config.SCALE_X
@@ -242,7 +242,7 @@ class VisualEnhancement:
                 center_x, center_y = ox / 4.0, oy / 4.0
                 mid_ray = (len(rays) - 1) * 0.5
                 for ray_index, (end_x, end_y, energy, _surface) in enumerate(rays):
-                    ex, ey = cam.iso_to_screen(end_x, end_y, 0.0)
+                    ex, ey = cam.iso_to_screen(end_x, end_y, world.height_at(end_x, end_y) * config.TERRAIN_HEIGHT_SCALE)
                     current = (int(ex), int(ey))
                     if previous is not None:
                         strength = max(0.0, min(1.0, energy))
