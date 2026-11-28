@@ -29,6 +29,7 @@ from ui.game_over import GameOver
 from ui.hud import HUD
 from ui.main_menu import MainMenu
 from ui.pause_menu import PauseMenu
+from ui.inventory_menu import InventoryMenu
 from ui.settings_menu import SettingsMenu
 from ui.widgets import FontSet
 from ui.loading_screen import LoadingScreen
@@ -77,6 +78,7 @@ class Game:
                                   self.save_manager.has_save())
         self.loading_screen = LoadingScreen(config.WINDOW_W, config.WINDOW_H)
         self.pause_menu: Optional[PauseMenu] = None
+        self.inventory_menu: Optional[InventoryMenu] = None
         self.settings_menu: Optional[SettingsMenu] = None
         self.game_over: Optional[GameOver] = None
         self.hud: Optional[HUD] = None
@@ -496,6 +498,9 @@ class Game:
             self._handle_menu_result(self.main_menu.handle(event,
                                                            self.audio))
         elif self.state == "playing":
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_i, pygame.K_TAB):
+                self._open_inventory()
+                return
             self.input.process(event)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 if self.survival is not None:
@@ -512,7 +517,7 @@ class Game:
                 if self.survival and self.survival.replace_battery():
                     self.player.flashlight_on = self.survival.flashlight_on
                     self.progression.notify("Fresh flashlight cell installed", 2.0)
-                    self.audio.play("pickup")
+                    self.audio.play("battery_swap")
                 elif self.survival:
                     self.progression.notify("No spare cell or battery is already full", 2.0)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
@@ -534,11 +539,18 @@ class Game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_h:
                 if self.survival and self.survival.use_medkit(self.player):
                     self.progression.notify("Medkit used (+40 HP)", 1.8)
-                    self.audio.play("pickup")
+                    self.audio.play("medkit_use")
                 elif self.survival:
                     self.progression.notify("No medkit or health is already full", 1.8)
             if InputManager.pause_pressed():
                 self._open_pause()
+        elif self.state == "inventory":
+            if self.inventory_menu is not None:
+                result = self.inventory_menu.handle(
+                    event, self.player, self.survival, self.story, self.audio)
+                if result == "close":
+                    self.inventory_menu = None
+                    self.state = "playing"
         elif self.state == "paused":
             self._handle_pause_result(self.pause_menu.handle(event,
                                                              self.audio))
@@ -580,6 +592,12 @@ class Game:
         self.state = "settings"
         # Fade into the settings page over the preserved background.
         self._crossfade(self._render, duration=0.35)
+
+    def _open_inventory(self) -> None:
+        self.inventory_menu = InventoryMenu(*self.screen.get_size())
+        self.state = "inventory"
+        self.audio.play("inventory_open")
+        self._crossfade(self._render, duration=0.18)
 
     def _open_pause(self) -> None:
         self.pause_menu = PauseMenu(*self.screen.get_size())
@@ -640,7 +658,7 @@ class Game:
                               speed_scale=0.52 if crouching else 1.0)
         player.update(dt)
         if player.footstep_sound:
-            self.audio.play("footstep")
+            self.audio.play("footstep_run" if player.running else ("footstep_crouch" if crouching else "footstep_walk"))
             if self.wm.controller:
                 self.wm.controller.emit_noise(
                     player.x, player.y,
@@ -784,7 +802,7 @@ class Game:
     # ------------------------------------------------------------------
     def _render(self) -> None:
         has_world = self.renderer is not None and self.wm is not None
-        if self.state in ("playing", "paused", "settings") and has_world:
+        if self.state in ("playing", "paused", "settings", "inventory") and has_world:
             tension = self.horror.tension if self.horror is not None else 0.0
             self.renderer.render_frame(self.wm.world, self.player,
                                        self.wm.controller.zombies,
@@ -799,6 +817,9 @@ class Game:
                 self.pause_menu.draw(self.screen, self.fonts)
             elif self.state == "settings" and self.settings_menu is not None:
                 self.settings_menu.draw(self.screen, self.fonts)
+            elif self.state == "inventory" and self.inventory_menu is not None:
+                self.inventory_menu.draw(self.screen, self.player,
+                                         self.survival, self.story)
         elif self.state == "settings":
             # Settings can be opened directly from the main menu, before a
             # world/renderer exists. Keep the cinematic menu visible beneath

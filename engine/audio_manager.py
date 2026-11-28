@@ -164,6 +164,53 @@ class AudioManager:
         self.sfx["ui"] = _f32_to_sound(
             np.sin(2 * np.pi * 660 * t) * self._decay(n, 30) * 0.4)
 
+        # Distinct tactile UI and survival-item cues. These short layered
+        # procedural effects are deliberately separate from the generic UI blip.
+        n = int(r * 0.34)
+        t = np.arange(n) / r
+        paper = self._lp(self._noise(n), 0.16) * np.exp(-t * 9.0)
+        latch = np.sin(2 * np.pi * (180 - 90 * t) * t) * np.exp(-t * 15.0)
+        self.sfx["inventory_open"] = _f32_to_sound(
+            (paper * 0.42 + latch * 0.58) * 0.62)
+        self.sfx["inventory_close"] = _f32_to_sound(
+            (paper[::-1] * 0.24 - latch * 0.5) * np.exp(-t * 2.0) * 0.58)
+
+        n = int(r * 0.22)
+        t = np.arange(n) / r
+        metal = np.sin(2 * np.pi * (920 - 420 * t) * t) * np.exp(-t * 22.0)
+        tick = self._lp(self._noise(n), 0.42) * np.exp(-t * 55.0)
+        self.sfx["item_select"] = _f32_to_sound(metal * 0.25 + tick * 0.18)
+        self.sfx["weapon_switch"] = _f32_to_sound(
+            (self._lp(self._noise(n), 0.62) * np.exp(-t * 30.0) * 0.65) +
+            (np.sin(2 * np.pi * 145 * t) * np.exp(-t * 19.0) * 0.25))
+
+        n = int(r * 0.72)
+        t = np.arange(n) / r
+        cloth = self._lp(self._noise(n), 0.055) * np.sin(np.pi * t / 0.72)
+        buckle = np.sin(2 * np.pi * 1250 * t) * np.exp(-np.maximum(0, t - 0.48) * 28)
+        self.sfx["medkit_use"] = _f32_to_sound(cloth * 0.48 + buckle * 0.18)
+
+        n = int(r * 0.48)
+        t = np.arange(n) / r
+        cell_click = self._lp(self._noise(n), 0.58) * np.exp(-t * 17.0)
+        cell_hum = np.sin(2 * np.pi * (210 + 35 * np.sin(2 * np.pi * 3 * t)) * t)
+        self.sfx["battery_swap"] = _f32_to_sound(
+            cell_click * 0.58 + cell_hum * np.exp(-t * 8.0) * 0.18)
+
+        # Three grounded footfall textures prevent every gait from sharing
+        # one identical synthetic thump.
+        for name, low, noise_level, duration in (
+            ("footstep_walk", 78, 0.34, 0.16),
+            ("footstep_run", 92, 0.48, 0.19),
+            ("footstep_crouch", 58, 0.18, 0.21),
+        ):
+            n = int(r * duration)
+            t = np.arange(n) / r
+            body = np.sin(2 * np.pi * low * t) * np.exp(-t * 25.0)
+            grit = self._lp(self._noise(n), 0.24) * np.exp(-t * 32.0)
+            self.sfx[name] = _f32_to_sound(
+                (body * (1.0 - noise_level) + grit * noise_level) * 0.46)
+
         # Thunder: a low filtered rumble under a deep 45 Hz thump.
         n = int(r * 1.4)
         t = np.arange(n) / r
