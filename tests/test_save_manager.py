@@ -1,5 +1,7 @@
 """Regression tests for safe, portable save-game persistence."""
 import json
+
+import config
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -28,6 +30,8 @@ class SaveManagerTests(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertEqual(data["player"]["hp"], 80)
         self.assertEqual(data["settings"]["master"], 0.8)
+        self.assertEqual(data["world"]["width"], config.MAP_W)
+        self.assertEqual(data["world"]["height"], config.MAP_H)
 
     def test_corrupt_save_is_rejected(self):
         with open(self.manager.path, "w", encoding="utf-8") as handle:

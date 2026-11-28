@@ -345,8 +345,19 @@ class Game:
             return False
         self._init_world()
         pd = data["player"]
+        saved_world = data.get("world", {})
+        if not isinstance(saved_world, dict):
+            saved_world = {}
+        saved_w = max(2, int(saved_world.get("width", 48)))
+        saved_h = max(2, int(saved_world.get("height", 48)))
+        px = float(pd["x"]) * (self.wm.world.W - 1) / (saved_w - 1)
+        py = float(pd["y"]) * (self.wm.world.H - 1) / (saved_h - 1)
+        # Old 48x48 saves are proportionally migrated to the expanded forest.
+        if self.wm.grid.is_blocked(int(round(px)), int(round(py))):
+            clear_x, clear_y = self.wm.grid.find_clear_tile((px, py))
+            px, py = clear_x + 0.5, clear_y + 0.5
         weapons = [Weapon.from_dict(w) for w in pd["weapons"]]
-        self.player = Player(pd["x"], pd["y"], weapons=weapons)
+        self.player = Player(px, py, weapons=weapons)
         self.player.current = pd.get("current", 0)
         self.player.hp = pd.get("hp", config.PLAYER_MAX_HP)
         pg = data["progression"]

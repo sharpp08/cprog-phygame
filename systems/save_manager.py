@@ -28,6 +28,7 @@ class SaveManager:
         """Write a complete snapshot atomically; never leave a partial save."""
         data = {
             "version": SAVE_VERSION,
+            "world": {"width": config.MAP_W, "height": config.MAP_H},
             "player": player.to_dict(),
             "progression": {
                 "phase": progression.phase,
