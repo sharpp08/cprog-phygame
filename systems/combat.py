@@ -42,7 +42,7 @@ class CombatSystem:
             if key in getattr(audio, "sfx", {}):
                 audio.play(key)
         if particles:
-            particles.emit("muzzle", ox, oy, 0.5,
+            particles.emit("muzzle", ox, oy, player.z + 0.5,
                            aim_dir[0] * 1.5, aim_dir[1] * 1.5, 0.5,
                            0.06, (255, 220, 150), 8)
         return True
@@ -95,7 +95,7 @@ class CombatSystem:
             if not self.grid.in_bounds(tx, ty):
                 b.active = False
                 continue
-            if self.grid.blocks[ty][tx] == config.BLOCK_SOLID:
+            if self.grid.blocks[ty][tx] in (config.BLOCK_SOLID, config.BLOCK_TREE):
                 b.active = False
                 if particles:
                     particles.burst("spark", b.x, b.y, 0.35, 5,
@@ -135,7 +135,7 @@ class CombatSystem:
             if g["age"] < 0.55:
                 nx, ny = g["x"] + g["vx"] * dt, g["y"] + g["vy"] * dt
                 tx, ty = int(nx), int(ny)
-                if self.grid.in_bounds(tx, ty) and self.grid.blocks[ty][tx] != config.BLOCK_SOLID:
+                if self.grid.in_bounds(tx, ty) and self.grid.blocks[ty][tx] not in (config.BLOCK_SOLID, config.BLOCK_TREE):
                     g["x"], g["y"] = nx, ny
                 g["vx"] *= max(0.0, 1.0 - 2.2 * dt)
                 g["vy"] *= max(0.0, 1.0 - 2.2 * dt)

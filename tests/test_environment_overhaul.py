@@ -5,6 +5,8 @@ import unittest
 
 import config
 from systems.navigation import Navigation
+from systems.combat import CombatSystem
+from entities.bullet import Bullet
 from world.map_generator import build_world
 
 
@@ -73,6 +75,22 @@ class ExpandedEnvironmentTests(unittest.TestCase):
         world = build_world(seed=8)
         for x, y in ((0, 0), (95.5, 0), (0, 95.5), (95.5, 95.5)):
             self.assertTrue(-0.28 <= world.height_at(x, y) <= 1.05)
+
+    def test_tree_trunks_stop_bullets_and_grenades(self):
+        world = build_world(seed=99)
+        tree = world.obstacles_of("tree")[0]
+        tx, ty = int(tree.x), int(tree.y)
+        combat = CombatSystem(world.grid)
+        combat.bullets.append(Bullet(tree.x, tree.y, (1.0, 0.0),
+                                     0.0, 10.0, 5.0, (220, 190, 120)))
+        combat.update(0.0, [], None, None)
+        self.assertEqual(combat.bullets, [])
+
+        grenade = {"x": tx - 0.1, "y": ty + 0.5,
+                   "vx": 6.0, "vy": 0.0, "age": 0.0, "fuse": 2.0}
+        combat.grenades = [grenade]
+        combat.update(0.1, [], None, None)
+        self.assertAlmostEqual(grenade["x"], tx - 0.1)
 
     def test_paths_remain_clear_of_tree_barriers(self):
         world = build_world(seed=44)
