@@ -26,6 +26,7 @@ class Navigation:
         self.h = h
         self._path_cache: dict = {}
         self._path_cache_size = 0
+        self._max_expansions = max(6000, min(18000, w * h * 2))
         self._DIRS = ((1, 0, 1), (-1, 0, 1), (0, 1, 1), (0, -1, 1),
                       (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414),
                       (-1, -1, 1.414))
@@ -52,7 +53,7 @@ class Navigation:
         heapq.heappush(open_heap, (_octile(start, goal), 0.0, start))
         closed = {start}
         nodes = 0
-        while open_heap and nodes < 1800:
+        while open_heap and nodes < self._max_expansions:
             _, _, cur = heapq.heappop(open_heap)
             if cur == goal:
                 path = [cur]
@@ -88,9 +89,8 @@ class Navigation:
         if self._path_cache_size >= 200:
             self._path_cache.clear()
             self._path_cache_size = 0
-        if path:
-            self._path_cache[key] = path
-            self._path_cache_size += 1
+        self._path_cache[key] = path
+        self._path_cache_size += 1
 
     # ------------------------------------------------------------------
     def plan(self, z) -> None:
@@ -118,11 +118,11 @@ class Navigation:
                 z.path_i += 1
                 if z.path_i >= len(z.path):
                     z.path = None
-                    return dx / m, dy / m
+                    return (dx / m, dy / m) if m > 1e-8 else (0.0, 0.0)
                 nx, ny = z.path[z.path_i]
                 cx, cy = nx + 0.5, ny + 0.5
                 px, py = cx - z.x, cy - z.y
                 pm = math.hypot(px, py) or 1.0
             return px / pm, py / pm
         # fallback: straight toward target (used when no path / no route)
-        return dx / m, dy / m
+        return (dx / m, dy / m) if m > 1e-8 else (0.0, 0.0)

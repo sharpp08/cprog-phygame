@@ -657,6 +657,7 @@ class Game:
         player.apply_movement(mv, sprinting and can_run, dt, self.wm.grid,
                               speed_scale=0.52 if crouching else 1.0)
         player.update(dt)
+        player.z = self.wm.world.height_at(player.x, player.y) * config.TERRAIN_HEIGHT_SCALE
         if player.footstep_sound:
             self.audio.play("footstep_run" if player.running else ("footstep_crouch" if crouching else "footstep_walk"))
             if self.wm.controller:
@@ -689,6 +690,7 @@ class Game:
             self.renderer.weather.rain_amount if self.renderer else 0.0)
         # zombies
         self.wm.controller.update(dt)
+        player.z = self.wm.world.height_at(player.x, player.y) * config.TERRAIN_HEIGHT_SCALE
         # Reward a clean escape with a short recovery window.
         nearby_threats = sum(
             1 for z in self.wm.controller.zombies

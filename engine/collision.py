@@ -31,8 +31,9 @@ class GridMap:
     outside the grid is considered solid so entities can never leave the map.
     """
 
-    def __init__(self, blocks: Sequence[Sequence[int]]) -> None:
+    def __init__(self, blocks: Sequence[Sequence[int]], circle_blocks=None) -> None:
         self.blocks = [list(row) for row in blocks]
+        self.circle_blocks = dict(circle_blocks or {})
         self.h = len(self.blocks)
         self.w = len(self.blocks[0]) if self.h else 0
 
@@ -64,6 +65,23 @@ class GridMap:
             for ty in range(ty0, ty1 + 1):
                 for tx in range(tx0, tx1 + 1):
                     if not self.is_blocked(tx, ty):
+                        continue
+                    if self.blocks[ty][tx] == config.BLOCK_TREE:
+                        ox, oy = tx + 0.5, ty + 0.5
+                        tree_r = self.circle_blocks.get((tx, ty), 0.34)
+                        dx, dy = cx - ox, cy - oy
+                        d2 = dx * dx + dy * dy
+                        min_dist = radius + tree_r
+                        if d2 >= min_dist * min_dist:
+                            continue
+                        if d2 > 1e-9:
+                            d = math.sqrt(d2)
+                            push = (min_dist - d) / d
+                            cx += dx * push
+                            cy += dy * push
+                        else:
+                            cx += min_dist
+                        moved = True
                         continue
                     nx = clamp(cx, tx, tx + 1)
                     ny = clamp(cy, ty, ty + 1)

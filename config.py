@@ -68,8 +68,8 @@ SCALE_Z = HEIGHT_SCALE    # obstacle Z offset used by the renderer
 # ---------------------------------------------------------------------------
 # Map / world
 # ---------------------------------------------------------------------------
-MAP_W = 48         # map width in tiles
-MAP_H = 48         # map height in tiles
+MAP_W = 96         # expanded forest width in tiles
+MAP_H = 96         # expanded forest height in tiles
 
 # Tile / surface kinds
 T_GRASS = 0
@@ -84,6 +84,8 @@ T_ROCK = 6         # water edge / rock ledge
 BLOCK_NONE = 0
 BLOCK_SOLID = 1
 BLOCK_WATER = 2    # water is solid for ground movement (can't wade)
+BLOCK_TREE = 3     # tree trunks use circular collision but remain nav blockers
+TERRAIN_HEIGHT_SCALE = 3.2
 
 # ---------------------------------------------------------------------------
 # Camera
@@ -205,7 +207,7 @@ PICKUP_TYPES = {
 # ---------------------------------------------------------------------------
 # Progression / waves
 # ---------------------------------------------------------------------------
-SHRINE_POS = (24, 24)        # world tile centre of the shrine landmark
+SHRINE_POS = (48, 48)        # world tile centre of the shrine landmark
 WAVES_AT_SHRINE = 3         # final waves to survive at the shrine
 WAVE_BASE_COUNT = 8
 WAVE_GROWTH = 1.7

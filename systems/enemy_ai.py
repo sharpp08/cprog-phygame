@@ -162,6 +162,8 @@ class ZombieController:
             z._tx, z._ty = p.x, p.y
             z.update(dt)
             self._behaviour(z, dt, p)
+            if self._world is not None:
+                z.z = self._world.height_at(z.x, z.y) * config.TERRAIN_HEIGHT_SCALE
             # Refresh the selected pose after AI/movement without advancing
             # timers twice; animation now reflects this step's resolved travel.
             z.update(0.0)

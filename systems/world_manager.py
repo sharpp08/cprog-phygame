@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import random
+
+import config
 from typing import List
 
 from entities.pickup import Pickup
@@ -21,6 +23,8 @@ class WorldManager:
                                             self.world.W, self.world.H)
         self.pickups: List[Pickup] = \
             [Pickup(x, y, p) for (x, y, p) in self.world.loot]
+        for pickup in self.pickups:
+            pickup.z = self.world.height_at(pickup.x, pickup.y) * config.TERRAIN_HEIGHT_SCALE
 
     # ------------------------------------------------------------------
     def setup(self, player, audio, particles) -> None:

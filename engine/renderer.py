@@ -182,7 +182,8 @@ class Renderer:
             row = world.tiles[ty]
             for tx in range(minx, min(maxx, w)):
                 t = row[tx]
-                x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5, 0.0)
+                x, y = cam.iso_to_screen(tx + 0.5, ty + 0.5,
+                                         world.height_at(tx + 0.5, ty + 0.5) * config.TERRAIN_HEIGHT_SCALE)
                 if x < -40 or x > self.W + 40 or y < -40 or y > self.H + 40:
                     continue
                 if t == config.T_WATER:
@@ -309,7 +310,38 @@ class Renderer:
         self.screen.blit(fs, (cx - w // 2, cy - h // 2))
 
     def _draw_obstacle(self, o) -> None:
-        spr = self._scale_sprite(self.assets.sprite(o.kind, o.variant))
+        if o.kind in ("fallen_log", "roots"):
+            cam = self.cam
+            cx, cy = cam.iso_to_screen(o.x, o.y, o.z)
+            if not (-80 <= cx <= self.W + 80 and -80 <= cy <= self.H + 80):
+                return
+            scale = cam.zoom * o.scale
+            if o.kind == "fallen_log":
+                length = int(30 * scale)
+                width = max(2, int(7 * scale))
+                angle = ((o.variant * 37 + int(o.x * 13 + o.y * 7)) % 55) - 27
+                radians = math.radians(angle)
+                dx = math.cos(radians) * length * 0.5
+                dy = math.sin(radians) * length * 0.5
+                pygame.draw.line(self.screen, (54, 43, 31),
+                                 (int(cx - dx), int(cy - dy)),
+                                 (int(cx + dx), int(cy + dy)), width + 2)
+                pygame.draw.line(self.screen, (103, 76, 48),
+                                 (int(cx - dx * 0.82), int(cy - dy * 0.82)),
+                                 (int(cx + dx * 0.82), int(cy + dy * 0.82)), width)
+                pygame.draw.circle(self.screen, (126, 94, 60),
+                                   (int(cx + dx), int(cy + dy)), max(2, width // 2))
+            else:
+                for arm in range(3):
+                    angle = (o.variant * 41 + arm * 57) * math.pi / 180.0
+                    ex = cx + math.cos(angle) * (8 + arm * 3) * scale
+                    ey = cy + math.sin(angle) * (4 + arm) * scale
+                    pygame.draw.line(self.screen, (76, 67, 48),
+                                     (int(cx), int(cy)), (int(ex), int(ey)),
+                                     max(1, int(2 * scale)))
+            return
+        spr = self._scale_sprite(self.assets.sprite(o.kind, o.variant),
+                                 self.cam.zoom * o.scale)
         if o.kind == "tree" and self.quality >= 1:
             sway = int(round(math.sin(self.time * 1.15 +
                                       o.x * 0.63 + o.y * 0.41) * 1.25))
@@ -321,7 +353,7 @@ class Renderer:
                     self._tree_sway_cache[key] = moved
                 spr = moved
         cam = self.cam
-        cx, cy = cam.iso_to_screen(o.x, o.y, 0.0)
+        cx, cy = cam.iso_to_screen(o.x, o.y, o.z)
         if cx < -160 or cx > self.W + 160 or cy < -180 or cy > self.H + 80:
             return
         if o.kind in ("tree", "shrine", "waterfall", "ruin", "rock"):
@@ -334,7 +366,7 @@ class Renderer:
         frames = self.assets.frames[key]
         flist = frames.get(z.anim_state, frames["idle"])
         cam = self.cam
-        cx, cy = cam.iso_to_screen(z.x, z.y, 0.0)
+        cx, cy = cam.iso_to_screen(z.x, z.y, z.z)
         self._shadow(z.x, z.y, 34, 80)
         def zombie_frame(state, index):
             choices = frames.get(state, frames["idle"])
@@ -385,7 +417,7 @@ class Renderer:
     def _draw_pickup(self, p) -> None:
         spr = self._scale_sprite(self.assets.spr[p.ptype])
         cam = self.cam
-        cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
+        cx, cy = cam.iso_to_screen(p.x, p.y, getattr(p, "z", 0.0))
         bob = math.sin(p.bob * 3.0) * 3 * cam.zoom
         self._shadow(p.x, p.y, 20, 60)
         self.screen.blit(spr, (cx - spr.get_width() / 2,

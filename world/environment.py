@@ -22,10 +22,13 @@ class World:
         self.tiles = data["tiles"]
         self.blocks = data["blocks"]
         self.grass_var = data["grass_var"]
+        self.elevation = data.get("elevation")
         self.terrain = Terrain(data["tiles"], data["grass_var"])
-        self.grid = GridMap(data["blocks"])
+        self.grid = GridMap(data["blocks"], data.get("tree_radii", {}))
         self.obstacles: List[Obstacle] = \
             [Obstacle.from_dict(o) for o in data["obstacles"]]
+        for obstacle in self.obstacles:
+            obstacle.z += self.height_at(obstacle.x, obstacle.y) * config.TERRAIN_HEIGHT_SCALE
         self.water_tiles = data["water_tiles"]
         self.lily_tiles = data["lily_tiles"]
         self.bridge = data["bridge"]
@@ -39,8 +42,25 @@ class World:
         self._time = 0.0
         # group obstacles by kind for cheap rendering
         self._by_kind: dict = {}
+        self._obstacle_chunks: dict = {}
+        self._chunk_size = 12
         for o in self.obstacles:
             self._by_kind.setdefault(o.kind, []).append(o)
+            key = (int(o.x) // self._chunk_size, int(o.y) // self._chunk_size)
+            self._obstacle_chunks.setdefault(key, []).append(o)
+
+    def height_at(self, x: float, y: float) -> float:
+        """Bilinearly sample the smooth low-relief terrain height field."""
+        if self.elevation is None:
+            return 0.0
+        x = max(0.0, min(self.W - 1.001, float(x)))
+        y = max(0.0, min(self.H - 1.001, float(y)))
+        x0, y0 = int(x), int(y)
+        x1, y1 = min(self.W - 1, x0 + 1), min(self.H - 1, y0 + 1)
+        fx, fy = x - x0, y - y0
+        a = self.elevation[y0][x0] * (1.0 - fx) + self.elevation[y0][x1] * fx
+        b = self.elevation[y1][x0] * (1.0 - fx) + self.elevation[y1][x1] * fx
+        return a * (1.0 - fy) + b * fy
 
     # ------------------------------------------------------------------
     def update(self, dt: float) -> None:
@@ -52,8 +72,20 @@ class World:
 
     def cull_obstacles(self, minx, miny, maxx, maxy,
                        pad: float = 1.0) -> List[Obstacle]:
-        return [o for o in self.obstacles
-                if o.in_rect(minx, miny, maxx, maxy, pad)]
+        if not self._obstacle_chunks:
+            return []
+        size = self._chunk_size
+        x0 = max(0, int(math.floor(minx - pad)) // size)
+        y0 = max(0, int(math.floor(miny - pad)) // size)
+        x1 = min((self.W - 1) // size, int(math.floor(maxx + pad)) // size)
+        y1 = min((self.H - 1) // size, int(math.floor(maxy + pad)) // size)
+        visible = []
+        for cy in range(y0, y1 + 1):
+            for cx in range(x0, x1 + 1):
+                for obstacle in self._obstacle_chunks.get((cx, cy), ()):
+                    if obstacle.in_rect(minx, miny, maxx, maxy, pad):
+                        visible.append(obstacle)
+        return visible
 
     def obstacles_of(self, kind: str) -> List[Obstacle]:
         return self._by_kind.get(kind, [])
