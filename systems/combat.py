@@ -34,7 +34,7 @@ class CombatSystem:
                 ox, oy, aim_dir,
                 params["speed"], params["damage"], params["range"],
                 w.spec["color"], pellets=params["pellets"],
-                spread=params["spread"])
+                spread=params["spread"], z=player.z + 0.35)
             self.bullets.append(b)
         player.mark_shoot()
         if audio:
