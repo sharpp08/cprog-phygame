@@ -15,6 +15,7 @@ class InventoryMenu:
         self.selected = 0
         self.message = "SELECT AN ITEM TO INSPECT"
         self._slots = []
+        self._slot_indices = []
 
     def _items(self, player, survival, story):
         items = []
@@ -97,9 +98,9 @@ class InventoryMenu:
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and items:
                 self._perform(items[self.selected], player, survival, audio)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            for index, rect in enumerate(self._slots):
+            for slot, rect in enumerate(self._slots):
                 if rect.collidepoint(event.pos):
-                    self.selected = index
+                    self.selected = self._slot_indices[slot]
                     audio.play("item_select")
                     return None
             if getattr(self, "_action_rect", pygame.Rect(0, 0, 0, 0)).collidepoint(event.pos) and items:
@@ -130,14 +131,18 @@ class InventoryMenu:
 
         list_rect = pygame.Rect(panel.x + 26, panel.y + 108,
                                 int(panel_w * 0.53), panel_h - 190)
-        row_h = min(54, max(42, (list_rect.height - 4) // max(1, min(8, len(items)))))
+        visible_count = min(8, len(items))
+        row_h = min(54, max(42, (list_rect.height - 4) // max(1, visible_count)))
+        first_visible = max(0, min(
+            self.selected - visible_count + 1, len(items) - visible_count))
         self._slots = []
-        for i, item in enumerate(items):
-            y = list_rect.y + i * row_h
-            if y + row_h > list_rect.bottom:
-                break
+        self._slot_indices = []
+        for i in range(first_visible, min(len(items), first_visible + visible_count)):
+            item = items[i]
+            y = list_rect.y + (i - first_visible) * row_h
             rect = pygame.Rect(list_rect.x, y, list_rect.width, row_h - 5)
             self._slots.append(rect)
+            self._slot_indices.append(i)
             selected = i == self.selected
             bg = (49, 61, 51) if selected else (20, 30, 27)
             pygame.draw.rect(screen, bg, rect, border_radius=5)
@@ -158,7 +163,7 @@ class InventoryMenu:
             item = items[self.selected]
             text(screen, self.fonts, item["name"], detail.x + 18,
                  detail.y + 34, 22, (224, 212, 177), "left", True)
-            text(screen, item.get("fonts", self.fonts), item["count"],
+            text(screen, self.fonts, item["count"],
                  detail.x + 18, detail.y + 66, 16, (185, 164, 121), "left")
             lines = item["detail"].split(" ")
             wrapped, line = [], ""
