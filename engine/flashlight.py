@@ -25,9 +25,14 @@ def _blockers_for(world):
                 continue
             kind = getattr(obstacle, "kind", "")
             radius = {
-                "tree": 0.76, "shrine": 0.78, "waterfall": 0.68,
+                "shrine": 0.78, "waterfall": 0.68,
                 "ruin": 0.70, "rock": 0.52, "bush": 0.30,
             }.get(kind, 0.64)
+            if kind == "tree":
+                # Match the actual variable trunk collider, not the much
+                # wider decorative canopy, so flashlight shadows align
+                # with physical tree barriers.
+                radius = float(getattr(obstacle, "collision_radius", 0.34)) + 0.07
             bx, by = float(obstacle.x), float(obstacle.y)
             blocker_cells.setdefault((int(math.floor(bx)),
                                       int(math.floor(by))), []).append(
@@ -62,7 +67,8 @@ def _tile(world, x: int, y: int) -> int:
 
 
 def _height(world, x: int, y: int) -> float:
-    return _SURFACE_HEIGHT.get(_tile(world, x, y), 0.0)
+    terrain = world.height_at(x + 0.5, y + 0.5) * 0.35
+    return terrain + _SURFACE_HEIGHT.get(_tile(world, x, y), 0.0)
 
 
 def _normal_response(world, x: float, y: float,
