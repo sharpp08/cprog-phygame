@@ -66,6 +66,7 @@ class SurvivalSystem:
             return False
         self.scrap -= cost
         self.medkits = min(9, self.medkits + 1)
+        player.hp = min(player.max_hp, player.hp + healing)
         return True
 
     def use_medkit(self, player, healing: float = 40.0) -> bool:

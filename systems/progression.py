@@ -50,8 +50,8 @@ class Progression:
             if self._spawn_timer <= 0 and controller.alive_count < cap:
                 z = controller.spawn_random()
                 if z is None:
-                    z = controller.spawn_near((random.randint(3, 44),
-                                               random.randint(3, 44)))
+                    z = controller.spawn_near((random.randint(3, world.W - 4),
+                                               random.randint(3, world.H - 4)))
                 self._spawn_timer = random.uniform(
                     3.0, 6.0) - min(3.0, self.time / 40.0)
             d = math.hypot(player.x - sx, player.y - sy)

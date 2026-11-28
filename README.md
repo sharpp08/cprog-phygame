@@ -44,6 +44,9 @@
 The game is set in an overgrown forest surrounding an isolated shrine. Its visual identity uses a dark, moonlit palette with muted greens, deep blue-green shadows, weathered earth, and restrained amber light.
 
 ### Forest-shrine environment
+- **Expanded playable world:** A seeded 96 × 96 tile forest with interconnected trails, remote clearings, multiple ruined sites, and exploration routes.
+- **Physical woodland:** Tree trunks use circular collision, with solid rocks and fallen logs; dense vegetation and roots add traversable ground detail.
+- **Rolling terrain:** A smooth elevation field subtly offsets the ground, characters, and environmental objects.
 
 The environment is built from procedural and cached game assets rather than using a static screenshot as the playable background. Its landmarks and visual elements include:
 

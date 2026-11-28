@@ -132,15 +132,27 @@ def generate_map(seed: int = 1234) -> Dict:
     obstacles.append(dict(x=sx + 0.5, y=sy + 0.5, kind="shrine", variant=0, z=0.0, solid=True, scale=1.0))
     obstacles.append(dict(x=wx + 0.5, y=wy + 0.5, kind="waterfall", variant=0, z=0.4, solid=True, scale=1.0))
 
+    # Irregular leaf-mould and exposed-soil patches break up the grass floor.
+    for _ in range(210):
+        cx, cy = rng.randrange(3, W - 3), rng.randrange(3, H - 3)
+        rx, ry = rng.uniform(1.2, 3.8), rng.uniform(1.0, 2.8)
+        if (cx, cy) in path_mask:
+            continue
+        for yy in range(max(1, int(cy - ry)), min(H - 1, int(cy + ry + 1))):
+            for xx in range(max(1, int(cx - rx)), min(W - 1, int(cx + rx + 1))):
+                if (xx, yy) not in path_mask and tiles[yy][xx] == config.T_GRASS and rng.random() < 0.72:
+                    if _ellipse(cx, cy, rx, ry, xx, yy):
+                        tiles[yy][xx] = config.T_DIRT
+
     ruins = [(sx + 17, sy + 15), (18, 20), (78, 17)]
     for rx, ry in ruins:
-        if (rx, ry) != (18, 20):
-            for dx, dy in ((-1, 0), (0, -1), (1, 0), (0, 1)):
-                tx, ty = rx + dx, ry + dy
-                if in_bounds(tx, ty):
-                    blocks[ty][tx] = config.BLOCK_SOLID
-                    tiles[ty][tx] = config.T_DIRT
-                    reserved.add((tx, ty))
+        for dx, dy in ((0, 0), (-1, 0), (0, -1), (1, 0), (0, 1),
+                        (-1, -1), (1, -1), (-1, 1), (1, 1)):
+            tx, ty = rx + dx, ry + dy
+            if in_bounds(tx, ty) and (tx, ty) not in path_mask:
+                blocks[ty][tx] = config.BLOCK_SOLID
+                tiles[ty][tx] = config.T_DIRT
+                reserved.add((tx, ty))
         obstacles.append(dict(x=rx + 0.5, y=ry + 0.5, kind="ruin", variant=0, z=0.0, solid=True, scale=1.0))
     ruin = ruins[0]
 

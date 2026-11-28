@@ -63,22 +63,22 @@ class TestVisualScenes(unittest.TestCase):
 
     def test_capture_five_visual_review_scenes(self):
         # Broad forest view around the central clearing and its landmarks.
-        self._capture("01_forest_environment", (21, 20), (23, 23))
+        self._capture("01_forest_environment", (47, 47), (48, 48))
 
         # Place the player beside a generated tree to inspect scale and
         # contact shadows against surrounding vegetation.
         trees = [o for o in self.world.obstacles if o.kind == "tree"]
         nearest = min(trees, key=lambda o:
-                      (o.x - 14) ** 2 + (o.y - 36) ** 2)
+                      (o.x - 44) ** 2 + (o.y - 66) ** 2)
         self._capture("02_player_vegetation",
                       (nearest.x + 2.2, nearest.y + 1.4))
 
         # Three distinct enemy silhouettes in one combat composition.
-        encounter_pos = (18.0, 18.0)
+        encounter_pos = (44.0, 44.0)
         enemies = [
-            Zombie(20.0, 18.0, "regular"),
-            Zombie(17.0, 20.0, "fast"),
-            Zombie(21.0, 21.0, "tank"),
+            Zombie(46.0, 44.0, "regular"),
+            Zombie(43.0, 46.0, "fast"),
+            Zombie(47.0, 47.0, "tank"),
         ]
         for enemy in enemies:
             enemy.anim_state = "walk"
@@ -87,9 +87,9 @@ class TestVisualScenes(unittest.TestCase):
                       encounter_pos, enemies)
 
         # Shrine and pond are both visible around the central map landmark.
-        self._capture("04_shrine_pond", (25.0, 25.0), (28.0, 28.0))
+        self._capture("04_shrine_pond", (49.0, 49.0), (55.0, 54.0))
 
         # Night lighting and the player's directional flashlight beam.
-        self._capture("05_flashlight_night", (20.0, 20.0), (20.0, 20.0),
-                      [Zombie(23.0, 19.0, "regular")])
+        self._capture("05_flashlight_night", (44.0, 44.0), (44.0, 44.0),
+                      [Zombie(47.0, 43.0, "regular")])
 

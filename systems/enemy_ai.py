@@ -60,6 +60,8 @@ class ZombieController:
                    duration: float = None) -> "Zombie":
         from entities.zombie import Zombie
         z = Zombie(x, y, ztype)
+        if self._world is not None:
+            z.z = self._world.height_at(x, y) * config.TERRAIN_HEIGHT_SCALE
         z._repath_cd = random.uniform(0.4, 0.8)
         z._tx = self._player.x if self._player else x
         z._ty = self._player.y if self._player else y
@@ -92,10 +94,9 @@ class ZombieController:
             if tile in (config.T_WATER, config.T_LILY, config.T_BRIDGE):
                 return "fog"
             near_cover = any(
-                o.in_rect(int(x) - 1, int(y) - 1,
-                          int(x) + 1, int(y) + 1, 0.0)
-                for o in getattr(w, "obstacles", ())
-                if getattr(o, "kind", None) in ("tree", "bush"))
+                o.kind in ("tree", "bush")
+                for o in w.cull_obstacles(int(x) - 1, int(y) - 1,
+                                          int(x) + 1, int(y) + 1, 0.0))
             if near_cover:
                 return "forest"
         return "ground"

@@ -283,7 +283,7 @@ class Renderer:
         elif key == "beacon":
             self._draw_beacon(obj)
 
-    def _shadow(self, x: float, y: float, size: float, alpha=90) -> None:
+    def _shadow(self, x: float, y: float, size: float, alpha=90, z: float = 0.0) -> None:
         size = size * self.cam.zoom
         key = (int(size), int(alpha))
         s = self._shadow_cache.get(key)
@@ -293,7 +293,7 @@ class Renderer:
             pygame.draw.ellipse(s, (0, 0, 0, alpha), s.get_rect())
             self._shadow_cache[key] = s
         cam = self.cam
-        cx, cy = cam.iso_to_screen(x, y, 0.0)
+        cx, cy = cam.iso_to_screen(x, y, z)
         self.screen.blit(s, (cx - s.get_width() / 2,
                              cy - s.get_height() / 2 + 4 * cam.zoom))
 
@@ -353,11 +353,11 @@ class Renderer:
                     self._tree_sway_cache[key] = moved
                 spr = moved
         cam = self.cam
-        cx, cy = cam.iso_to_screen(o.x, o.y, o.z)
+        cx, cy = cam.iso_to_screen(o.x, o.y, 0.0)
         if cx < -160 or cx > self.W + 160 or cy < -180 or cy > self.H + 80:
             return
         if o.kind in ("tree", "shrine", "waterfall", "ruin", "rock"):
-            self._shadow(o.x, o.y, 30 if o.kind == "rock" else 42, 70)
+            self._shadow(o.x, o.y, 30 if o.kind == "rock" else 42, 70, o.z)
         oy = -o.z * config.SCALE_Z * cam.zoom
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() + oy + 8 * cam.zoom))
@@ -367,7 +367,7 @@ class Renderer:
         flist = frames.get(z.anim_state, frames["idle"])
         cam = self.cam
         cx, cy = cam.iso_to_screen(z.x, z.y, z.z)
-        self._shadow(z.x, z.y, 34, 80)
+        self._shadow(z.x, z.y, 34, 80, z.z)
         def zombie_frame(state, index):
             choices = frames.get(state, frames["idle"])
             # Archetype proportions are already authored into the cached pose.
@@ -419,7 +419,7 @@ class Renderer:
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, getattr(p, "z", 0.0))
         bob = math.sin(p.bob * 3.0) * 3 * cam.zoom
-        self._shadow(p.x, p.y, 20, 60)
+        self._shadow(p.x, p.y, 20, 60, getattr(p, "z", 0.0))
         self.screen.blit(spr, (cx - spr.get_width() / 2,
                                cy - spr.get_height() - 6 * cam.zoom + bob))
         # soft glow ring
@@ -444,7 +444,7 @@ class Renderer:
     def _draw_player(self, p) -> None:
         cam = self.cam
         cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
-        self._shadow(p.x, p.y, 34, 90)
+        self._shadow(p.x, p.y, 34, 90, p.z)
 
         # Read the live weapon/action flags as well as anim_state. Input is
         # processed after Player.update(), so anim_state can still be "run"
@@ -545,7 +545,7 @@ class Renderer:
         # muzzle flash
         if p._shoot_flash > 0:
             mx, my = cam.iso_to_screen(p.x + p.aim[0] * 0.7,
-                                       p.y + p.aim[1] * 0.7, 0.3)
+                                       p.y + p.aim[1] * 0.7, p.z + 0.3)
             m = self._scale_sprite(self.assets.spr["muzzle"])
             self.screen.blit(m, (mx - m.get_width() / 2,
                                  my - m.get_height() / 2 - 4 * cam.zoom))

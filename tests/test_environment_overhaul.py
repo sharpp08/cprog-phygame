@@ -61,6 +61,19 @@ class ExpandedEnvironmentTests(unittest.TestCase):
         self.assertEqual({id(o) for o in actual},
                          {id(o) for o in expected})
 
+    def test_all_enemy_spawn_points_are_clear_and_reachable(self):
+        world = build_world(seed=91)
+        nav = Navigation(world.grid, world.W, world.H)
+        self.assertGreaterEqual(len(world.spawn_points), 8)
+        for point in world.spawn_points:
+            self.assertFalse(world.grid.is_blocked(*point))
+            self.assertIsNotNone(nav.a_star(point, world.shrine))
+
+    def test_height_queries_are_safe_at_map_edges(self):
+        world = build_world(seed=8)
+        for x, y in ((0, 0), (95.5, 0), (0, 95.5), (95.5, 95.5)):
+            self.assertTrue(-0.28 <= world.height_at(x, y) <= 1.05)
+
     def test_paths_remain_clear_of_tree_barriers(self):
         world = build_world(seed=44)
         for y, row in enumerate(world.tiles):

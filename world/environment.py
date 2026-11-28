@@ -53,8 +53,8 @@ class World:
         """Bilinearly sample the smooth low-relief terrain height field."""
         if self.elevation is None:
             return 0.0
-        x = max(0.0, min(self.W - 1.001, float(x)))
-        y = max(0.0, min(self.H - 1.001, float(y)))
+        x = max(0.0, min(self.W - 1.0, float(x)))
+        y = max(0.0, min(self.H - 1.0, float(y)))
         x0, y0 = int(x), int(y)
         x1, y1 = min(self.W - 1, x0 + 1), min(self.H - 1, y0 + 1)
         fx, fy = x - x0, y - y0
