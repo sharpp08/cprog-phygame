@@ -67,7 +67,9 @@ def _tile(world, x: int, y: int) -> int:
 
 
 def _height(world, x: int, y: int) -> float:
-    terrain = world.height_at(x + 0.5, y + 0.5) * 0.35
+    height_at = getattr(world, "height_at", None)
+    terrain = (height_at(x + 0.5, y + 0.5) * 0.35
+               if callable(height_at) else 0.0)
     return terrain + _SURFACE_HEIGHT.get(_tile(world, x, y), 0.0)
 
 
