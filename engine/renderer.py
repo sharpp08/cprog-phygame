@@ -443,7 +443,7 @@ class Renderer:
     # ------------------------------------------------------------------
     def _draw_player(self, p) -> None:
         cam = self.cam
-        cx, cy = cam.iso_to_screen(p.x, p.y, 0.0)
+        cx, cy = cam.iso_to_screen(p.x, p.y, p.z)
         self._shadow(p.x, p.y, 34, 90, p.z)
 
         # Read the live weapon/action flags as well as anim_state. Input is
